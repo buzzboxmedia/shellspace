@@ -1,0 +1,149 @@
+import SwiftUI
+
+struct LauncherView: View {
+    @EnvironmentObject var appState: AppState
+    @State private var showSettings = false
+
+    var body: some View {
+        ZStack {
+            // Glass background
+            VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
+                .ignoresSafeArea()
+
+            VStack(spacing: 40) {
+                // Header with settings button
+                HStack {
+                    Spacer()
+                    Text("Claude Hub")
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+                    Spacer()
+                }
+                .overlay(alignment: .trailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 8)
+                }
+
+                VStack(spacing: 32) {
+                    // Main Projects Section
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("PROJECTS")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .tracking(1.5)
+
+                        HStack(spacing: 16) {
+                            ForEach(appState.mainProjects) { project in
+                                ProjectCard(project: project)
+                            }
+                        }
+                    }
+
+                    // Clients Section
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("CLIENTS")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .tracking(1.5)
+
+                        HStack(spacing: 16) {
+                            ForEach(appState.clientProjects) { project in
+                                ProjectCard(project: project)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(48)
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .environmentObject(appState)
+        }
+    }
+}
+
+struct ProjectCard: View {
+    @EnvironmentObject var appState: AppState
+    let project: Project
+    @State private var isHovered = false
+
+    var sessionCount: Int {
+        appState.sessionsFor(project: project).count
+    }
+
+    var body: some View {
+        Button {
+            withAnimation(.spring(response: 0.3)) {
+                appState.selectedProject = project
+            }
+        } label: {
+            VStack(spacing: 12) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: project.icon)
+                        .font(.system(size: 28))
+                        .foregroundStyle(.primary)
+
+                    if sessionCount > 0 {
+                        Text("\(sessionCount)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 18, height: 18)
+                            .background(Color.blue)
+                            .clipShape(Circle())
+                            .offset(x: 8, y: -8)
+                    }
+                }
+
+                Text(project.name)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.primary)
+            }
+            .frame(width: 100, height: 100)
+            .background {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: .black.opacity(isHovered ? 0.2 : 0.1), radius: isHovered ? 16 : 10)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(.white.opacity(0.2), lineWidth: 1)
+            }
+            .scaleEffect(isHovered ? 1.05 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+// NSVisualEffectView wrapper for glass effect
+struct VisualEffectView: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+    let blendingMode: NSVisualEffectView.BlendingMode
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = blendingMode
+    }
+}
+
+// Preview available in Xcode only
