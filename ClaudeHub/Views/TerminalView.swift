@@ -54,7 +54,12 @@ struct TerminalView: View {
                     // Auto-start Claude with delay to avoid fork crash
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                         viewLogger.info("Starting Claude in: \(session.projectPath)")
-                        terminalController.startClaude(in: session.projectPath, sessionId: session.id, claudeSessionId: session.claudeSessionId)
+                        terminalController.startClaude(
+                            in: session.projectPath,
+                            sessionId: session.id,
+                            claudeSessionId: session.claudeSessionId,
+                            parkerBriefing: session.parkerBriefing
+                        )
                         // Trigger view refresh and capture session ID
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                             forceRefresh.toggle()
@@ -172,7 +177,7 @@ class TerminalController: ObservableObject {
         return truncated
     }
 
-    func startClaude(in directory: String, sessionId: UUID, claudeSessionId: String? = nil) {
+    func startClaude(in directory: String, sessionId: UUID, claudeSessionId: String? = nil, parkerBriefing: String? = nil) {
         logger.info("startClaude called for directory: \(directory), sessionId: \(sessionId), claudeSessionId: \(claudeSessionId ?? "none")")
 
         // Don't restart if already running for this session
@@ -200,29 +205,48 @@ class TerminalController: ObservableObject {
         env["COLORTERM"] = "truecolor"
         env["HOME"] = NSHomeDirectory()
         env["PATH"] = "\(NSHomeDirectory())/.npm-global/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:\(NSHomeDirectory())/.local/bin"
+        env["BASH_SILENCE_DEPRECATION_WARNING"] = "1"
 
         let envArray = env.map { "\($0.key)=\($0.value)" }
 
-        // Start bash shell
-        logger.info("Starting bash shell")
+        // Start zsh shell
+        logger.info("Starting zsh shell")
         terminalView?.startProcess(
-            executable: "/bin/bash",
+            executable: "/bin/zsh",
             environment: envArray
         )
 
-        // Send cd command to change directory, then start claude
+        // Send commands with optional Parker briefing
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            let claudeCommand: String
-            if let resumeId = claudeSessionId {
-                // Resume existing session
-                claudeCommand = "cd '\(directory)' && claude --resume '\(resumeId)'\n"
-                self?.logger.info("Resuming Claude session: \(resumeId)")
+            // If there's a Parker briefing, echo it first
+            if let briefing = parkerBriefing {
+                let escapedBriefing = briefing.replacingOccurrences(of: "'", with: "'\\''")
+                self?.terminalView?.send(txt: "echo '\(escapedBriefing)'\n")
+                self?.logger.info("Echoed Parker briefing")
+
+                // Small delay before starting Claude so briefing is visible
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    self?.startClaudeCommand(in: directory, claudeSessionId: claudeSessionId)
+                }
             } else {
-                // Start new session
-                claudeCommand = "cd '\(directory)' && claude\n"
-                self?.logger.info("Starting new Claude session")
+                self?.startClaudeCommand(in: directory, claudeSessionId: claudeSessionId)
             }
-            self?.terminalView?.send(txt: claudeCommand)
+        }
+    }
+
+    private func startClaudeCommand(in directory: String, claudeSessionId: String?) {
+        // Always start fresh - don't try to resume old sessions that may not exist
+        let claudeCommand = "cd '\(directory)' && claude\n"
+        logger.info("Starting Claude session in: \(directory)")
+        terminalView?.send(txt: claudeCommand)
+
+        // Ensure terminal has focus after Claude starts
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            if let terminal = self?.terminalView, let window = terminal.window {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                window.makeKeyAndOrderFront(nil)
+                window.makeFirstResponder(terminal)
+            }
         }
     }
 
@@ -380,12 +404,10 @@ class TerminalContainerView: NSView {
         // Make window key
         window.makeKeyAndOrderFront(nil)
 
-        // Make terminal first responder with slight delay to ensure view hierarchy is ready
-        DispatchQueue.main.async {
-            let success = window.makeFirstResponder(terminal)
-            if !success {
-                // If terminal won't accept, make container the responder
-                window.makeFirstResponder(self)
+        // Force terminal to be first responder - try multiple times
+        for delay in [0.0, 0.1, 0.3, 0.5] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                _ = window.makeFirstResponder(terminal)
             }
         }
     }

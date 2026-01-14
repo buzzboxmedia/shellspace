@@ -68,11 +68,7 @@ struct MenuBarSessionRow: View {
 
     var body: some View {
         Button {
-            // Open app and switch to this session
-            if let project = (appState.mainProjects + appState.clientProjects).first(where: { $0.path == session.projectPath }) {
-                appState.selectedProject = project
-                appState.activeSession = session
-            }
+            // Just open the app - user can select session in their preferred window
             NSApplication.shared.activate(ignoringOtherApps: true)
         } label: {
             HStack {
@@ -109,8 +105,7 @@ struct MenuBarProjectRow: View {
 
     var body: some View {
         Button {
-            appState.selectedProject = project
-            let _ = appState.createSession(for: project)
+            // Just open the app - user can select project in their preferred window
             NSApplication.shared.activate(ignoringOtherApps: true)
         } label: {
             HStack {

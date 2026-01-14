@@ -8,8 +8,17 @@ struct Session: Identifiable, Hashable, Codable {
     var lastAccessedAt: Date = Date()
     var claudeSessionId: String?  // Claude's session ID for --resume
 
+    // Link to active project from ACTIVE-PROJECTS.md
+    var activeProjectName: String?
+    var parkerBriefing: String?
+
     enum CodingKeys: String, CodingKey {
         case id, name, projectPath, createdAt, lastAccessedAt, claudeSessionId
+        case activeProjectName, parkerBriefing
+    }
+
+    var isProjectLinked: Bool {
+        activeProjectName != nil
     }
 }
 

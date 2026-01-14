@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LauncherView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var windowState: WindowState
     @State private var showSettings = false
 
     var body: some View {
@@ -72,6 +73,7 @@ struct LauncherView: View {
 
 struct ProjectCard: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var windowState: WindowState
     let project: Project
     @State private var isHovered = false
 
@@ -82,7 +84,7 @@ struct ProjectCard: View {
     var body: some View {
         Button {
             withAnimation(.spring(response: 0.3)) {
-                appState.selectedProject = project
+                windowState.selectedProject = project
             }
         } label: {
             VStack(spacing: 12) {

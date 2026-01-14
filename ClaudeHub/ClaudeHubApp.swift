@@ -3,6 +3,12 @@ import os.log
 
 private let appLogger = Logger(subsystem: "com.buzzbox.claudehub", category: "AppState")
 
+/// Per-window state - each window gets its own instance
+class WindowState: ObservableObject {
+    @Published var selectedProject: Project?
+    @Published var activeSession: Session?
+}
+
 @main
 struct ClaudeHubApp: App {
     @StateObject private var appState = AppState()
@@ -10,7 +16,7 @@ struct ClaudeHubApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            WindowContainer()
                 .environmentObject(appState)
                 .onAppear {
                     // Make sure app is active when window appears
@@ -19,23 +25,10 @@ struct ClaudeHubApp: App {
         }
         .windowResizability(.contentSize)
         .commands {
-            CommandGroup(after: .newItem) {
-                Button("New Chat") {
-                    if let project = appState.selectedProject {
-                        let _ = appState.createSession(for: project)
-                    }
-                }
-                .keyboardShortcut("n", modifiers: .command)
-                .disabled(appState.selectedProject == nil)
-            }
+            // Note: Cmd+N now opens a new independent window (default WindowGroup behavior)
             // Navigation
             CommandGroup(after: .sidebar) {
-                Button("Back to Projects") {
-                    appState.selectedProject = nil
-                    appState.activeSession = nil
-                }
-                .keyboardShortcut(.escape, modifiers: [])
-                .disabled(appState.selectedProject == nil)
+                // Escape to go back is handled per-window in WorkspaceView
             }
             // Ensure standard Edit menu commands work
             CommandGroup(replacing: .pasteboard) {
@@ -79,14 +72,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 class AppState: ObservableObject {
-    @Published var selectedProject: Project?
+    // Shared data across all windows
     @Published var sessions: [Session] = []
-    @Published var activeSession: Session?
     @Published var mainProjects: [Project] = []
     @Published var clientProjects: [Project] = []
 
     // Store terminal controllers by session ID so they persist when switching
     var terminalControllers: [UUID: TerminalController] = [:]
+
+    // Per-window states keyed by window ID - ensures true isolation
+    private var windowStates: [UUID: WindowState] = [:]
+
+    func getOrCreateWindowState(for windowId: UUID) -> WindowState {
+        if let existing = windowStates[windowId] {
+            return existing
+        }
+        let state = WindowState()
+        windowStates[windowId] = state
+        appLogger.info("Created new WindowState for window \(windowId)")
+        return state
+    }
+
+    func removeWindowState(for windowId: UUID) {
+        windowStates.removeValue(forKey: windowId)
+    }
+
+    // Services for active project detection
+    private let activeProjectsParser = ActiveProjectsParser()
+    private let briefingGenerator = ParkerBriefingGenerator()
 
     private let defaults = UserDefaults.standard
     private let mainProjectsKey = "mainProjects"
@@ -117,7 +130,7 @@ class AppState: ObservableObject {
 
     func createSession(for project: Project) -> Session {
         // Generate name like "Chat 1", "Chat 2", etc
-        let existingCount = sessionsFor(project: project).count
+        let existingCount = sessionsFor(project: project).filter { !$0.isProjectLinked }.count
         let chatName = "Chat \(existingCount + 1)"
 
         let session = Session(
@@ -127,17 +140,58 @@ class AppState: ObservableObject {
             createdAt: Date()
         )
         sessions.append(session)
-        activeSession = session
         saveSessions()
         return session
+    }
+
+    /// Create sessions for all active projects in ACTIVE-PROJECTS.md
+    func createSessionsForActiveProjects(project: Project) -> [Session] {
+        let activeProjects = activeProjectsParser.parseActiveProjects(at: project.path)
+        var createdSessions: [Session] = []
+
+        for activeProject in activeProjects {
+            // Check if session already exists for this active project
+            let existingSession = sessions.first { session in
+                session.projectPath == project.path &&
+                session.activeProjectName == activeProject.name
+            }
+
+            if existingSession != nil {
+                // Already exists, skip creation
+                continue
+            }
+
+            // Generate Parker briefing
+            let briefing = briefingGenerator.generateBriefing(
+                for: activeProject,
+                clientName: project.name
+            )
+
+            // Create new session linked to this active project
+            let session = Session(
+                id: UUID(),
+                name: activeProject.name,
+                projectPath: project.path,
+                createdAt: Date(),
+                activeProjectName: activeProject.name,
+                parkerBriefing: briefing
+            )
+
+            sessions.append(session)
+            createdSessions.append(session)
+            appLogger.info("Created session for active project: \(activeProject.name)")
+        }
+
+        if !createdSessions.isEmpty {
+            saveSessions()
+        }
+        return createdSessions
     }
 
     func deleteSession(_ session: Session) {
         sessions.removeAll { $0.id == session.id }
         removeController(for: session)
-        if activeSession?.id == session.id {
-            activeSession = nil
-        }
+        // Note: Each window's WindowState must handle clearing its own activeSession if needed
         saveSessions()
     }
 
@@ -262,17 +316,47 @@ struct SavedProject: Codable {
     }
 }
 
-struct ContentView: View {
+/// Each window gets its own WindowContainer with independent WindowState
+struct WindowContainer: View {
     @EnvironmentObject var appState: AppState
+    @State private var windowId = UUID()
+    @State private var windowState: WindowState?
 
     var body: some View {
         Group {
-            if let project = appState.selectedProject {
+            if let state = windowState {
+                WindowContent()
+                    .environmentObject(state)
+            } else {
+                Color.clear
+            }
+        }
+        .frame(minWidth: 900, minHeight: 600)
+        .onAppear {
+            // Get or create window state for this window's unique ID
+            if windowState == nil {
+                windowState = appState.getOrCreateWindowState(for: windowId)
+            }
+        }
+        .onDisappear {
+            // Clean up window state when window closes
+            appState.removeWindowState(for: windowId)
+        }
+    }
+}
+
+/// The actual window content, with its own WindowState from environment
+struct WindowContent: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var windowState: WindowState
+
+    var body: some View {
+        Group {
+            if let project = windowState.selectedProject {
                 WorkspaceView(project: project)
             } else {
                 LauncherView()
             }
         }
-        .frame(minWidth: 900, minHeight: 600)
     }
 }
