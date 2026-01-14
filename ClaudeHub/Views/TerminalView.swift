@@ -258,6 +258,9 @@ class TerminalController: ObservableObject {
         // Configure appearance
         terminal.configureNativeColors()
 
+        // Disable mouse reporting so text selection works
+        terminal.allowMouseReporting = false
+
         // Set up colors for dark terminal (slightly transparent for depth)
         terminal.nativeForegroundColor = NSColor(calibratedRed: 0.92, green: 0.92, blue: 0.94, alpha: 1.0)
         terminal.nativeBackgroundColor = NSColor(calibratedRed: 0.08, green: 0.08, blue: 0.10, alpha: 0.95)
@@ -385,6 +388,7 @@ class TerminalContainerView: NSView {
         terminalView?.allowMouseReporting = false
         setupClickMonitor()
         setupDragDrop()
+        setupKeyMonitor()
     }
 
     private func setupDragDrop() {
@@ -470,6 +474,9 @@ class TerminalContainerView: NSView {
             NSEvent.removeMonitor(monitor)
         }
         if let monitor = dragMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        if let monitor = keyMonitor {
             NSEvent.removeMonitor(monitor)
         }
     }
@@ -605,26 +612,45 @@ class TerminalContainerView: NSView {
         return nil
     }
 
-    // Intercept Cmd+C and Cmd+V
+    // Intercept Cmd+C and Cmd+V at the app level to beat SwiftTerm's keyDown
+    private var keyMonitor: Any?
+
+    func setupKeyMonitor() {
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self = self,
+                  event.modifierFlags.contains(.command),
+                  let terminal = self.terminalView,
+                  event.window == self.window else {
+                return event
+            }
+
+            switch event.charactersIgnoringModifiers {
+            case "c":
+                // Copy selected text before keyDown clears selection
+                terminal.copy(self)
+                return nil  // Consume event
+            case "v":
+                // Handle image paste
+                if self.handleImagePaste() {
+                    return nil
+                }
+            default:
+                break
+            }
+            return event
+        }
+    }
+
+    // Intercept Cmd+V for image paste (backup)
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.modifierFlags.contains(.command) else {
             return super.performKeyEquivalent(with: event)
         }
 
-        switch event.charactersIgnoringModifiers {
-        case "c":
-            // Copy selected text from terminal
-            if let terminal = terminalView {
-                terminal.copy(self)
-                return true
-            }
-        case "v":
-            // Handle image paste
+        if event.charactersIgnoringModifiers == "v" {
             if handleImagePaste() {
                 return true
             }
-        default:
-            break
         }
         return super.performKeyEquivalent(with: event)
     }
