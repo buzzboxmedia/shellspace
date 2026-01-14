@@ -1,0 +1,211 @@
+{
+  "" : {
+    "const-values" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SwiftTerm-primary.swiftconstvalues",
+    "dependencies" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SwiftTerm-primary.d",
+    "diagnostics" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SwiftTerm-primary.dia",
+    "emit-module-dependencies" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SwiftTerm-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SwiftTerm-primary-emit-module.dia",
+    "pch" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SwiftTerm-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SwiftTerm-primary.swiftdeps"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Apple/AppleTerminalView.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/AppleTerminalView.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/AppleTerminalView.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/AppleTerminalView.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Apple/CaretView.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/CaretView.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/CaretView.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/CaretView.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Apple/Extensions.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Extensions.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Extensions.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Extensions.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Apple/TerminalViewDelegate.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/TerminalViewDelegate.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/TerminalViewDelegate.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/TerminalViewDelegate.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Buffer.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Buffer.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Buffer.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Buffer.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/BufferLine.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/BufferLine.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/BufferLine.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/BufferLine.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/BufferSet.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/BufferSet.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/BufferSet.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/BufferSet.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/CharData.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/CharData.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/CharData.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/CharData.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/CharSets.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/CharSets.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/CharSets.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/CharSets.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/CircularList.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/CircularList.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/CircularList.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/CircularList.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Colors.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Colors.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Colors.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Colors.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/EscapeSequenceParser.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/EscapeSequenceParser.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/EscapeSequenceParser.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/EscapeSequenceParser.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/EscapeSequences.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/EscapeSequences.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/EscapeSequences.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/EscapeSequences.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/ExternsionsTerminal.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/ExternsionsTerminal.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/ExternsionsTerminal.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/ExternsionsTerminal.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/File.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/File.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/File.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/File.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/HeadlessTerminal.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/HeadlessTerminal.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/HeadlessTerminal.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/HeadlessTerminal.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Line.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Line.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Line.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Line.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/LocalProcess.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/LocalProcess.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/LocalProcess.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/LocalProcess.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Mac/MacAccessibilityService.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacAccessibilityService.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacAccessibilityService.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacAccessibilityService.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Mac/MacCaretView.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacCaretView.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacCaretView.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacCaretView.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Mac/MacDebugView.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacDebugView.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacDebugView.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacDebugView.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Mac/MacExtensions.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacExtensions.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacExtensions.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacExtensions.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Mac/MacLocalTerminalView.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacLocalTerminalView.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacLocalTerminalView.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacLocalTerminalView.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Mac/MacTerminalView.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacTerminalView.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacTerminalView.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/MacTerminalView.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Position.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Position.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Position.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Position.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Pty.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Pty.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Pty.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Pty.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/SearchService.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SearchService.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SearchService.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SearchService.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/SelectionService.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SelectionService.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SelectionService.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SelectionService.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/SixelDcsHandler.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SixelDcsHandler.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SixelDcsHandler.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/SixelDcsHandler.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Terminal.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Terminal.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Terminal.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Terminal.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/TerminalOptions.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/TerminalOptions.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/TerminalOptions.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/TerminalOptions.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/Utilities.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Utilities.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Utilities.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/Utilities.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/iOS/iOSAccessoryView.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSAccessoryView.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSAccessoryView.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSAccessoryView.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/iOS/iOSCaretView.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSCaretView.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSCaretView.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSCaretView.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/iOS/iOSDoubleButton.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSDoubleButton.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSDoubleButton.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSDoubleButton.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/iOS/iOSExtensions.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSExtensions.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSExtensions.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSExtensions.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/iOS/iOSKeyboardView.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSKeyboardView.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSKeyboardView.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSKeyboardView.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/iOS/iOSTerminalView.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSTerminalView.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSTerminalView.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSTerminalView.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/iOS/iOSTextInput.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSTextInput.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSTextInput.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSTextInput.o"
+  },
+  "/Users/baronmiller/Code/claudehub/build/SourcePackages/checkouts/SwiftTerm/Sources/SwiftTerm/iOS/iOSTextStorage.swift" : {
+    "index-unit-output-path" : "/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSTextStorage.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSTextStorage.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/SwiftTerm.build/Release/SwiftTerm.build/Objects-normal/arm64/iOSTextStorage.o"
+  }
+}

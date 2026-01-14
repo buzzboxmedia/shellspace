@@ -6,9 +6,10 @@ struct Session: Identifiable, Hashable, Codable {
     let projectPath: String
     let createdAt: Date
     var lastAccessedAt: Date = Date()
+    var claudeSessionId: String?  // Claude's session ID for --resume
 
     enum CodingKeys: String, CodingKey {
-        case id, name, projectPath, createdAt, lastAccessedAt
+        case id, name, projectPath, createdAt, lastAccessedAt, claudeSessionId
     }
 }
 

@@ -1,31 +1,183 @@
 import SwiftUI
 import SwiftTerm
 import AppKit
+import os.log
+
+private let viewLogger = Logger(subsystem: "com.buzzbox.claudehub", category: "TerminalView")
 
 struct TerminalView: View {
     let session: Session
     @EnvironmentObject var appState: AppState
-    @StateObject private var terminalController = TerminalController()
+    @State private var forceRefresh = false
+    @State private var summarizationTimer: Timer?
+
+    // Get controller from AppState so it persists when switching sessions
+    var terminalController: TerminalController {
+        appState.getOrCreateController(for: session)
+    }
+
+    var isStarted: Bool {
+        terminalController.terminalView != nil
+    }
 
     var body: some View {
-        SwiftTermView(controller: terminalController)
-            .onAppear {
-                terminalController.startClaude(in: session.projectPath, sessionId: session.id)
+        let _ = forceRefresh  // Force view to depend on this state
+        ZStack {
+            if isStarted {
+                SwiftTermView(controller: terminalController)
+                    .id(session.id)  // Ensure view updates when session changes
+                    .onAppear {
+                        startSummarizationCheck()
+                    }
+                    .onDisappear {
+                        summarizationTimer?.invalidate()
+                    }
+            } else {
+                // Show loading state while auto-starting
+                VStack(spacing: 20) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+
+                    Text("Starting Claude...")
+                        .font(.headline)
+                        .foregroundColor(.white)
+
+                    Text(session.projectPath)
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(NSColor(calibratedRed: 0.1, green: 0.1, blue: 0.12, alpha: 1.0)))
+                .onAppear {
+                    viewLogger.info("TerminalView appeared for session: \(session.name), claudeSessionId: \(session.claudeSessionId ?? "none")")
+                    // Auto-start Claude with delay to avoid fork crash
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        viewLogger.info("Starting Claude in: \(session.projectPath)")
+                        terminalController.startClaude(in: session.projectPath, sessionId: session.id, claudeSessionId: session.claudeSessionId)
+                        // Trigger view refresh and capture session ID
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            forceRefresh.toggle()
+                        }
+                        // After Claude starts, try to capture the session ID
+                        if session.claudeSessionId == nil {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                                captureClaudeSessionId()
+                            }
+                        }
+                    }
+                }
             }
-            .onDisappear {
-                // Don't terminate - keep running in background
+        }
+    }
+
+    private func startSummarizationCheck() {
+        viewLogger.info("Starting summarization check timer for session: \(session.name)")
+        // Check every 5 seconds if we should summarize
+        summarizationTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
+            checkAndSummarize()
+        }
+    }
+
+    private func captureClaudeSessionId() {
+        // Convert project path to Claude's folder format
+        let claudeProjectPath = session.projectPath.replacingOccurrences(of: "/", with: "-")
+        let claudeProjectsDir = "\(NSHomeDirectory())/.claude/projects/\(claudeProjectPath)"
+
+        viewLogger.info("Looking for Claude session in: \(claudeProjectsDir)")
+
+        let fileManager = FileManager.default
+        guard let files = try? fileManager.contentsOfDirectory(atPath: claudeProjectsDir) else {
+            viewLogger.warning("Could not read Claude projects directory")
+            return
+        }
+
+        // Find the most recently modified .jsonl file
+        var latestFile: (name: String, date: Date)?
+        for file in files where file.hasSuffix(".jsonl") {
+            let filePath = "\(claudeProjectsDir)/\(file)"
+            if let attrs = try? fileManager.attributesOfItem(atPath: filePath),
+               let modDate = attrs[.modificationDate] as? Date {
+                if latestFile == nil || modDate > latestFile!.date {
+                    latestFile = (file, modDate)
+                }
             }
+        }
+
+        if let latest = latestFile {
+            // Extract UUID from filename (remove .jsonl extension)
+            let sessionId = String(latest.name.dropLast(6))  // Remove ".jsonl"
+            viewLogger.info("Captured Claude session ID: \(sessionId)")
+
+            // Update the session with the Claude session ID
+            appState.updateClaudeSessionId(session, claudeSessionId: sessionId)
+        } else {
+            viewLogger.warning("No session files found in Claude projects directory")
+        }
+    }
+
+    private func checkAndSummarize() {
+        // Only summarize once per session
+        guard !terminalController.hasSummarized else {
+            viewLogger.debug("Already summarized this session, skipping")
+            return
+        }
+
+        let content = terminalController.getTerminalContent()
+        viewLogger.info("Checking terminal content: \(content.count) characters")
+
+        // Look for signs that Claude has responded (at least 50 lines of content)
+        let lineCount = content.components(separatedBy: "\n").count
+        viewLogger.info("Terminal has \(lineCount) lines")
+
+        // Check if there's meaningful content (Claude typically outputs a lot when it responds)
+        if lineCount > 30 && content.contains("Claude") {
+            viewLogger.info("Detected Claude response, triggering summarization")
+            terminalController.hasSummarized = true
+            summarizationTimer?.invalidate()
+
+            ClaudeAPI.shared.summarizeChat(content: content) { title in
+                if let title = title {
+                    viewLogger.info("Received summary title: '\(title)'")
+                    appState.updateSessionName(session, name: title)
+                } else {
+                    viewLogger.warning("Summarization returned nil")
+                }
+            }
+        }
     }
 }
 
 // Controller to manage the terminal and process
 class TerminalController: ObservableObject {
-    var terminalView: LocalProcessTerminalView?
+    @Published var terminalView: LocalProcessTerminalView?
     private var currentSessionId: UUID?
+    var hasSummarized = false
+    private let logger = Logger(subsystem: "com.buzzbox.claudehub", category: "TerminalController")
 
-    func startClaude(in directory: String, sessionId: UUID) {
+    // Get terminal content for summarization
+    func getTerminalContent() -> String {
+        guard let terminal = terminalView?.getTerminal() else {
+            logger.warning("No terminal available for content extraction")
+            return ""
+        }
+
+        // Use the public API to get buffer content
+        let data = terminal.getBufferAsData()
+        let content = String(data: data, encoding: .utf8) ?? ""
+
+        // Limit to ~4000 characters for API call
+        let truncated = String(content.suffix(4000))
+        logger.info("Extracted \(truncated.count) characters from terminal (from \(content.count) total)")
+        return truncated
+    }
+
+    func startClaude(in directory: String, sessionId: UUID, claudeSessionId: String? = nil) {
+        logger.info("startClaude called for directory: \(directory), sessionId: \(sessionId), claudeSessionId: \(claudeSessionId ?? "none")")
+
         // Don't restart if already running for this session
         if currentSessionId == sessionId && terminalView != nil {
+            logger.info("Claude already running for this session, skipping")
             return
         }
 
@@ -33,29 +185,45 @@ class TerminalController: ObservableObject {
 
         // Create terminal view if needed
         if terminalView == nil {
+            logger.info("Creating new LocalProcessTerminalView")
             terminalView = LocalProcessTerminalView(frame: .zero)
             configureTerminal()
         }
 
         // Find claude path
         let claudePath = findClaudePath()
+        logger.info("Found claude at: \(claudePath)")
 
         // Set up environment
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"
         env["COLORTERM"] = "truecolor"
         env["HOME"] = NSHomeDirectory()
-        env["PATH"] = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:\(NSHomeDirectory())/.local/bin"
+        env["PATH"] = "\(NSHomeDirectory())/.npm-global/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:\(NSHomeDirectory())/.local/bin"
 
         let envArray = env.map { "\($0.key)=\($0.value)" }
 
-        // Start claude process
+        // Start bash shell
+        logger.info("Starting bash shell")
         terminalView?.startProcess(
-            executable: claudePath,
-            args: [claudePath],
-            environment: envArray,
-            execName: "claude"
+            executable: "/bin/bash",
+            environment: envArray
         )
+
+        // Send cd command to change directory, then start claude
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            let claudeCommand: String
+            if let resumeId = claudeSessionId {
+                // Resume existing session
+                claudeCommand = "cd '\(directory)' && claude --resume '\(resumeId)'\n"
+                self?.logger.info("Resuming Claude session: \(resumeId)")
+            } else {
+                // Start new session
+                claudeCommand = "cd '\(directory)' && claude\n"
+                self?.logger.info("Starting new Claude session")
+            }
+            self?.terminalView?.send(txt: claudeCommand)
+        }
     }
 
     private func configureTerminal() {
@@ -77,6 +245,7 @@ class TerminalController: ObservableObject {
 
     private func findClaudePath() -> String {
         let possiblePaths = [
+            "\(NSHomeDirectory())/.npm-global/bin/claude",
             "/usr/local/bin/claude",
             "/opt/homebrew/bin/claude",
             "\(NSHomeDirectory())/.local/bin/claude",
@@ -148,11 +317,8 @@ struct SwiftTermView: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSView, context: Context) {
         // Focus terminal when view updates
-        if let container = nsView as? TerminalContainerView,
-           let terminalView = container.terminalView {
-            DispatchQueue.main.async {
-                terminalView.window?.makeFirstResponder(terminalView)
-            }
+        if let container = nsView as? TerminalContainerView {
+            container.focusTerminal()
         }
     }
 }
@@ -170,28 +336,16 @@ class TerminalContainerView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
-        // Forward all key events to the terminal
-        if let terminal = terminalView {
-            terminal.keyDown(with: event)
-        } else {
-            super.keyDown(with: event)
-        }
+        // Don't forward - just focus the terminal and let it handle keys directly
+        focusTerminal()
     }
 
     override func keyUp(with event: NSEvent) {
-        if let terminal = terminalView {
-            terminal.keyUp(with: event)
-        } else {
-            super.keyUp(with: event)
-        }
+        // Consumed - terminal handles its own key events
     }
 
     override func flagsChanged(with event: NSEvent) {
-        if let terminal = terminalView {
-            terminal.flagsChanged(with: event)
-        } else {
-            super.flagsChanged(with: event)
-        }
+        // Consumed - terminal handles its own key events
     }
 
     override func viewDidMoveToWindow() {
@@ -226,12 +380,13 @@ class TerminalContainerView: NSView {
         // Make window key
         window.makeKeyAndOrderFront(nil)
 
-        // Make terminal first responder - this is the key line
-        let success = window.makeFirstResponder(terminal)
-        if !success {
-            // If terminal won't accept, make container the responder
-            // and we'll forward key events manually
-            window.makeFirstResponder(self)
+        // Make terminal first responder with slight delay to ensure view hierarchy is ready
+        DispatchQueue.main.async {
+            let success = window.makeFirstResponder(terminal)
+            if !success {
+                // If terminal won't accept, make container the responder
+                window.makeFirstResponder(self)
+            }
         }
     }
 }

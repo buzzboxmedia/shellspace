@@ -1,0 +1,56 @@
+{
+  "" : {
+    "const-values" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/ClaudeHub-primary.swiftconstvalues",
+    "dependencies" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/ClaudeHub-primary.d",
+    "diagnostics" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/ClaudeHub-primary.dia",
+    "emit-module-dependencies" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/ClaudeHub-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/ClaudeHub-primary-emit-module.dia",
+    "pch" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/ClaudeHub-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/ClaudeHub-primary.swiftdeps"
+  },
+  "/Users/baronmiller/Code/claudehub/ClaudeHub/ClaudeHubApp.swift" : {
+    "index-unit-output-path" : "/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/ClaudeHubApp.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/ClaudeHubApp.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/ClaudeHubApp.o"
+  },
+  "/Users/baronmiller/Code/claudehub/ClaudeHub/Models/Project.swift" : {
+    "index-unit-output-path" : "/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/Project.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/Project.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/Project.o"
+  },
+  "/Users/baronmiller/Code/claudehub/ClaudeHub/Models/Session.swift" : {
+    "index-unit-output-path" : "/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/Session.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/Session.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/Session.o"
+  },
+  "/Users/baronmiller/Code/claudehub/ClaudeHub/Services/ClaudeAPI.swift" : {
+    "index-unit-output-path" : "/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/ClaudeAPI.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/ClaudeAPI.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/ClaudeAPI.o"
+  },
+  "/Users/baronmiller/Code/claudehub/ClaudeHub/Views/LauncherView.swift" : {
+    "index-unit-output-path" : "/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/LauncherView.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/LauncherView.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/LauncherView.o"
+  },
+  "/Users/baronmiller/Code/claudehub/ClaudeHub/Views/MenuBarView.swift" : {
+    "index-unit-output-path" : "/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/MenuBarView.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/MenuBarView.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/MenuBarView.o"
+  },
+  "/Users/baronmiller/Code/claudehub/ClaudeHub/Views/SettingsView.swift" : {
+    "index-unit-output-path" : "/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/SettingsView.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/SettingsView.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/SettingsView.o"
+  },
+  "/Users/baronmiller/Code/claudehub/ClaudeHub/Views/TerminalView.swift" : {
+    "index-unit-output-path" : "/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/TerminalView.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/TerminalView.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/TerminalView.o"
+  },
+  "/Users/baronmiller/Code/claudehub/ClaudeHub/Views/WorkspaceView.swift" : {
+    "index-unit-output-path" : "/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/WorkspaceView.o",
+    "llvm-bc" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/WorkspaceView.bc",
+    "object" : "/Users/baronmiller/Code/claudehub/build/Build/Intermediates.noindex/ClaudeHub.build/Release/ClaudeHub.build/Objects-normal/arm64/WorkspaceView.o"
+  }
+}

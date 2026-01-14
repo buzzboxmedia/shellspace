@@ -1,4 +1,7 @@
 import SwiftUI
+import os.log
+
+private let appLogger = Logger(subsystem: "com.buzzbox.claudehub", category: "AppState")
 
 @main
 struct ClaudeHubApp: App {
@@ -15,6 +18,43 @@ struct ClaudeHubApp: App {
                 }
         }
         .windowResizability(.contentSize)
+        .commands {
+            CommandGroup(after: .newItem) {
+                Button("New Chat") {
+                    if let project = appState.selectedProject {
+                        let _ = appState.createSession(for: project)
+                    }
+                }
+                .keyboardShortcut("n", modifiers: .command)
+                .disabled(appState.selectedProject == nil)
+            }
+            // Navigation
+            CommandGroup(after: .sidebar) {
+                Button("Back to Projects") {
+                    appState.selectedProject = nil
+                    appState.activeSession = nil
+                }
+                .keyboardShortcut(.escape, modifiers: [])
+                .disabled(appState.selectedProject == nil)
+            }
+            // Ensure standard Edit menu commands work
+            CommandGroup(replacing: .pasteboard) {
+                Button("Copy") {
+                    NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil)
+                }
+                .keyboardShortcut("c", modifiers: .command)
+
+                Button("Paste") {
+                    NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
+                }
+                .keyboardShortcut("v", modifiers: .command)
+
+                Button("Select All") {
+                    NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+                }
+                .keyboardShortcut("a", modifiers: .command)
+            }
+        }
 
         MenuBarExtra("Claude Hub", systemImage: "terminal.fill") {
             MenuBarView()
@@ -45,6 +85,9 @@ class AppState: ObservableObject {
     @Published var mainProjects: [Project] = []
     @Published var clientProjects: [Project] = []
 
+    // Store terminal controllers by session ID so they persist when switching
+    var terminalControllers: [UUID: TerminalController] = [:]
+
     private let defaults = UserDefaults.standard
     private let mainProjectsKey = "mainProjects"
     private let clientProjectsKey = "clientProjects"
@@ -55,14 +98,31 @@ class AppState: ObservableObject {
         loadSessions()
     }
 
+    func getOrCreateController(for session: Session) -> TerminalController {
+        if let existing = terminalControllers[session.id] {
+            return existing
+        }
+        let controller = TerminalController()
+        terminalControllers[session.id] = controller
+        return controller
+    }
+
+    func removeController(for session: Session) {
+        terminalControllers.removeValue(forKey: session.id)
+    }
+
     func sessionsFor(project: Project) -> [Session] {
         sessions.filter { $0.projectPath == project.path }
     }
 
     func createSession(for project: Project) -> Session {
+        // Generate name like "Chat 1", "Chat 2", etc
+        let existingCount = sessionsFor(project: project).count
+        let chatName = "Chat \(existingCount + 1)"
+
         let session = Session(
             id: UUID(),
-            name: "New Chat",
+            name: chatName,
             projectPath: project.path,
             createdAt: Date()
         )
@@ -74,6 +134,7 @@ class AppState: ObservableObject {
 
     func deleteSession(_ session: Session) {
         sessions.removeAll { $0.id == session.id }
+        removeController(for: session)
         if activeSession?.id == session.id {
             activeSession = nil
         }
@@ -81,9 +142,24 @@ class AppState: ObservableObject {
     }
 
     func updateSessionName(_ session: Session, name: String) {
+        appLogger.info("Updating session name from '\(session.name)' to '\(name)'")
         if let index = sessions.firstIndex(where: { $0.id == session.id }) {
             sessions[index].name = name
             saveSessions()
+            appLogger.info("Session name updated and saved")
+        } else {
+            appLogger.warning("Session not found for name update: \(session.id)")
+        }
+    }
+
+    func updateClaudeSessionId(_ session: Session, claudeSessionId: String) {
+        appLogger.info("Updating Claude session ID for '\(session.name)' to '\(claudeSessionId)'")
+        if let index = sessions.firstIndex(where: { $0.id == session.id }) {
+            sessions[index].claudeSessionId = claudeSessionId
+            saveSessions()
+            appLogger.info("Claude session ID updated and saved")
+        } else {
+            appLogger.warning("Session not found for Claude session ID update: \(session.id)")
         }
     }
 
@@ -132,10 +208,11 @@ class AppState: ObservableObject {
             mainProjects = saved.map { $0.toProject() }
         } else {
             // Default projects
+            let dropboxPath = NSString("~/Library/CloudStorage/Dropbox").expandingTildeInPath
             mainProjects = [
-                Project(name: "Miller", path: NSString("~/Dropbox/Miller").expandingTildeInPath, icon: "person.fill"),
-                Project(name: "Talkspresso", path: NSString("~/Dropbox/Talkspresso").expandingTildeInPath, icon: "cup.and.saucer.fill"),
-                Project(name: "Buzzbox", path: NSString("~/Dropbox/Buzzbox").expandingTildeInPath, icon: "shippingbox.fill")
+                Project(name: "Miller", path: "\(dropboxPath)/Miller", icon: "person.fill"),
+                Project(name: "Talkspresso", path: "\(dropboxPath)/Talkspresso", icon: "cup.and.saucer.fill"),
+                Project(name: "Buzzbox", path: "\(dropboxPath)/Buzzbox", icon: "shippingbox.fill")
             ]
         }
 
@@ -144,12 +221,13 @@ class AppState: ObservableObject {
             clientProjects = saved.map { $0.toProject() }
         } else {
             // Default clients
+            let clientsPath = NSString("~/Library/CloudStorage/Dropbox/Buzzbox/Clients").expandingTildeInPath
             clientProjects = [
-                Project(name: "AAGL", path: NSString("~/Dropbox/Buzzbox/Clients/AAGL").expandingTildeInPath, icon: "cross.case.fill"),
-                Project(name: "AFL", path: NSString("~/Dropbox/Buzzbox/Clients/AFL").expandingTildeInPath, icon: "building.columns.fill"),
-                Project(name: "Citadel", path: NSString("~/Dropbox/Buzzbox/Clients/Citadel").expandingTildeInPath, icon: "car.fill"),
-                Project(name: "INFAB", path: NSString("~/Dropbox/Buzzbox/Clients/INFAB").expandingTildeInPath, icon: "shield.fill"),
-                Project(name: "TDS", path: NSString("~/Dropbox/Buzzbox/Clients/TDS").expandingTildeInPath, icon: "eye.fill")
+                Project(name: "AAGL", path: "\(clientsPath)/AAGL", icon: "cross.case.fill"),
+                Project(name: "AFL", path: "\(clientsPath)/AFL", icon: "building.columns.fill"),
+                Project(name: "Citadel", path: "\(clientsPath)/Citadel", icon: "car.fill"),
+                Project(name: "INFAB", path: "\(clientsPath)/INFAB", icon: "shield.fill"),
+                Project(name: "TDS", path: "\(clientsPath)/TDS", icon: "eye.fill")
             ]
         }
     }

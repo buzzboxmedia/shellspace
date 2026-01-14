@@ -8,10 +8,17 @@ struct WorkspaceView: View {
         appState.sessionsFor(project: project)
     }
 
+    func goBack() {
+        withAnimation(.spring(response: 0.3)) {
+            appState.selectedProject = nil
+            appState.activeSession = nil
+        }
+    }
+
     var body: some View {
         HSplitView {
             // Sidebar
-            SessionSidebar(project: project)
+            SessionSidebar(project: project, goBack: goBack)
                 .frame(minWidth: 200, idealWidth: 250, maxWidth: 300)
 
             // Terminal area
@@ -37,74 +44,82 @@ struct WorkspaceView: View {
 struct SessionSidebar: View {
     @EnvironmentObject var appState: AppState
     let project: Project
+    let goBack: () -> Void
+    @State private var isBackHovered = false
 
     var sessions: [Session] {
         appState.sessionsFor(project: project)
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header with project name
-            HStack {
-                Button {
-                    withAnimation(.spring(response: 0.3)) {
-                        appState.selectedProject = nil
-                        appState.activeSession = nil
+        GeometryReader { geometry in
+            VStack(alignment: .leading, spacing: 0) {
+                // Header row - fixed height
+                HStack {
+                    Button(action: goBack) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 12, weight: .semibold))
+                            Text("Back")
+                                .font(.system(size: 12))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(isBackHovered ? Color.white.opacity(0.15) : Color.white.opacity(0.05))
+                        )
                     }
-                } label: {
-                    Image(systemName: "chevron.left")
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .onHover { isBackHovered = $0 }
+
+                    Spacer()
+
+                    Text(project.name)
                         .font(.system(size: 14, weight: .semibold))
+
+                    Spacer()
+
+                    // Balance spacer
+                    Color.clear.frame(width: 60)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(.ultraThinMaterial)
+
+                Divider()
+
+                // New Chat button
+                Button {
+                    let _ = appState.createSession(for: project)
+                } label: {
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                        Text("New Chat")
+                    }
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.blue)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
 
-                Spacer()
+                Divider()
 
-                Text(project.name)
-                    .font(.system(size: 14, weight: .semibold))
-
-                Spacer()
-
-                // Placeholder for balance
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .semibold))
-                    .opacity(0)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(.ultraThinMaterial)
-
-            Divider()
-
-            // New Chat button
-            Button {
-                let _ = appState.createSession(for: project)
-            } label: {
-                HStack {
-                    Image(systemName: "plus.circle.fill")
-                    Text("New Chat")
-                }
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.blue)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-            }
-            .buttonStyle(.plain)
-
-            Divider()
-
-            // Session list
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(sessions) { session in
-                        SessionRow(session: session)
+                // Session list - fills remaining space
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(sessions) { session in
+                            SessionRow(session: session)
+                        }
                     }
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.vertical, 8)
             }
-
-            Spacer()
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
         }
         .background(.ultraThinMaterial.opacity(0.5))
     }
@@ -143,8 +158,18 @@ struct SessionRow: View {
 
             Spacer()
 
-            // Delete button on hover
+            // Edit and delete buttons on hover
             if isHovered && !isEditing {
+                Button {
+                    editedName = session.name
+                    isEditing = true
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+
                 Button {
                     appState.deleteSession(session)
                 } label: {
@@ -163,12 +188,12 @@ struct SessionRow: View {
         }
         .padding(.horizontal, 8)
         .contentShape(Rectangle())
-        .onTapGesture {
-            appState.activeSession = session
-        }
         .onTapGesture(count: 2) {
             editedName = session.name
             isEditing = true
+        }
+        .onTapGesture(count: 1) {
+            appState.activeSession = session
         }
         .onHover { hovering in
             isHovered = hovering
