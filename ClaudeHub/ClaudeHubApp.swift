@@ -76,6 +76,7 @@ class AppState: ObservableObject {
     @Published var sessions: [Session] = []
     @Published var mainProjects: [Project] = []
     @Published var clientProjects: [Project] = []
+    @Published var devProjects: [Project] = []  // Meta: ClaudeHub itself
 
     // Store terminal controllers by session ID so they persist when switching
     var terminalControllers: [UUID: TerminalController] = [:]
@@ -269,6 +270,11 @@ class AppState: ObservableObject {
                 Project(name: "Buzzbox", path: "\(dropboxPath)/Buzzbox", icon: "shippingbox.fill")
             ]
         }
+
+        // Dev projects (always this, not persisted)
+        devProjects = [
+            Project(name: "ClaudeHub", path: "\(NSHomeDirectory())/Code/claudehub", icon: "hammer.fill")
+        ]
 
         if let data = defaults.data(forKey: clientProjectsKey),
            let saved = try? JSONDecoder().decode([SavedProject].self, from: data) {

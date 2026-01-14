@@ -60,6 +60,23 @@ struct LauncherView: View {
                             }
                         }
                     }
+
+                    Divider()
+                        .padding(.vertical, 8)
+
+                    // Development Section (ClaudeHub itself)
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("DEVELOPMENT")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.orange)
+                            .tracking(1.5)
+
+                        HStack(spacing: 16) {
+                            ForEach(appState.devProjects) { project in
+                                ProjectCard(project: project)
+                            }
+                        }
+                    }
                 }
             }
             .padding(48)
