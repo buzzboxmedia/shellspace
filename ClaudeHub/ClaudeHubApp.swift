@@ -265,7 +265,7 @@ class AppState: ObservableObject {
         encoder.outputFormatting = .prettyPrinted
         if let data = try? encoder.encode(sessions) {
             try? data.write(to: sessionsFilePath)
-            appLogger.info("Saved \(sessions.count) sessions to Dropbox")
+            appLogger.info("Saved \(self.sessions.count) sessions to Dropbox")
         }
     }
 
