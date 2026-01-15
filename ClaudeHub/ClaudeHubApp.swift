@@ -107,7 +107,23 @@ class AppState: ObservableObject {
     private let clientProjectsKey = "clientProjects"
     private let sessionsKey = "sessions"
 
+    // Dropbox path for synced storage
+    private var dropboxDataPath: URL {
+        let dropboxPath = NSString("~/Library/CloudStorage/Dropbox/Buzzbox/ClaudeHub").expandingTildeInPath
+        return URL(fileURLWithPath: dropboxPath)
+    }
+
+    private var sessionsFilePath: URL {
+        dropboxDataPath.appendingPathComponent("sessions.json")
+    }
+
+    private var projectsFilePath: URL {
+        dropboxDataPath.appendingPathComponent("projects.json")
+    }
+
     init() {
+        // Ensure data directory exists
+        try? FileManager.default.createDirectory(at: dropboxDataPath, withIntermediateDirectories: true)
         loadProjects()
         loadSessions()
     }
@@ -218,18 +234,38 @@ class AppState: ObservableObject {
         }
     }
 
-    // MARK: - Session Persistence
+    func updateSessionSummary(_ session: Session, summary: String) {
+        appLogger.info("Saving session summary for '\(session.name)'")
+        if let index = sessions.firstIndex(where: { $0.id == session.id }) {
+            sessions[index].lastSessionSummary = summary
+            saveSessions()
+            appLogger.info("Session summary saved")
+        }
+    }
+
+    // MARK: - Session Persistence (Dropbox synced)
 
     private func loadSessions() {
-        if let data = defaults.data(forKey: sessionsKey),
+        // Try Dropbox file first
+        if let data = try? Data(contentsOf: sessionsFilePath),
            let saved = try? JSONDecoder().decode([Session].self, from: data) {
             sessions = saved
+            appLogger.info("Loaded \(saved.count) sessions from Dropbox")
+        } else if let data = defaults.data(forKey: sessionsKey),
+           let saved = try? JSONDecoder().decode([Session].self, from: data) {
+            // Migrate from UserDefaults to Dropbox
+            sessions = saved
+            saveSessions()
+            appLogger.info("Migrated \(saved.count) sessions to Dropbox")
         }
     }
 
     private func saveSessions() {
-        if let data = try? JSONEncoder().encode(sessions) {
-            defaults.set(data, forKey: sessionsKey)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        if let data = try? encoder.encode(sessions) {
+            try? data.write(to: sessionsFilePath)
+            appLogger.info("Saved \(sessions.count) sessions to Dropbox")
         }
     }
 
@@ -255,12 +291,25 @@ class AppState: ObservableObject {
         saveProjects()
     }
 
-    // MARK: - Persistence
+    // MARK: - Project Persistence (Dropbox synced)
 
     private func loadProjects() {
-        if let data = defaults.data(forKey: mainProjectsKey),
-           let saved = try? JSONDecoder().decode([SavedProject].self, from: data) {
-            mainProjects = saved.map { $0.toProject() }
+        // Try Dropbox file first
+        if let data = try? Data(contentsOf: projectsFilePath),
+           let saved = try? JSONDecoder().decode(SavedProjectsFile.self, from: data) {
+            mainProjects = saved.main.map { $0.toProject() }
+            clientProjects = saved.clients.map { $0.toProject() }
+            appLogger.info("Loaded projects from Dropbox")
+        } else if let mainData = defaults.data(forKey: mainProjectsKey),
+           let mainSaved = try? JSONDecoder().decode([SavedProject].self, from: mainData) {
+            // Migrate from UserDefaults
+            mainProjects = mainSaved.map { $0.toProject() }
+            if let clientData = defaults.data(forKey: clientProjectsKey),
+               let clientSaved = try? JSONDecoder().decode([SavedProject].self, from: clientData) {
+                clientProjects = clientSaved.map { $0.toProject() }
+            }
+            saveProjects()
+            appLogger.info("Migrated projects to Dropbox")
         } else {
             // Default projects
             let dropboxPath = NSString("~/Library/CloudStorage/Dropbox").expandingTildeInPath
@@ -269,17 +318,6 @@ class AppState: ObservableObject {
                 Project(name: "Talkspresso", path: "\(dropboxPath)/Talkspresso", icon: "cup.and.saucer.fill"),
                 Project(name: "Buzzbox", path: "\(dropboxPath)/Buzzbox", icon: "shippingbox.fill")
             ]
-        }
-
-        // Dev projects (always this, not persisted)
-        devProjects = [
-            Project(name: "ClaudeHub", path: "\(NSHomeDirectory())/Code/claudehub", icon: "hammer.fill")
-        ]
-
-        if let data = defaults.data(forKey: clientProjectsKey),
-           let saved = try? JSONDecoder().decode([SavedProject].self, from: data) {
-            clientProjects = saved.map { $0.toProject() }
-        } else {
             // Default clients
             let clientsPath = NSString("~/Library/CloudStorage/Dropbox/Buzzbox/Clients").expandingTildeInPath
             clientProjects = [
@@ -291,17 +329,22 @@ class AppState: ObservableObject {
                 Project(name: "TDS", path: "\(clientsPath)/TDS", icon: "eye.fill")
             ]
         }
+
+        // Dev projects (always this, not persisted - path is machine-specific)
+        devProjects = [
+            Project(name: "ClaudeHub", path: "\(NSHomeDirectory())/Code/claudehub", icon: "hammer.fill")
+        ]
     }
 
     private func saveProjects() {
-        let mainSaved = mainProjects.map { SavedProject(from: $0) }
-        let clientSaved = clientProjects.map { SavedProject(from: $0) }
-
-        if let data = try? JSONEncoder().encode(mainSaved) {
-            defaults.set(data, forKey: mainProjectsKey)
-        }
-        if let data = try? JSONEncoder().encode(clientSaved) {
-            defaults.set(data, forKey: clientProjectsKey)
+        let saved = SavedProjectsFile(
+            main: mainProjects.map { SavedProject(from: $0) },
+            clients: clientProjects.map { SavedProject(from: $0) }
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        if let data = try? encoder.encode(saved) {
+            try? data.write(to: projectsFilePath)
         }
     }
 }
@@ -321,6 +364,12 @@ struct SavedProject: Codable {
     func toProject() -> Project {
         Project(name: name, path: path, icon: icon)
     }
+}
+
+// Container for saving both project lists
+struct SavedProjectsFile: Codable {
+    let main: [SavedProject]
+    let clients: [SavedProject]
 }
 
 /// Each window gets its own WindowContainer with independent WindowState

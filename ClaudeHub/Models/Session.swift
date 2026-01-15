@@ -13,9 +13,12 @@ struct Session: Identifiable, Hashable, Codable {
     var activeProjectName: String?
     var parkerBriefing: String?
 
+    // Summary from last session for context when reopening
+    var lastSessionSummary: String?
+
     enum CodingKeys: String, CodingKey {
         case id, name, description, projectPath, createdAt, lastAccessedAt, claudeSessionId
-        case activeProjectName, parkerBriefing
+        case activeProjectName, parkerBriefing, lastSessionSummary
     }
 
     var isProjectLinked: Bool {
