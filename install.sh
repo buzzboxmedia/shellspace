@@ -21,6 +21,11 @@ else
     echo "No changes to commit"
 fi
 
+# Get version from git commit count (after commit so it's current)
+COMMIT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo "0")
+VERSION="1.0.$COMMIT_COUNT"
+echo "Version: $VERSION"
+
 echo "Building $APP_NAME..."
 swift build
 
@@ -51,9 +56,8 @@ if [ -f "$SCRIPT_DIR/ClaudeHub/Resources/AppIcon.icns" ]; then
     cp "$SCRIPT_DIR/ClaudeHub/Resources/AppIcon.icns" "$APP_PATH/Contents/Resources/"
 fi
 
-# Only create Info.plist on fresh install or if missing
-if [ "$FRESH_INSTALL" = true ] || [ ! -f "$APP_PATH/Contents/Info.plist" ]; then
-    cat > "$APP_PATH/Contents/Info.plist" << 'PLIST'
+# Always update Info.plist (version changes each build)
+cat > "$APP_PATH/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -69,7 +73,7 @@ if [ "$FRESH_INSTALL" = true ] || [ ! -f "$APP_PATH/Contents/Info.plist" ]; then
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>$VERSION</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>
@@ -79,7 +83,6 @@ if [ "$FRESH_INSTALL" = true ] || [ ! -f "$APP_PATH/Contents/Info.plist" ]; then
 </dict>
 </plist>
 PLIST
-fi
 
 # Register with Launch Services
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_PATH"
