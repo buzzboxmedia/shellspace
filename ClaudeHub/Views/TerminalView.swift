@@ -137,22 +137,30 @@ struct TerminalView: View {
         // Wait for some content to appear
         guard lineCount > 10 else { return }
 
-        // Try to extract user's first input as the title
+        // Try to extract user's first input and send to Claude for a title
         if let userInput = extractUserInput(from: content) {
             viewLogger.info("Extracted user input: '\(userInput)'")
             terminalController.hasSummarized = true
             summarizationTimer?.invalidate()
 
-            // Clean up and truncate the input for a title
-            let title = cleanupTitle(userInput)
-            viewLogger.info("Using title: '\(title)'")
-            appState.updateSessionName(session, name: title)
+            // Send user's input to Claude to generate a smart title
+            ClaudeAPI.shared.generateTitle(from: userInput) { title in
+                if let title = title {
+                    viewLogger.info("Claude generated title: '\(title)'")
+                    appState.updateSessionName(session, name: title)
+                } else {
+                    // Fallback: use cleaned up input directly
+                    let fallbackTitle = self.cleanupTitle(userInput)
+                    viewLogger.info("Using fallback title: '\(fallbackTitle)'")
+                    appState.updateSessionName(session, name: fallbackTitle)
+                }
+            }
             return
         }
 
-        // Fallback: if we have Claude response but couldn't extract input, use API
+        // Fallback: if we have Claude response but couldn't extract input, use full content
         if lineCount > 30 && content.contains("Claude") {
-            viewLogger.info("Falling back to API summarization")
+            viewLogger.info("Falling back to full content summarization")
             terminalController.hasSummarized = true
             summarizationTimer?.invalidate()
 
