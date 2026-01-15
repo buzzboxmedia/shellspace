@@ -107,25 +107,31 @@ class AppState: ObservableObject {
     private let clientProjectsKey = "clientProjects"
     private let sessionsKey = "sessions"
 
-    // Dropbox path for synced storage
-    private var dropboxDataPath: URL {
-        let dropboxPath = NSString("~/Library/CloudStorage/Dropbox/Buzzbox/ClaudeHub").expandingTildeInPath
-        return URL(fileURLWithPath: dropboxPath)
-    }
-
-    private var sessionsFilePath: URL {
-        dropboxDataPath.appendingPathComponent("sessions.json")
+    // Global config path (for project list only)
+    private var configPath: URL {
+        let path = NSString("~/Library/CloudStorage/Dropbox/Buzzbox/ClaudeHub").expandingTildeInPath
+        return URL(fileURLWithPath: path)
     }
 
     private var projectsFilePath: URL {
-        dropboxDataPath.appendingPathComponent("projects.json")
+        configPath.appendingPathComponent("projects.json")
     }
 
     init() {
-        // Ensure data directory exists
-        try? FileManager.default.createDirectory(at: dropboxDataPath, withIntermediateDirectories: true)
+        // Ensure config directory exists
+        try? FileManager.default.createDirectory(at: configPath, withIntermediateDirectories: true)
         loadProjects()
-        loadSessions()
+        loadAllSessions()
+    }
+
+    /// Get the sessions file path for a project
+    private func sessionsFilePath(for projectPath: String) -> URL {
+        // Special case: ClaudeHub dev folder -> save to Dropbox version
+        if projectPath.contains("/Code/claudehub") || projectPath.contains("/code/claudehub") {
+            return configPath.appendingPathComponent("sessions.json")
+        }
+        // All other projects: save in project folder
+        return URL(fileURLWithPath: projectPath).appendingPathComponent(".claudehub-sessions.json")
     }
 
     func getOrCreateController(for session: Session) -> TerminalController {
@@ -243,30 +249,54 @@ class AppState: ObservableObject {
         }
     }
 
-    // MARK: - Session Persistence (Dropbox synced)
+    // MARK: - Session Persistence (per-project)
 
-    private func loadSessions() {
-        // Try Dropbox file first
-        if let data = try? Data(contentsOf: sessionsFilePath),
-           let saved = try? JSONDecoder().decode([Session].self, from: data) {
-            sessions = saved
-            appLogger.info("Loaded \(saved.count) sessions from Dropbox")
-        } else if let data = defaults.data(forKey: sessionsKey),
-           let saved = try? JSONDecoder().decode([Session].self, from: data) {
-            // Migrate from UserDefaults to Dropbox
-            sessions = saved
-            saveSessions()
-            appLogger.info("Migrated \(saved.count) sessions to Dropbox")
+    /// Load sessions from all known project folders
+    private func loadAllSessions() {
+        var allSessions: [Session] = []
+        let allProjects = mainProjects + clientProjects + devProjects
+
+        for project in allProjects {
+            let filePath = sessionsFilePath(for: project.path)
+            if let data = try? Data(contentsOf: filePath),
+               let projectSessions = try? JSONDecoder().decode([Session].self, from: data) {
+                allSessions.append(contentsOf: projectSessions)
+                appLogger.info("Loaded \(projectSessions.count) sessions from \(project.name)")
+            }
         }
+
+        // Also migrate any old sessions from UserDefaults
+        if allSessions.isEmpty, let data = defaults.data(forKey: sessionsKey),
+           let oldSessions = try? JSONDecoder().decode([Session].self, from: data) {
+            allSessions = oldSessions
+            // Save to new per-project format
+            sessions = allSessions
+            saveAllSessions()
+            appLogger.info("Migrated \(oldSessions.count) sessions to per-project storage")
+        }
+
+        sessions = allSessions
     }
 
+    /// Save sessions to their respective project folders
     private func saveSessions() {
+        saveAllSessions()
+    }
+
+    private func saveAllSessions() {
+        // Group sessions by project path
+        let grouped = Dictionary(grouping: sessions) { $0.projectPath }
+
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
-        if let data = try? encoder.encode(sessions) {
-            try? data.write(to: sessionsFilePath)
-            appLogger.info("Saved \(self.sessions.count) sessions to Dropbox")
+
+        for (projectPath, projectSessions) in grouped {
+            let filePath = sessionsFilePath(for: projectPath)
+            if let data = try? encoder.encode(projectSessions) {
+                try? data.write(to: filePath)
+            }
         }
+        appLogger.info("Saved sessions to project folders")
     }
 
     // MARK: - Project Management
