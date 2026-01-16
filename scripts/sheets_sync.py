@@ -242,6 +242,89 @@ def log_task(workspace: str, project: str, task: str, description: str,
     return result
 
 
+def create_project(workspace: str, project: str):
+    """Add a project header row to the spreadsheet."""
+    spreadsheet_id = ensure_spreadsheet()
+    sheets = get_sheets_service()
+
+    now = datetime.now()
+    row = [
+        now.strftime("%Y-%m-%d"),
+        now.strftime("%H:%M"),
+        workspace,
+        project,
+        f"📁 {project}",  # Task column shows it's a project
+        "Project created",
+        "",  # No hours for project header
+        "",
+        "project",  # Status = project
+        ""
+    ]
+
+    sheets.spreadsheets().values().append(
+        spreadsheetId=spreadsheet_id,
+        range=f"{SHEET_NAME}!A:J",
+        valueInputOption="RAW",
+        insertDataOption="INSERT_ROWS",
+        body={"values": [row]}
+    ).execute()
+
+    result = {
+        "success": True,
+        "spreadsheet_id": spreadsheet_id,
+        "url": f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}",
+        "created": {
+            "type": "project",
+            "workspace": workspace,
+            "project": project
+        }
+    }
+    print(json.dumps(result))
+    return result
+
+
+def create_task(workspace: str, project: str, task: str):
+    """Add a new task row to the spreadsheet."""
+    spreadsheet_id = ensure_spreadsheet()
+    sheets = get_sheets_service()
+
+    now = datetime.now()
+    row = [
+        now.strftime("%Y-%m-%d"),
+        now.strftime("%H:%M"),
+        workspace,
+        project or "—",
+        task,
+        "",  # No description yet
+        "",  # No hours yet
+        "",
+        "created",  # Status = created (not started)
+        ""
+    ]
+
+    sheets.spreadsheets().values().append(
+        spreadsheetId=spreadsheet_id,
+        range=f"{SHEET_NAME}!A:J",
+        valueInputOption="RAW",
+        insertDataOption="INSERT_ROWS",
+        body={"values": [row]}
+    ).execute()
+
+    result = {
+        "success": True,
+        "spreadsheet_id": spreadsheet_id,
+        "url": f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}",
+        "created": {
+            "type": "task",
+            "workspace": workspace,
+            "project": project,
+            "task": task
+        }
+    }
+    print(json.dumps(result))
+    return result
+
+
 def list_tasks(limit: int = 10):
     """List recent tasks from the spreadsheet."""
     spreadsheet_id = get_spreadsheet_id()
@@ -310,6 +393,17 @@ def main():
     list_parser = subparsers.add_parser("list", help="List recent tasks")
     list_parser.add_argument("--limit", type=int, default=10, help="Number of tasks to show")
 
+    # Create project command
+    create_project_parser = subparsers.add_parser("create-project", help="Create a project in the sheet")
+    create_project_parser.add_argument("--workspace", required=True, help="Workspace name")
+    create_project_parser.add_argument("--project", required=True, help="Project name")
+
+    # Create task command
+    create_task_parser = subparsers.add_parser("create-task", help="Create a task in the sheet")
+    create_task_parser.add_argument("--workspace", required=True, help="Workspace name")
+    create_task_parser.add_argument("--project", default="", help="Project name (optional)")
+    create_task_parser.add_argument("--task", required=True, help="Task name")
+
     args = parser.parse_args()
 
     try:
@@ -328,6 +422,10 @@ def main():
             init_spreadsheet()
         elif args.command == "list":
             list_tasks(args.limit)
+        elif args.command == "create-project":
+            create_project(workspace=args.workspace, project=args.project)
+        elif args.command == "create-task":
+            create_task(workspace=args.workspace, project=args.project, task=args.task)
     except Exception as e:
         print(json.dumps({"success": False, "error": str(e)}), file=sys.stderr)
         sys.exit(1)

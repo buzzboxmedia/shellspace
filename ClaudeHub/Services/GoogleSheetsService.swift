@@ -102,6 +102,53 @@ class GoogleSheetsService {
         }
     }
 
+    /// Create a project in Google Sheets
+    func createProject(workspace: String, project: String) async {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        process.arguments = [
+            scriptPath,
+            "create-project",
+            "--workspace", workspace,
+            "--project", project
+        ]
+
+        let outputPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = outputPipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            print("Failed to sync project to sheets: \(error)")
+        }
+    }
+
+    /// Create a task in Google Sheets
+    func createTask(workspace: String, project: String?, task: String) async {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        process.arguments = [
+            scriptPath,
+            "create-task",
+            "--workspace", workspace,
+            "--project", project ?? "",
+            "--task", task
+        ]
+
+        let outputPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = outputPipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            print("Failed to sync task to sheets: \(error)")
+        }
+    }
+
     /// Check if authentication is set up
     func checkAuth() async -> Bool {
         let tokenPath = NSHomeDirectory() + "/.claudehub/sheets_token.json"

@@ -195,6 +195,12 @@ class AppState: ObservableObject {
         taskGroups.append(group)
         saveProjectGroups()
         appLogger.info("Created task group: \(name)")
+
+        // Sync to Google Sheets
+        Task {
+            await GoogleSheetsService.shared.createProject(workspace: project.name, project: name)
+        }
+
         return group
     }
 
@@ -255,6 +261,16 @@ class AppState: ObservableObject {
         session.taskGroupId = group?.id
         sessions.append(session)
         saveSessions()
+
+        // Sync to Google Sheets
+        Task {
+            await GoogleSheetsService.shared.createTask(
+                workspace: project.name,
+                project: group?.name,
+                task: taskName
+            )
+        }
+
         return session
     }
 
