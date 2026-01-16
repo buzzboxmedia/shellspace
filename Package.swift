@@ -13,7 +13,8 @@ let package = Package(
         .executableTarget(
             name: "ClaudeHub",
             dependencies: ["SwiftTerm"],
-            path: "ClaudeHub"
+            path: "ClaudeHub",
+            resources: [.copy("Resources/AppIcon.icns")]
         )
     ]
 )
