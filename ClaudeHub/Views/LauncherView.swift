@@ -16,7 +16,7 @@ struct LauncherView: View {
                 HStack {
                     Spacer()
                     Text("Claude Hub")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .font(.system(size: 42, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
                     Spacer()
                 }
@@ -34,9 +34,9 @@ struct LauncherView: View {
 
                 VStack(spacing: 32) {
                     // Main Projects Section
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 20) {
                         Text("PROJECTS")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(.secondary)
                             .tracking(1.5)
 
@@ -48,9 +48,9 @@ struct LauncherView: View {
                     }
 
                     // Clients Section
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 20) {
                         Text("CLIENTS")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(.secondary)
                             .tracking(1.5)
 
@@ -65,9 +65,9 @@ struct LauncherView: View {
                         .padding(.vertical, 8)
 
                     // Development Section (ClaudeHub itself)
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 20) {
                         Text("DEVELOPMENT")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(.orange)
                             .tracking(1.5)
 
@@ -105,29 +105,29 @@ struct ProjectCard: View {
                 windowState.selectedProject = project
             }
         } label: {
-            VStack(spacing: 12) {
+            VStack(spacing: 14) {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: project.icon)
-                        .font(.system(size: 28))
+                        .font(.system(size: 36))
                         .foregroundStyle(.primary)
 
                     // Show badge only when sessions need attention
                     if waitingCount > 0 {
                         Text("\(waitingCount)")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.system(size: 12, weight: .bold))
                             .foregroundColor(.white)
-                            .frame(width: 18, height: 18)
+                            .frame(width: 22, height: 22)
                             .background(Color.orange)
                             .clipShape(Circle())
-                            .offset(x: 8, y: -8)
+                            .offset(x: 10, y: -10)
                     }
                 }
 
                 Text(project.name)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(.primary)
             }
-            .frame(width: 100, height: 100)
+            .frame(width: 120, height: 120)
             .background {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(.ultraThinMaterial)

@@ -50,23 +50,6 @@ struct ClaudeHubApp: App {
                 .keyboardShortcut("a", modifiers: .command)
             }
 
-            // Zoom commands for scaling the whole UI
-            CommandGroup(after: .toolbar) {
-                Button("Zoom In") {
-                    appState.increaseUIScale()
-                }
-                .keyboardShortcut("+", modifiers: .command)
-
-                Button("Zoom Out") {
-                    appState.decreaseUIScale()
-                }
-                .keyboardShortcut("-", modifiers: .command)
-
-                Button("Actual Size") {
-                    appState.resetUIScale()
-                }
-                .keyboardShortcut("0", modifiers: .command)
-            }
         }
 
         MenuBarExtra("Claude Hub", systemImage: "terminal.fill") {
@@ -106,25 +89,6 @@ class AppState: ObservableObject {
     @Published var clientProjects: [Project] = []
     @Published var devProjects: [Project] = []  // Meta: ClaudeHub itself
 
-    // Global UI scale (Cmd+/- to adjust)
-    @Published var uiScale: CGFloat = 1.25
-    private static let minScale: CGFloat = 0.8
-    private static let maxScale: CGFloat = 1.8
-
-    func increaseUIScale() {
-        uiScale = min(uiScale + 0.1, Self.maxScale)
-        appLogger.info("UI scale increased to \(self.uiScale)")
-    }
-
-    func decreaseUIScale() {
-        uiScale = max(uiScale - 0.1, Self.minScale)
-        appLogger.info("UI scale decreased to \(self.uiScale)")
-    }
-
-    func resetUIScale() {
-        uiScale = 1.0
-        appLogger.info("UI scale reset to 1.0")
-    }
 
     // Track which sessions are waiting for user input
     @Published var waitingSessions: Set<UUID> = []
@@ -724,63 +688,6 @@ struct WindowContent: View {
                 WorkspaceView(project: project)
             } else {
                 LauncherView()
-            }
-        }
-        .background(WindowResizer(scale: appState.uiScale))
-    }
-}
-
-/// Helper to resize window and scale content
-struct WindowResizer: NSViewRepresentable {
-    let scale: CGFloat
-
-    private static let baseWidth: CGFloat = 1200
-    private static let baseHeight: CGFloat = 800
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            guard let window = nsView.window,
-                  let contentView = window.contentView else { return }
-
-            // Apply scale transform to content view
-            contentView.wantsLayer = true
-            if let layer = contentView.layer {
-                // Use sublayerTransform so child views scale properly with hit testing
-                var transform = CATransform3DIdentity
-                transform = CATransform3DScale(transform, scale, scale, 1.0)
-
-                // Animate the transform
-                CATransaction.begin()
-                CATransaction.setAnimationDuration(0.2)
-                layer.sublayerTransform = transform
-                CATransaction.commit()
-            }
-
-            // Resize window to match scaled content
-            let newWidth = Self.baseWidth * scale
-            let newHeight = Self.baseHeight * scale
-
-            var frame = window.frame
-            guard let screen = window.screen else { return }
-
-            let oldMaxY = frame.maxY
-            frame.size.width = newWidth
-            frame.size.height = newHeight
-            frame.origin.y = oldMaxY - newHeight
-
-            // Keep on screen
-            let visibleFrame = screen.visibleFrame
-            frame.origin.x = max(visibleFrame.origin.x, min(frame.origin.x, visibleFrame.maxX - frame.width))
-            frame.origin.y = max(visibleFrame.origin.y, min(frame.origin.y, visibleFrame.maxY - frame.height))
-
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.2
-                window.animator().setFrame(frame, display: true)
             }
         }
     }
