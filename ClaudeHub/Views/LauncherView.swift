@@ -94,8 +94,9 @@ struct ProjectCard: View {
     let project: Project
     @State private var isHovered = false
 
-    var sessionCount: Int {
-        appState.sessionsFor(project: project).count
+    /// Count of sessions waiting for user input (not total sessions)
+    var waitingCount: Int {
+        appState.waitingCountFor(project: project)
     }
 
     var body: some View {
@@ -110,12 +111,13 @@ struct ProjectCard: View {
                         .font(.system(size: 28))
                         .foregroundStyle(.primary)
 
-                    if sessionCount > 0 {
-                        Text("\(sessionCount)")
+                    // Show badge only when sessions need attention
+                    if waitingCount > 0 {
+                        Text("\(waitingCount)")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundColor(.white)
                             .frame(width: 18, height: 18)
-                            .background(Color.blue)
+                            .background(Color.orange)
                             .clipShape(Circle())
                             .offset(x: 8, y: -8)
                     }

@@ -188,6 +188,17 @@ struct SessionRow: View {
         windowState.activeSession?.id == session.id
     }
 
+    var isWaiting: Bool {
+        appState.waitingSessions.contains(session.id)
+    }
+
+    /// Status color: green (active), orange (waiting), gray (inactive)
+    var statusColor: Color {
+        if isActive { return .green }
+        if isWaiting { return .orange }
+        return Color.gray.opacity(0.4)
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             // Enhanced status indicator
@@ -196,9 +207,13 @@ struct SessionRow: View {
                     Circle()
                         .fill(Color.green.opacity(0.3))
                         .frame(width: 16, height: 16)
+                } else if isWaiting {
+                    Circle()
+                        .fill(Color.orange.opacity(0.3))
+                        .frame(width: 16, height: 16)
                 }
                 Circle()
-                    .fill(isActive ? Color.green : Color.gray.opacity(0.4))
+                    .fill(statusColor)
                     .frame(width: 8, height: 8)
             }
             .frame(width: 16, height: 16)
@@ -212,11 +227,24 @@ struct SessionRow: View {
                 .font(.system(size: 13))
             } else {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(session.name)
-                        .font(.system(size: 13))
-                        .foregroundStyle(isActive ? .primary : .secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    HStack(spacing: 6) {
+                        Text(session.name)
+                            .font(.system(size: 13))
+                            .foregroundStyle(isActive ? .primary : .secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+
+                        // Show "waiting" badge when Claude needs input
+                        if isWaiting {
+                            Text("waiting")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(.orange)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Color.orange.opacity(0.15))
+                                .clipShape(Capsule())
+                        }
+                    }
 
                     // Show description if available
                     if let description = session.description, !description.isEmpty {
@@ -231,10 +259,10 @@ struct SessionRow: View {
                     if session.isProjectLinked {
                         Text("Project")
                             .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(.blue)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
-                            .background(Color.orange.opacity(0.15))
+                            .background(Color.blue.opacity(0.15))
                             .clipShape(Capsule())
                     }
                 }
@@ -290,6 +318,8 @@ struct SessionRow: View {
         }
         .onTapGesture(count: 1) {
             windowState.activeSession = session
+            // Clear waiting state when user views this session
+            appState.clearSessionWaiting(session)
         }
         .onHover { hovering in
             isHovered = hovering

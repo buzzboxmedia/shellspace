@@ -3,18 +3,46 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject var appState: AppState
 
+    var waitingCount: Int {
+        appState.waitingSessions.count
+    }
+
+    /// Sessions sorted with waiting ones first
+    var sortedSessions: [Session] {
+        appState.sessions.sorted { a, b in
+            let aWaiting = appState.waitingSessions.contains(a.id)
+            let bWaiting = appState.waitingSessions.contains(b.id)
+            if aWaiting != bWaiting {
+                return aWaiting  // Waiting sessions first
+            }
+            return a.createdAt > b.createdAt  // Then by most recent
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Active sessions
             if !appState.sessions.isEmpty {
-                Text("ACTIVE SESSIONS")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
-                    .padding(.bottom, 4)
+                HStack {
+                    Text("ACTIVE SESSIONS")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
 
-                ForEach(appState.sessions.prefix(5)) { session in
+                    Spacer()
+
+                    // Show waiting count badge
+                    if waitingCount > 0 {
+                        Text("\(waitingCount) waiting")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+
+                // Sort sessions: waiting ones first
+                ForEach(sortedSessions.prefix(5)) { session in
                     MenuBarSessionRow(session: session)
                 }
 
@@ -62,8 +90,12 @@ struct MenuBarSessionRow: View {
     @State private var isHovered = false
 
     var projectName: String {
-        let allProjects = appState.mainProjects + appState.clientProjects
+        let allProjects = appState.mainProjects + appState.clientProjects + appState.devProjects
         return allProjects.first { $0.path == session.projectPath }?.name ?? "Unknown"
+    }
+
+    var isWaiting: Bool {
+        appState.waitingSessions.contains(session.id)
     }
 
     var body: some View {
@@ -72,14 +104,23 @@ struct MenuBarSessionRow: View {
             NSApplication.shared.activate(ignoringOtherApps: true)
         } label: {
             HStack {
+                // Orange dot for waiting, green dot for active
                 Circle()
-                    .fill(Color.green)
+                    .fill(isWaiting ? Color.orange : Color.green)
                     .frame(width: 6, height: 6)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(session.name)
-                        .font(.system(size: 12))
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(session.name)
+                            .font(.system(size: 12))
+                            .lineLimit(1)
+
+                        if isWaiting {
+                            Text("waiting")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(.orange)
+                        }
+                    }
 
                     Text(projectName)
                         .font(.system(size: 10))

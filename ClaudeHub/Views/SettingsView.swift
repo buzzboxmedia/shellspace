@@ -7,6 +7,9 @@ struct SettingsView: View {
     @State private var apiKey: String = UserDefaults.standard.string(forKey: "anthropic_api_key") ?? ""
     @State private var isAPIKeyVisible = false
 
+    // Notification settings (bound to NotificationManager)
+    @ObservedObject private var notificationManager = NotificationManager.shared
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -140,6 +143,62 @@ struct SettingsView: View {
                     .padding(.horizontal, 16)
             }
 
+            Divider()
+                .padding(.vertical, 8)
+
+            // Notifications Section
+            VStack(alignment: .leading, spacing: 12) {
+                Text("NOTIFICATIONS")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 16)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    // Main toggle
+                    Toggle("Notify when Claude is waiting", isOn: $notificationManager.notificationsEnabled)
+                        .font(.system(size: 12))
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .padding(.horizontal, 16)
+
+                    // Sub-options (indented, dimmed when disabled)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Style")
+                                .font(.system(size: 12))
+                                .foregroundStyle(notificationManager.notificationsEnabled ? .primary : .tertiary)
+
+                            Spacer()
+
+                            Picker("", selection: $notificationManager.notificationStyle) {
+                                ForEach(NotificationStyle.allCases, id: \.self) { style in
+                                    Text(style.rawValue).tag(style)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .frame(width: 100)
+                            .disabled(!notificationManager.notificationsEnabled)
+                        }
+
+                        Toggle("Play sound", isOn: $notificationManager.playSound)
+                            .font(.system(size: 12))
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .foregroundStyle(notificationManager.notificationsEnabled ? .primary : .tertiary)
+                            .disabled(!notificationManager.notificationsEnabled)
+
+                        Toggle("Only when in background", isOn: $notificationManager.onlyWhenInBackground)
+                            .font(.system(size: 12))
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .foregroundStyle(notificationManager.notificationsEnabled ? .primary : .tertiary)
+                            .disabled(!notificationManager.notificationsEnabled)
+                    }
+                    .padding(.leading, 24)
+                    .padding(.horizontal, 16)
+                }
+            }
+
             Spacer()
 
             Divider()
@@ -192,7 +251,7 @@ struct SettingsView: View {
             }
             .padding(12)
         }
-        .frame(width: 350, height: 500)
+        .frame(width: 350, height: 580)
         .background(.ultraThinMaterial)
     }
 

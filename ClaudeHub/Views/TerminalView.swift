@@ -60,6 +60,8 @@ struct TerminalView: View {
                             claudeSessionId: session.claudeSessionId,
                             parkerBriefing: session.parkerBriefing
                         )
+                        // Start waiting state monitor
+                        terminalController.startWaitingStateMonitor(session: session, appState: appState)
                         // Trigger view refresh and capture session ID
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                             forceRefresh.toggle()
@@ -255,6 +257,16 @@ class TerminalController: ObservableObject {
     var projectPath: String?  // Store project path for screenshot saving
     private let logger = Logger(subsystem: "com.buzzbox.claudehub", category: "TerminalController")
 
+    // Waiting state detection
+    private var waitingStateTimer: Timer?
+    private var lastTerminalContent: String = ""
+    private var contentUnchangedCount: Int = 0
+    private weak var appState: AppState?
+    private var currentSession: Session?
+
+    /// Callback when waiting state changes
+    var onWaitingStateChanged: ((Bool) -> Void)?
+
     // Font size management
     private static let defaultFontSize: CGFloat = 13
     private static let minFontSize: CGFloat = 8
@@ -284,6 +296,93 @@ class TerminalController: ObservableObject {
             terminal.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         }
         logger.info("Font size changed to: \(self.fontSize)")
+    }
+
+    // MARK: - Waiting State Detection
+
+    /// Start monitoring for Claude waiting state
+    func startWaitingStateMonitor(session: Session, appState: AppState) {
+        self.currentSession = session
+        self.appState = appState
+        self.lastTerminalContent = ""
+        self.contentUnchangedCount = 0
+
+        // Poll every 2 seconds
+        waitingStateTimer?.invalidate()
+        waitingStateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            self?.checkWaitingState()
+        }
+        logger.info("Started waiting state monitor for session: \(session.name)")
+    }
+
+    /// Stop monitoring waiting state
+    func stopWaitingStateMonitor() {
+        waitingStateTimer?.invalidate()
+        waitingStateTimer = nil
+        logger.info("Stopped waiting state monitor")
+    }
+
+    /// Check if Claude is waiting for input
+    private func checkWaitingState() {
+        let content = getTerminalContent()
+
+        // Check if content has changed
+        if content == lastTerminalContent {
+            contentUnchangedCount += 1
+        } else {
+            contentUnchangedCount = 0
+            lastTerminalContent = content
+
+            // Content changed - Claude might be responding, clear waiting state
+            if let session = currentSession {
+                appState?.clearSessionWaiting(session)
+            }
+        }
+
+        // If content unchanged for 2+ checks (~4 seconds) and shows prompt, mark as waiting
+        if contentUnchangedCount >= 2 && isClaudePromptVisible(in: content) {
+            if let session = currentSession {
+                appState?.markSessionWaiting(session)
+                onWaitingStateChanged?(true)
+            }
+        }
+    }
+
+    /// Check if Claude's input prompt is visible at the end of terminal output
+    private func isClaudePromptVisible(in content: String) -> Bool {
+        let lines = content.components(separatedBy: "\n")
+
+        // Check last few non-empty lines for prompt
+        let recentLines = lines.suffix(10).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+
+        for line in recentLines.reversed() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            // Claude Code prompt patterns
+            if trimmed.hasPrefix(">") || trimmed.hasPrefix("❯") {
+                // Make sure it's not just showing a prompt with text (user typing)
+                let afterPrompt = trimmed.dropFirst().trimmingCharacters(in: .whitespaces)
+                if afterPrompt.isEmpty {
+                    logger.debug("Found empty Claude prompt - waiting for input")
+                    return true
+                }
+            }
+
+            // Also check for the full prompt line pattern (e.g., "> " at start)
+            if trimmed == ">" || trimmed == "❯" {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    /// Notify that user is interacting (typing, etc.)
+    func userInteracted() {
+        contentUnchangedCount = 0
+        if let session = currentSession {
+            appState?.clearSessionWaiting(session)
+        }
     }
 
     // Get terminal content for summarization

@@ -78,6 +78,9 @@ class AppState: ObservableObject {
     @Published var clientProjects: [Project] = []
     @Published var devProjects: [Project] = []  // Meta: ClaudeHub itself
 
+    // Track which sessions are waiting for user input
+    @Published var waitingSessions: Set<UUID> = []
+
     // Store terminal controllers by session ID so they persist when switching
     var terminalControllers: [UUID: TerminalController] = [:]
 
@@ -247,6 +250,51 @@ class AppState: ObservableObject {
             saveSessions()
             appLogger.info("Session summary saved")
         }
+    }
+
+    // MARK: - Waiting State Management
+
+    /// Mark a session as waiting for user input
+    func markSessionWaiting(_ session: Session) {
+        guard !waitingSessions.contains(session.id) else { return }
+
+        waitingSessions.insert(session.id)
+        appLogger.info("Session marked as waiting: \(session.name)")
+
+        // Find project name for notification
+        let allProjects = mainProjects + clientProjects + devProjects
+        let projectName = allProjects.first { $0.path == session.projectPath }?.name ?? "Unknown"
+
+        // Send notification
+        NotificationManager.shared.notifyClaudeWaiting(
+            sessionId: session.id,
+            sessionName: session.name,
+            projectName: projectName
+        )
+
+        // Update dock badge
+        NotificationManager.shared.updateDockBadge(count: waitingSessions.count)
+    }
+
+    /// Clear waiting state when user interacts with session
+    func clearSessionWaiting(_ session: Session) {
+        guard waitingSessions.contains(session.id) else { return }
+
+        waitingSessions.remove(session.id)
+        appLogger.info("Session no longer waiting: \(session.name)")
+
+        // Clear notification for this session
+        NotificationManager.shared.clearNotification(for: session.id)
+
+        // Update dock badge
+        NotificationManager.shared.updateDockBadge(count: waitingSessions.count)
+    }
+
+    /// Get count of waiting sessions for a project
+    func waitingCountFor(project: Project) -> Int {
+        sessionsFor(project: project)
+            .filter { waitingSessions.contains($0.id) }
+            .count
     }
 
     // MARK: - Session Persistence (per-project)
