@@ -21,6 +21,8 @@ struct ClaudeHubApp: App {
                 .onAppear {
                     // Make sure app is active when window appears
                     NSApplication.shared.activate(ignoringOtherApps: true)
+                    // Give AppDelegate access to appState for cleanup on quit
+                    appDelegate.appState = appState
                 }
         }
         .windowResizability(.contentSize)
@@ -58,6 +60,8 @@ struct ClaudeHubApp: App {
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    weak var appState: AppState?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Ensure app can become active
         NSApplication.shared.activate(ignoringOtherApps: true)
@@ -69,11 +73,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.makeKeyAndOrderFront(nil)
         }
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Save all active session logs before quitting
+        appState?.saveAllActiveLogs()
+    }
 }
 
 class AppState: ObservableObject {
     // Shared data across all windows
     @Published var sessions: [Session] = []
+    @Published var taskGroups: [ProjectGroup] = []  // Task groups (projects within folders)
     @Published var mainProjects: [Project] = []
     @Published var clientProjects: [Project] = []
     @Published var devProjects: [Project] = []  // Meta: ClaudeHub itself
@@ -125,6 +135,7 @@ class AppState: ObservableObject {
         try? FileManager.default.createDirectory(at: configPath, withIntermediateDirectories: true)
         loadProjects()
         loadAllSessions()
+        loadAllProjectGroups()
     }
 
     /// Get the sessions file path for a project
@@ -135,6 +146,14 @@ class AppState: ObservableObject {
         }
         // All other projects: save in project folder
         return URL(fileURLWithPath: projectPath).appendingPathComponent(".claudehub-sessions.json")
+    }
+
+    /// Get the task groups file path for a project
+    private func taskGroupsFilePath(for projectPath: String) -> URL {
+        if projectPath.contains("/Code/claudehub") || projectPath.contains("/code/claudehub") {
+            return configPath.appendingPathComponent("taskgroups.json")
+        }
+        return URL(fileURLWithPath: projectPath).appendingPathComponent(".claudehub-taskgroups.json")
     }
 
     func getOrCreateController(for session: Session) -> TerminalController {
@@ -154,7 +173,63 @@ class AppState: ObservableObject {
         sessions.filter { $0.projectPath == project.path }
     }
 
-    func createSession(for project: Project, name: String? = nil) -> Session {
+    // MARK: - Task Group Management
+
+    func taskGroupsFor(project: Project) -> [ProjectGroup] {
+        taskGroups.filter { $0.projectPath == project.path }
+    }
+
+    func sessionsFor(taskGroup: ProjectGroup) -> [Session] {
+        sessions.filter { $0.taskGroupId == taskGroup.id }
+    }
+
+    /// Sessions that are not in any task group (standalone tasks)
+    func standaloneSessions(for project: Project) -> [Session] {
+        sessions.filter { $0.projectPath == project.path && $0.taskGroupId == nil && !$0.isProjectLinked }
+    }
+
+    func createProjectGroup(for project: Project, name: String) -> ProjectGroup {
+        let group = ProjectGroup(name: name, projectPath: project.path)
+        taskGroups.append(group)
+        saveProjectGroups()
+        appLogger.info("Created task group: \(name)")
+        return group
+    }
+
+    func deleteProjectGroup(_ group: ProjectGroup) {
+        // Move all tasks in this group to standalone
+        for i in sessions.indices where sessions[i].taskGroupId == group.id {
+            sessions[i].taskGroupId = nil
+        }
+        taskGroups.removeAll { $0.id == group.id }
+        saveProjectGroups()
+        saveSessions()
+        appLogger.info("Deleted task group: \(group.name)")
+    }
+
+    func renameProjectGroup(_ group: ProjectGroup, name: String) {
+        if let index = taskGroups.firstIndex(where: { $0.id == group.id }) {
+            taskGroups[index].name = name
+            saveProjectGroups()
+        }
+    }
+
+    func toggleProjectGroupExpanded(_ group: ProjectGroup) {
+        if let index = taskGroups.firstIndex(where: { $0.id == group.id }) {
+            taskGroups[index].isExpanded.toggle()
+            saveProjectGroups()
+        }
+    }
+
+    func moveSession(_ session: Session, toGroup group: ProjectGroup?) {
+        if let index = sessions.firstIndex(where: { $0.id == session.id }) {
+            sessions[index].taskGroupId = group?.id
+            saveSessions()
+            appLogger.info("Moved session '\(session.name)' to group: \(group?.name ?? "standalone")")
+        }
+    }
+
+    func createSession(for project: Project, name: String? = nil, inGroup group: ProjectGroup? = nil) -> Session {
         // Use provided name or generate default "Task 1", "Task 2", etc
         let taskName: String
         let isUserNamed: Bool
@@ -168,13 +243,14 @@ class AppState: ObservableObject {
             isUserNamed = false  // Auto-generated, can be renamed by AI
         }
 
-        let session = Session(
+        var session = Session(
             id: UUID(),
             name: taskName,
             projectPath: project.path,
             createdAt: Date(),
             userNamed: isUserNamed
         )
+        session.taskGroupId = group?.id
         sessions.append(session)
         saveSessions()
         return session
@@ -260,6 +336,72 @@ class AppState: ObservableObject {
             saveSessions()
             appLogger.info("Session summary saved")
         }
+    }
+
+    func updateSessionLogPath(_ session: Session, logPath: String) {
+        appLogger.info("Updating log path for '\(session.name)'")
+        if let index = sessions.firstIndex(where: { $0.id == session.id }) {
+            sessions[index].logFilePath = logPath
+            sessions[index].lastLogSavedAt = Date()
+            saveSessions()
+            appLogger.info("Session log path updated")
+        }
+    }
+
+    /// Read the saved log content for a session
+    func readSessionLog(_ session: Session) -> String? {
+        let logPath = session.logPath
+        guard FileManager.default.fileExists(atPath: logPath.path) else {
+            appLogger.info("No log file found for session: \(session.name)")
+            return nil
+        }
+
+        do {
+            let content = try String(contentsOf: logPath, encoding: .utf8)
+            appLogger.info("Read log for session '\(session.name)': \(content.count) characters")
+            return content
+        } catch {
+            appLogger.error("Failed to read log: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Generate a resume prompt for continuing a task
+    func generateResumePrompt(for session: Session) -> String {
+        var prompt = "I'm resuming work on: \"\(session.name)\"\n\n"
+
+        // Add summary if available
+        if let summary = session.lastSessionSummary, !summary.isEmpty {
+            prompt += "Last session summary:\n\(summary)\n\n"
+        }
+
+        // Add recent log context if available (last ~2000 chars)
+        if let logContent = readSessionLog(session) {
+            // Strip the header and get the conversation content
+            let lines = logContent.components(separatedBy: "\n")
+            let contentLines = lines.dropFirst(5) // Skip header lines
+            let content = contentLines.joined(separator: "\n")
+
+            // Take the last portion for context
+            let recentContent = String(content.suffix(3000))
+            if !recentContent.isEmpty {
+                prompt += "Recent conversation context:\n---\n\(recentContent)\n---\n\n"
+            }
+        }
+
+        prompt += "What's the current status and what are the recommended next steps?"
+
+        return prompt
+    }
+
+    /// Save logs for all active sessions (called on app quit or session switch)
+    func saveAllActiveLogs() {
+        for (sessionId, controller) in terminalControllers {
+            if let session = sessions.first(where: { $0.id == sessionId }) {
+                controller.saveLog(for: session)
+            }
+        }
+        appLogger.info("Saved logs for all active sessions")
     }
 
     // MARK: - Waiting State Management
@@ -359,6 +501,46 @@ class AppState: ObservableObject {
             }
         }
         appLogger.info("Saved sessions to project folders")
+    }
+
+    // MARK: - Task Group Persistence (per-project)
+
+    private func loadAllProjectGroups() {
+        var allGroups: [ProjectGroup] = []
+        let allProjects = mainProjects + clientProjects + devProjects
+
+        for project in allProjects {
+            let filePath = taskGroupsFilePath(for: project.path)
+            if let data = try? Data(contentsOf: filePath),
+               let projectGroups = try? JSONDecoder().decode([ProjectGroup].self, from: data) {
+                allGroups.append(contentsOf: projectGroups)
+                appLogger.info("Loaded \(projectGroups.count) task groups from \(project.name)")
+            }
+        }
+
+        taskGroups = allGroups
+    }
+
+    private func saveProjectGroups() {
+        let groupsToSave = taskGroups
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            self?.saveAllProjectGroups(groupsToSave)
+        }
+    }
+
+    private func saveAllProjectGroups(_ groupsToSave: [ProjectGroup]) {
+        let grouped = Dictionary(grouping: groupsToSave) { $0.projectPath }
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+
+        for (projectPath, projectGroups) in grouped {
+            let filePath = taskGroupsFilePath(for: projectPath)
+            if let data = try? encoder.encode(projectGroups) {
+                try? data.write(to: filePath)
+            }
+        }
+        appLogger.info("Saved task groups to project folders")
     }
 
     // MARK: - Project Management

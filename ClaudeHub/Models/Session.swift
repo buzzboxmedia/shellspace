@@ -19,9 +19,30 @@ struct Session: Identifiable, Hashable, Codable {
     // If true, user manually named this task - don't auto-rename
     var userNamed: Bool = false
 
+    // Log file path for conversation history
+    var logFilePath: String?
+
+    // Last time the log was saved
+    var lastLogSavedAt: Date?
+
+    // Optional task group (project) this task belongs to
+    var taskGroupId: UUID?
+
     enum CodingKeys: String, CodingKey {
         case id, name, description, projectPath, createdAt, lastAccessedAt, claudeSessionId
         case activeProjectName, parkerBriefing, lastSessionSummary, userNamed
+        case logFilePath, lastLogSavedAt, taskGroupId
+    }
+
+    /// Get the path to the log file for this session
+    var logPath: URL {
+        let logsDir = URL(fileURLWithPath: projectPath).appendingPathComponent(".claudehub-logs")
+        return logsDir.appendingPathComponent("\(id.uuidString).log")
+    }
+
+    /// Check if this session has a saved log
+    var hasLog: Bool {
+        FileManager.default.fileExists(atPath: logPath.path)
     }
 
     var isProjectLinked: Bool {

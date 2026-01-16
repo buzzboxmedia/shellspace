@@ -56,19 +56,27 @@ struct SessionSidebar: View {
     let goBack: () -> Void
     @State private var isBackHovered = false
     @State private var isCreatingTask = false
+    @State private var isCreatingGroup = false
     @State private var newTaskName = ""
+    @State private var newGroupName = ""
+    @State private var selectedGroupForNewTask: ProjectGroup?
     @FocusState private var isTaskFieldFocused: Bool
+    @FocusState private var isGroupFieldFocused: Bool
 
     var sessions: [Session] {
         appState.sessionsFor(project: project)
+    }
+
+    var taskGroups: [ProjectGroup] {
+        appState.taskGroupsFor(project: project)
     }
 
     var projectLinkedSessions: [Session] {
         sessions.filter { $0.isProjectLinked }
     }
 
-    var taskSessions: [Session] {
-        sessions.filter { !$0.isProjectLinked }
+    var standaloneTasks: [Session] {
+        appState.standaloneSessions(for: project)
     }
 
     func createTask() {
@@ -76,13 +84,28 @@ struct SessionSidebar: View {
         guard !name.isEmpty else {
             isCreatingTask = false
             newTaskName = ""
+            selectedGroupForNewTask = nil
             return
         }
 
-        let newSession = appState.createSession(for: project, name: name)
+        let newSession = appState.createSession(for: project, name: name, inGroup: selectedGroupForNewTask)
         windowState.activeSession = newSession
         isCreatingTask = false
         newTaskName = ""
+        selectedGroupForNewTask = nil
+    }
+
+    func createGroup() {
+        let name = newGroupName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            isCreatingGroup = false
+            newGroupName = ""
+            return
+        }
+
+        _ = appState.createProjectGroup(for: project, name: name)
+        isCreatingGroup = false
+        newGroupName = ""
     }
 
     var body: some View {
@@ -129,52 +152,100 @@ struct SessionSidebar: View {
                 // Task list - fills remaining space
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        // New Task button/input
-                        if isCreatingTask {
-                            HStack(spacing: 8) {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(.blue)
-
-                                TextField("Task name...", text: $newTaskName)
-                                    .textFieldStyle(.plain)
-                                    .font(.system(size: 13))
-                                    .focused($isTaskFieldFocused)
-                                    .onSubmit { createTask() }
-                                    .onExitCommand {
-                                        isCreatingTask = false
-                                        newTaskName = ""
-                                    }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(Color.blue.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                            )
-                            .padding(.horizontal, 12)
-                            .onAppear { isTaskFieldFocused = true }
-                        } else {
-                            Button {
-                                isCreatingTask = true
-                            } label: {
+                        // Action buttons row
+                        HStack(spacing: 8) {
+                            // New Task button
+                            if isCreatingTask {
                                 HStack(spacing: 8) {
                                     Image(systemName: "plus")
                                         .font(.system(size: 12, weight: .semibold))
-                                    Text("New Task")
-                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(.blue)
+
+                                    TextField("Task name...", text: $newTaskName)
+                                        .textFieldStyle(.plain)
+                                        .font(.system(size: 13))
+                                        .focused($isTaskFieldFocused)
+                                        .onSubmit { createTask() }
+                                        .onExitCommand {
+                                            isCreatingTask = false
+                                            newTaskName = ""
+                                            selectedGroupForNewTask = nil
+                                        }
                                 }
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
+                                .padding(.horizontal, 12)
                                 .padding(.vertical, 10)
-                                .background(Color.blue)
+                                .background(Color.blue.opacity(0.1))
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                                )
+                                .onAppear { isTaskFieldFocused = true }
+                            } else {
+                                Button {
+                                    isCreatingTask = true
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 11, weight: .semibold))
+                                        Text("Task")
+                                            .font(.system(size: 12, weight: .medium))
+                                    }
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(Color.blue)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
-                            .padding(.horizontal, 12)
+
+                            // New Project button
+                            if isCreatingGroup {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "folder.badge.plus")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(.purple)
+
+                                    TextField("Project name...", text: $newGroupName)
+                                        .textFieldStyle(.plain)
+                                        .font(.system(size: 13))
+                                        .focused($isGroupFieldFocused)
+                                        .onSubmit { createGroup() }
+                                        .onExitCommand {
+                                            isCreatingGroup = false
+                                            newGroupName = ""
+                                        }
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(Color.purple.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.purple.opacity(0.3), lineWidth: 1)
+                                )
+                                .onAppear { isGroupFieldFocused = true }
+                            } else {
+                                Button {
+                                    isCreatingGroup = true
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "folder.badge.plus")
+                                            .font(.system(size: 11, weight: .semibold))
+                                        Text("Project")
+                                            .font(.system(size: 12, weight: .medium))
+                                    }
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(Color.purple)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
+                        .padding(.horizontal, 12)
 
                         // Active Projects Section (from ACTIVE-PROJECTS.md)
                         if !projectLinkedSessions.isEmpty {
@@ -192,8 +263,13 @@ struct SessionSidebar: View {
                             }
                         }
 
-                        // Tasks Section
-                        if !taskSessions.isEmpty {
+                        // Project Groups with their tasks
+                        ForEach(taskGroups) { group in
+                            ProjectGroupSection(group: group, project: project)
+                        }
+
+                        // Standalone Tasks Section
+                        if !standaloneTasks.isEmpty {
                             Text("TASKS")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary)
@@ -202,7 +278,7 @@ struct SessionSidebar: View {
                                 .padding(.top, 4)
 
                             LazyVStack(spacing: 4) {
-                                ForEach(taskSessions) { session in
+                                ForEach(standaloneTasks) { session in
                                     TaskRow(session: session, project: project)
                                 }
                             }
@@ -220,14 +296,184 @@ struct SessionSidebar: View {
     }
 }
 
+// MARK: - Project Group Section (collapsible)
+
+struct ProjectGroupSection: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var windowState: WindowState
+    let group: ProjectGroup
+    let project: Project
+    @State private var isHovered = false
+    @State private var isEditing = false
+    @State private var editedName: String = ""
+    @State private var isCreatingTask = false
+    @State private var newTaskName = ""
+    @FocusState private var isTaskFieldFocused: Bool
+
+    var tasks: [Session] {
+        appState.sessionsFor(taskGroup: group)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Group header
+            HStack(spacing: 8) {
+                // Expand/collapse chevron
+                Button {
+                    appState.toggleProjectGroupExpanded(group)
+                } label: {
+                    Image(systemName: group.isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16)
+                }
+                .buttonStyle(.plain)
+
+                // Folder icon
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.purple)
+
+                // Group name
+                if isEditing {
+                    TextField("Project name", text: $editedName, onCommit: {
+                        appState.renameProjectGroup(group, name: editedName)
+                        isEditing = false
+                    })
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, weight: .medium))
+                } else {
+                    Text(group.name)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.primary)
+                }
+
+                Spacer()
+
+                // Task count badge
+                Text("\(tasks.count)")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(Capsule())
+
+                // Actions on hover
+                if isHovered {
+                    HStack(spacing: 4) {
+                        // Add task to group
+                        Button {
+                            isCreatingTask = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.blue)
+                        }
+                        .buttonStyle(.plain)
+
+                        // Edit name
+                        Button {
+                            editedName = group.name
+                            isEditing = true
+                        } label: {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+
+                        // Delete group
+                        Button {
+                            appState.deleteProjectGroup(group)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(isHovered ? Color.white.opacity(0.05) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) {
+                editedName = group.name
+                isEditing = true
+            }
+            .onTapGesture(count: 1) {
+                appState.toggleProjectGroupExpanded(group)
+            }
+            .onHover { isHovered = $0 }
+            .padding(.horizontal, 8)
+
+            // New task input (inline)
+            if isCreatingTask {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.blue)
+
+                    TextField("Task name...", text: $newTaskName)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
+                        .focused($isTaskFieldFocused)
+                        .onSubmit {
+                            createTask()
+                        }
+                        .onExitCommand {
+                            isCreatingTask = false
+                            newTaskName = ""
+                        }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.blue.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .padding(.leading, 32)
+                .padding(.horizontal, 8)
+                .onAppear { isTaskFieldFocused = true }
+            }
+
+            // Tasks in this group (indented)
+            if group.isExpanded {
+                LazyVStack(spacing: 2) {
+                    ForEach(tasks) { session in
+                        TaskRow(session: session, project: project, indented: true)
+                    }
+                }
+            }
+        }
+    }
+
+    private func createTask() {
+        let name = newTaskName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            isCreatingTask = false
+            newTaskName = ""
+            return
+        }
+
+        let newSession = appState.createSession(for: project, name: name, inGroup: group)
+        windowState.activeSession = newSession
+        isCreatingTask = false
+        newTaskName = ""
+    }
+}
+
 struct TaskRow: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var windowState: WindowState
     let session: Session
     let project: Project
+    var indented: Bool = false  // For tasks inside groups
     @State private var isHovered = false
     @State private var isEditing = false
     @State private var editedName: String = ""
+    @State private var isResuming = false
 
     var isActive: Bool {
         windowState.activeSession?.id == session.id
@@ -239,6 +485,10 @@ struct TaskRow: View {
 
     var isLogged: Bool {
         session.lastSessionSummary != nil && !session.lastSessionSummary!.isEmpty
+    }
+
+    var hasLog: Bool {
+        session.hasLog
     }
 
     /// Status color: green (active/logged), orange (waiting), gray (inactive)
@@ -338,9 +588,28 @@ struct TaskRow: View {
 
             Spacer()
 
-            // Edit and delete buttons on hover
+            // Action buttons on hover
             if isHovered && !isEditing {
                 HStack(spacing: 6) {
+                    // Update/Resume button - only show if session has a log
+                    if hasLog {
+                        Button {
+                            resumeTask()
+                        } label: {
+                            if isResuming {
+                                ProgressView()
+                                    .scaleEffect(0.5)
+                                    .frame(width: 14, height: 14)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .help("Resume this task - load context and get status update")
+                    }
+
                     Button {
                         editedName = session.name
                         isEditing = true
@@ -367,7 +636,7 @@ struct TaskRow: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.vertical, indented ? 8 : 10)
         .background {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(isActive ? Color.blue.opacity(0.15) : (isHovered ? Color.white.opacity(0.08) : Color.clear))
@@ -378,7 +647,8 @@ struct TaskRow: View {
                     .stroke(Color.blue.opacity(0.3), lineWidth: 1)
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.leading, indented ? 32 : 8)
+        .padding(.trailing, 8)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) {
             editedName = session.name
@@ -393,6 +663,28 @@ struct TaskRow: View {
             isHovered = hovering
         }
     }
+
+    /// Resume a task by loading context and sending update prompt to Claude
+    private func resumeTask() {
+        isResuming = true
+
+        // First, select this session
+        windowState.activeSession = session
+        appState.clearSessionWaiting(session)
+
+        // Wait for terminal to be ready, then send the resume prompt
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            // Generate the resume prompt
+            let prompt = appState.generateResumePrompt(for: session)
+
+            // Get the terminal controller and send the prompt
+            if let controller = appState.terminalControllers[session.id] {
+                controller.sendToTerminal(prompt + "\n")
+            }
+
+            isResuming = false
+        }
+    }
 }
 
 struct TerminalHeader: View {
@@ -402,6 +694,8 @@ struct TerminalHeader: View {
     @Binding var showLogSheet: Bool
     @State private var isPulsing = false
     @State private var isLogHovered = false
+    @State private var isSaveHovered = false
+    @State private var showSavedConfirmation = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -448,6 +742,31 @@ struct TerminalHeader: View {
             }
 
             Spacer()
+
+            // Save Log button
+            Button {
+                saveLog()
+            } label: {
+                HStack(spacing: 5) {
+                    if showSavedConfirmation {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .semibold))
+                    } else {
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    Text(showSavedConfirmation ? "Saved" : "Save")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .foregroundStyle(showSavedConfirmation ? .green : .secondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.white.opacity(isSaveHovered ? 0.15 : 0.08))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .onHover { isSaveHovered = $0 }
+            .help("Save conversation log for this session")
 
             // Log Task button - more prominent
             Button {
@@ -509,6 +828,25 @@ struct TerminalHeader: View {
                 )
             }
         )
+    }
+
+    private func saveLog() {
+        // Get the terminal controller and save the log
+        if let controller = appState.terminalControllers[session.id] {
+            controller.saveLog(for: session)
+
+            // Show confirmation
+            withAnimation {
+                showSavedConfirmation = true
+            }
+
+            // Reset after 2 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                withAnimation {
+                    showSavedConfirmation = false
+                }
+            }
+        }
     }
 }
 

@@ -10,6 +10,7 @@ struct TerminalView: View {
     @EnvironmentObject var appState: AppState
     @State private var forceRefresh = false
     @State private var summarizationTimer: Timer?
+    @State private var autoSaveTimer: Timer?
 
     // Get controller from AppState so it persists when switching sessions
     var terminalController: TerminalController {
@@ -28,9 +29,13 @@ struct TerminalView: View {
                     .id(session.id)  // Ensure view updates when session changes
                     .onAppear {
                         startSummarizationCheck()
+                        startAutoSave()
                     }
                     .onDisappear {
                         summarizationTimer?.invalidate()
+                        autoSaveTimer?.invalidate()
+                        // Save log when leaving the view
+                        terminalController.saveLog(for: session)
                     }
             } else {
                 // Show loading state while auto-starting
@@ -93,6 +98,14 @@ struct TerminalView: View {
         // Check every 5 seconds if we should summarize
         summarizationTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
             checkAndSummarize()
+        }
+    }
+
+    private func startAutoSave() {
+        viewLogger.info("Starting auto-save timer for session: \(session.name)")
+        // Auto-save log every 30 seconds
+        autoSaveTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { _ in
+            terminalController.saveLog(for: session)
         }
     }
 
@@ -400,6 +413,63 @@ class TerminalController: ObservableObject {
         if let session = currentSession {
             appState?.clearSessionWaiting(session)
         }
+    }
+
+    // MARK: - Log Management
+
+    /// Save the current terminal content to a log file
+    func saveLog(for session: Session) {
+        let content = getFullTerminalContent()
+        guard !content.isEmpty else {
+            logger.info("No content to save for session: \(session.name)")
+            return
+        }
+
+        let logsDir = URL(fileURLWithPath: session.projectPath).appendingPathComponent(".claudehub-logs")
+
+        // Create logs directory if needed
+        do {
+            try FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
+        } catch {
+            logger.error("Failed to create logs directory: \(error.localizedDescription)")
+            return
+        }
+
+        let logPath = session.logPath
+
+        // Write log with timestamp header
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let header = "=== ClaudeHub Session Log ===\nSession: \(session.name)\nSaved: \(timestamp)\nProject: \(session.projectPath)\n\n"
+
+        let fullContent = header + content
+
+        do {
+            try fullContent.write(to: logPath, atomically: true, encoding: .utf8)
+            logger.info("Saved log for session '\(session.name)' to: \(logPath.path)")
+
+            // Update session with log info
+            appState?.updateSessionLogPath(session, logPath: logPath.path)
+        } catch {
+            logger.error("Failed to save log: \(error.localizedDescription)")
+        }
+    }
+
+    /// Get the full terminal content (not truncated)
+    func getFullTerminalContent() -> String {
+        guard let terminal = terminalView?.getTerminal() else {
+            logger.warning("No terminal available for content extraction")
+            return ""
+        }
+
+        let data = terminal.getBufferAsData()
+        let content = String(data: data, encoding: .utf8) ?? ""
+        logger.info("Extracted \(content.count) characters from terminal (full)")
+        return content
+    }
+
+    /// Send text to the terminal (for the Update button)
+    func sendToTerminal(_ text: String) {
+        terminalView?.send(txt: text)
     }
 
     // Get terminal content for summarization
