@@ -726,6 +726,12 @@ struct WindowContent: View {
                 LauncherView()
             }
         }
+        .scaleEffect(appState.uiScale, anchor: .topLeading)
+        .frame(
+            width: 1100 * appState.uiScale,
+            height: 700 * appState.uiScale,
+            alignment: .topLeading
+        )
         .background(WindowResizer(scale: appState.uiScale))
     }
 }
