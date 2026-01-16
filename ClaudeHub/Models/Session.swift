@@ -1,4 +1,6 @@
 import Foundation
+import SwiftUI
+import UniformTypeIdentifiers
 
 struct Session: Identifiable, Hashable, Codable {
     let id: UUID
@@ -59,5 +61,17 @@ extension Session {
             projectPath: "/Users/baron/Dropbox/Buzzbox/Clients/AAGL",
             createdAt: Date()
         )
+    }
+}
+
+// MARK: - Drag and Drop Support
+
+extension UTType {
+    static let session = UTType(exportedAs: "com.buzzbox.claudehub.session")
+}
+
+extension Session: Transferable {
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .session)
     }
 }

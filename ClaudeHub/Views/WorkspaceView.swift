@@ -268,8 +268,8 @@ struct SessionSidebar: View {
                             ProjectGroupSection(group: group, project: project)
                         }
 
-                        // Standalone Tasks Section
-                        if !standaloneTasks.isEmpty {
+                        // Standalone Tasks Section (drop here to remove from group)
+                        VStack(alignment: .leading, spacing: 4) {
                             Text("TASKS")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(.secondary)
@@ -277,11 +277,28 @@ struct SessionSidebar: View {
                                 .padding(.horizontal, 16)
                                 .padding(.top, 4)
 
-                            LazyVStack(spacing: 4) {
-                                ForEach(standaloneTasks) { session in
-                                    TaskRow(session: session, project: project)
+                            if standaloneTasks.isEmpty {
+                                // Drop zone when empty
+                                Text("Drop tasks here")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.tertiary)
+                                    .frame(maxWidth: .infinity, minHeight: 40)
+                                    .background(Color.white.opacity(0.03))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .padding(.horizontal, 8)
+                            } else {
+                                LazyVStack(spacing: 4) {
+                                    ForEach(standaloneTasks) { session in
+                                        TaskRow(session: session, project: project)
+                                    }
                                 }
                             }
+                        }
+                        .dropDestination(for: Session.self) { droppedSessions, _ in
+                            for session in droppedSessions {
+                                appState.moveSession(session, toGroup: nil)
+                            }
+                            return true
                         }
                     }
                     .padding(.vertical, 12)
@@ -446,6 +463,12 @@ struct ProjectGroupSection: View {
                     }
                 }
             }
+        }
+        .dropDestination(for: Session.self) { droppedSessions, _ in
+            for session in droppedSessions {
+                appState.moveSession(session, toGroup: group)
+            }
+            return true
         }
     }
 
@@ -662,6 +685,7 @@ struct TaskRow: View {
         .onHover { hovering in
             isHovered = hovering
         }
+        .draggable(session)
     }
 
     /// Resume a task by loading context and sending update prompt to Claude
