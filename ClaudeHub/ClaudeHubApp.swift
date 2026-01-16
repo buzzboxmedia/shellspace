@@ -49,6 +49,24 @@ struct ClaudeHubApp: App {
                 }
                 .keyboardShortcut("a", modifiers: .command)
             }
+
+            // Zoom commands for scaling the whole UI
+            CommandGroup(after: .toolbar) {
+                Button("Zoom In") {
+                    appState.increaseUIScale()
+                }
+                .keyboardShortcut("+", modifiers: .command)
+
+                Button("Zoom Out") {
+                    appState.decreaseUIScale()
+                }
+                .keyboardShortcut("-", modifiers: .command)
+
+                Button("Actual Size") {
+                    appState.resetUIScale()
+                }
+                .keyboardShortcut("0", modifiers: .command)
+            }
         }
 
         MenuBarExtra("Claude Hub", systemImage: "terminal.fill") {
@@ -87,6 +105,26 @@ class AppState: ObservableObject {
     @Published var mainProjects: [Project] = []
     @Published var clientProjects: [Project] = []
     @Published var devProjects: [Project] = []  // Meta: ClaudeHub itself
+
+    // Global UI scale (Cmd+/- to adjust)
+    @Published var uiScale: CGFloat = 1.0
+    private static let minScale: CGFloat = 0.7
+    private static let maxScale: CGFloat = 1.5
+
+    func increaseUIScale() {
+        uiScale = min(uiScale + 0.1, Self.maxScale)
+        appLogger.info("UI scale increased to \(self.uiScale)")
+    }
+
+    func decreaseUIScale() {
+        uiScale = max(uiScale - 0.1, Self.minScale)
+        appLogger.info("UI scale decreased to \(self.uiScale)")
+    }
+
+    func resetUIScale() {
+        uiScale = 1.0
+        appLogger.info("UI scale reset to 1.0")
+    }
 
     // Track which sessions are waiting for user input
     @Published var waitingSessions: Set<UUID> = []
@@ -688,5 +726,10 @@ struct WindowContent: View {
                 LauncherView()
             }
         }
+        .scaleEffect(appState.uiScale)
+        .frame(
+            minWidth: 900 * appState.uiScale,
+            minHeight: 600 * appState.uiScale
+        )
     }
 }

@@ -1161,18 +1161,7 @@ class TerminalContainerView: NSView {
                 if self.handleImagePaste() {
                     return nil
                 }
-            case "=", "+":
-                // Cmd+Plus to zoom in (= is the unshifted key for +)
-                self.controller?.increaseFontSize()
-                return nil
-            case "-":
-                // Cmd+Minus to zoom out
-                self.controller?.decreaseFontSize()
-                return nil
-            case "0":
-                // Cmd+0 to reset zoom
-                self.controller?.resetFontSize()
-                return nil
+            // Note: Cmd+/- and Cmd+0 are handled at the app level for global UI zoom
             default:
                 break
             }
