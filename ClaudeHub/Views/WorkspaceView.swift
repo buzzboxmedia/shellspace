@@ -1190,10 +1190,10 @@ struct LogTaskSheet: View {
         let actHrs = Double(actualHours) ?? 0.5
 
         Task {
-            // Save locally
+            // Save locally first - this is the critical part
             appState.updateSessionSummary(session, summary: billableDescription)
 
-            // Sync to Google Sheets
+            // Sync to Google Sheets (optional, may fail)
             do {
                 let result = try await GoogleSheetsService.shared.logTask(
                     workspace: project.name,
@@ -1208,23 +1208,36 @@ struct LogTaskSheet: View {
 
                 await MainActor.run {
                     isSaving = false
+                    savedSuccessfully = true  // Local save always succeeds at this point
+
                     if result.success {
-                        savedSuccessfully = true
+                        // Full success - close immediately
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                             isPresented = false
                         }
                     } else if result.needs_auth == true {
-                        saveError = "Google Sheets not authorized."
+                        saveError = "Saved locally. Google Sheets not authorized."
+                        // Still close after showing message
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            isPresented = false
+                        }
                     } else {
                         saveError = "Saved locally. Sheets sync: \(result.error ?? "unknown error")"
-                        savedSuccessfully = true
+                        // Still close after showing message
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            isPresented = false
+                        }
                     }
                 }
             } catch {
                 await MainActor.run {
                     isSaving = false
+                    savedSuccessfully = true  // Local save succeeded
                     saveError = "Saved locally. Sheets sync failed."
-                    savedSuccessfully = true
+                    // Still close after showing message
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        isPresented = false
+                    }
                 }
             }
         }
