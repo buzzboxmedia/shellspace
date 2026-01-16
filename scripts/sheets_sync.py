@@ -7,12 +7,10 @@ Usage:
     python3 sheets_sync.py log --project "INFAB" --task "Fix checkout" --status "completed" --notes "Fixed the bug"
     python3 sheets_sync.py init  # Creates the spreadsheet if it doesn't exist
     python3 sheets_sync.py list  # Lists recent tasks
-    python3 sheets_sync.py auth  # Run OAuth flow (first-time setup)
 """
 
 import argparse
 import json
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -21,19 +19,19 @@ from pathlib import Path
 import warnings
 warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL")
 
-from google.oauth2.credentials import Credentials
+from google.oauth2.service_account import Credentials
 from google.auth.transport.requests import Request
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 # Configuration
 CONFIG_DIR = Path.home() / ".claudehub"
-TOKEN_PATH = CONFIG_DIR / "sheets_token.json"
-CREDENTIALS_PATH = CONFIG_DIR / "google_credentials.json"
+CREDENTIALS_PATH = Path.home() / "Dropbox/Buzzbox/credentials/buzzbox-agency-e2cca1e9d52a.json"
+DELEGATED_USER = "baron@buzzboxmedia.com"
+
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive.file"
+    "https://www.googleapis.com/auth/drive"
 ]
 
 # Spreadsheet config
@@ -46,78 +44,19 @@ HEADERS = ["Date", "Time", "Project", "Task", "Status", "Notes"]
 
 
 def get_credentials():
-    """Get valid user credentials, prompting for auth if needed."""
-    creds = None
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-
-    if TOKEN_PATH.exists():
-        creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
-
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            try:
-                creds.refresh(Request())
-            except Exception:
-                creds = None
-
-        if not creds:
-            # Need to run auth flow
-            print(json.dumps({
-                "success": False,
-                "error": "Not authenticated. Run: python3 sheets_sync.py auth",
-                "needs_auth": True
-            }))
-            sys.exit(1)
-
-        # Save refreshed credentials
-        with open(TOKEN_PATH, "w") as f:
-            f.write(creds.to_json())
-
-    return creds
-
-
-def run_auth_flow():
-    """Run the OAuth2 authorization flow."""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-
+    """Load service account credentials with domain-wide delegation."""
     if not CREDENTIALS_PATH.exists():
-        setup_instructions = """
-To set up Google Sheets integration:
-
-1. Go to https://console.cloud.google.com/apis/credentials
-2. Create a project (or select existing)
-3. Enable the Google Sheets API and Google Drive API
-4. Create OAuth 2.0 credentials (Desktop app)
-5. Download the JSON file
-6. Save it to: ~/.claudehub/google_credentials.json
-
-Then run this command again.
-"""
         print(json.dumps({
             "success": False,
-            "error": "Credentials file not found",
-            "instructions": setup_instructions.strip(),
-            "path": str(CREDENTIALS_PATH)
+            "error": f"Credentials not found at {CREDENTIALS_PATH}"
         }))
         sys.exit(1)
 
-    print("Opening browser for Google authorization...", file=sys.stderr)
-    print("Please sign in and authorize access to Google Sheets.", file=sys.stderr)
-
-    flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), SCOPES)
-
-    try:
-        creds = flow.run_local_server(port=8085, open_browser=True)
-    except Exception as e:
-        # Fallback to console-based flow
-        print(f"Browser flow failed: {e}", file=sys.stderr)
-        print("Using manual authorization...", file=sys.stderr)
-        creds = flow.run_console()
-
-    with open(TOKEN_PATH, "w") as f:
-        f.write(creds.to_json())
-
-    print(json.dumps({"success": True, "message": "Authorization successful!"}))
+    creds = Credentials.from_service_account_file(
+        str(CREDENTIALS_PATH),
+        scopes=SCOPES,
+        subject=DELEGATED_USER
+    )
     return creds
 
 
@@ -159,8 +98,8 @@ def find_existing_spreadsheet():
         files = results.get("files", [])
         if files:
             return files[0]["id"]
-    except HttpError:
-        pass
+    except HttpError as e:
+        print(f"Drive search error: {e}", file=sys.stderr)
     return None
 
 
@@ -181,6 +120,8 @@ def create_spreadsheet():
     ).execute()
 
     spreadsheet_id = spreadsheet["spreadsheetId"]
+    # Get actual sheet ID from response
+    sheet_id = spreadsheet["sheets"][0]["properties"]["sheetId"]
 
     # Add headers
     sheets.spreadsheets().values().update(
@@ -198,7 +139,7 @@ def create_spreadsheet():
                 {
                     "repeatCell": {
                         "range": {
-                            "sheetId": 0,
+                            "sheetId": sheet_id,
                             "startRowIndex": 0,
                             "endRowIndex": 1
                         },
@@ -214,7 +155,7 @@ def create_spreadsheet():
                 {
                     "updateSheetProperties": {
                         "properties": {
-                            "sheetId": 0,
+                            "sheetId": sheet_id,
                             "gridProperties": {"frozenRowCount": 1}
                         },
                         "fields": "gridProperties.frozenRowCount"
@@ -342,9 +283,6 @@ def main():
     parser = argparse.ArgumentParser(description="ClaudeHub Google Sheets sync")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # Auth command
-    subparsers.add_parser("auth", help="Authorize with Google")
-
     # Log command
     log_parser = subparsers.add_parser("log", help="Log a task")
     log_parser.add_argument("--project", required=True, help="Project name")
@@ -362,9 +300,7 @@ def main():
     args = parser.parse_args()
 
     try:
-        if args.command == "auth":
-            run_auth_flow()
-        elif args.command == "log":
+        if args.command == "log":
             log_task(args.project, args.task, args.status, args.notes)
         elif args.command == "init":
             init_spreadsheet()
