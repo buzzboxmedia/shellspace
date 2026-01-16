@@ -5,6 +5,20 @@ struct LauncherView: View {
     @EnvironmentObject var windowState: WindowState
     @State private var showSettings = false
 
+    /// Open the Buzzbox Task Log spreadsheet
+    private func openTaskLogSpreadsheet() {
+        let idFile = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claudehub/task_log_sheet_id.txt")
+
+        if let spreadsheetId = try? String(contentsOf: idFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines) {
+            let url = URL(string: "https://docs.google.com/spreadsheets/d/\(spreadsheetId)")!
+            NSWorkspace.shared.open(url)
+        } else {
+            // No spreadsheet yet - open Google Sheets home
+            NSWorkspace.shared.open(URL(string: "https://sheets.google.com")!)
+        }
+    }
+
     var body: some View {
         ZStack {
             // Glass background
@@ -66,10 +80,33 @@ struct LauncherView: View {
 
                     // Development Section (ClaudeHub itself)
                     VStack(alignment: .leading, spacing: 20) {
-                        Text("DEVELOPMENT")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.orange)
-                            .tracking(1.5)
+                        HStack {
+                            Text("DEVELOPMENT")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.orange)
+                                .tracking(1.5)
+
+                            Spacer()
+
+                            // Link to Task Log spreadsheet
+                            Button {
+                                openTaskLogSpreadsheet()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "tablecells")
+                                        .font(.system(size: 12))
+                                    Text("Task Log")
+                                        .font(.system(size: 12, weight: .medium))
+                                }
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.white.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                            .buttonStyle(.plain)
+                            .help("Open Buzzbox Task Log in Google Sheets")
+                        }
 
                         HStack(spacing: 16) {
                             ForEach(appState.devProjects) { project in
