@@ -107,9 +107,9 @@ class AppState: ObservableObject {
     @Published var devProjects: [Project] = []  // Meta: ClaudeHub itself
 
     // Global UI scale (Cmd+/- to adjust)
-    @Published var uiScale: CGFloat = 1.0
-    private static let minScale: CGFloat = 0.7
-    private static let maxScale: CGFloat = 1.5
+    @Published var uiScale: CGFloat = 1.25
+    private static let minScale: CGFloat = 0.8
+    private static let maxScale: CGFloat = 1.8
 
     func increaseUIScale() {
         uiScale = min(uiScale + 0.1, Self.maxScale)
@@ -734,8 +734,8 @@ struct WindowContent: View {
 struct WindowResizer: NSViewRepresentable {
     let scale: CGFloat
 
-    private static let baseWidth: CGFloat = 1100
-    private static let baseHeight: CGFloat = 700
+    private static let baseWidth: CGFloat = 1200
+    private static let baseHeight: CGFloat = 800
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
