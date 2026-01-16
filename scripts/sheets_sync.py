@@ -126,7 +126,7 @@ def find_existing_spreadsheet(workspace: str = None):
 
 
 def create_spreadsheet(workspace: str = None):
-    """Create a new spreadsheet with headers."""
+    """Create a new spreadsheet with headers and nice styling."""
     sheets = get_sheets_service()
     spreadsheet_name = get_spreadsheet_name(workspace)
 
@@ -143,7 +143,6 @@ def create_spreadsheet(workspace: str = None):
     ).execute()
 
     spreadsheet_id = spreadsheet["spreadsheetId"]
-    # Get actual sheet ID from response
     sheet_id = spreadsheet["sheets"][0]["properties"]["sheetId"]
 
     # Add headers
@@ -154,27 +153,31 @@ def create_spreadsheet(workspace: str = None):
         body={"values": [HEADERS]}
     ).execute()
 
-    # Format header row (bold, background color)
+    # Style the spreadsheet
     sheets.spreadsheets().batchUpdate(
         spreadsheetId=spreadsheet_id,
         body={
             "requests": [
+                # Header row: dark purple background, white bold text
                 {
                     "repeatCell": {
-                        "range": {
-                            "sheetId": sheet_id,
-                            "startRowIndex": 0,
-                            "endRowIndex": 1
-                        },
+                        "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1},
                         "cell": {
                             "userEnteredFormat": {
-                                "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.3},
-                                "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}}
+                                "backgroundColor": {"red": 0.4, "green": 0.2, "blue": 0.6},
+                                "textFormat": {
+                                    "bold": True,
+                                    "fontSize": 11,
+                                    "foregroundColor": {"red": 1, "green": 1, "blue": 1}
+                                },
+                                "horizontalAlignment": "CENTER",
+                                "verticalAlignment": "MIDDLE"
                             }
                         },
-                        "fields": "userEnteredFormat(backgroundColor,textFormat)"
+                        "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)"
                     }
                 },
+                # Freeze header row
                 {
                     "updateSheetProperties": {
                         "properties": {
@@ -183,7 +186,59 @@ def create_spreadsheet(workspace: str = None):
                         },
                         "fields": "gridProperties.frozenRowCount"
                     }
-                }
+                },
+                # Set column widths
+                {"updateDimensionProperties": {
+                    "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 0, "endIndex": 1},
+                    "properties": {"pixelSize": 100}, "fields": "pixelSize"  # Date
+                }},
+                {"updateDimensionProperties": {
+                    "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 1, "endIndex": 2},
+                    "properties": {"pixelSize": 70}, "fields": "pixelSize"  # Time
+                }},
+                {"updateDimensionProperties": {
+                    "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 2, "endIndex": 3},
+                    "properties": {"pixelSize": 120}, "fields": "pixelSize"  # Workspace
+                }},
+                {"updateDimensionProperties": {
+                    "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 3, "endIndex": 4},
+                    "properties": {"pixelSize": 140}, "fields": "pixelSize"  # Project
+                }},
+                {"updateDimensionProperties": {
+                    "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 4, "endIndex": 5},
+                    "properties": {"pixelSize": 200}, "fields": "pixelSize"  # Task
+                }},
+                {"updateDimensionProperties": {
+                    "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 5, "endIndex": 6},
+                    "properties": {"pixelSize": 250}, "fields": "pixelSize"  # Description
+                }},
+                {"updateDimensionProperties": {
+                    "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 6, "endIndex": 7},
+                    "properties": {"pixelSize": 80}, "fields": "pixelSize"  # Est Hrs
+                }},
+                {"updateDimensionProperties": {
+                    "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 7, "endIndex": 8},
+                    "properties": {"pixelSize": 90}, "fields": "pixelSize"  # Actual Hrs
+                }},
+                {"updateDimensionProperties": {
+                    "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 8, "endIndex": 9},
+                    "properties": {"pixelSize": 100}, "fields": "pixelSize"  # Status
+                }},
+                {"updateDimensionProperties": {
+                    "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 9, "endIndex": 10},
+                    "properties": {"pixelSize": 300}, "fields": "pixelSize"  # Notes
+                }},
+                # Set header row height
+                {"updateDimensionProperties": {
+                    "range": {"sheetId": sheet_id, "dimension": "ROWS", "startIndex": 0, "endIndex": 1},
+                    "properties": {"pixelSize": 36}, "fields": "pixelSize"
+                }},
+                # Add filter to header
+                {"setBasicFilter": {
+                    "filter": {
+                        "range": {"sheetId": sheet_id, "startRowIndex": 0, "startColumnIndex": 0, "endColumnIndex": 10}
+                    }
+                }},
             ]
         }
     ).execute()
