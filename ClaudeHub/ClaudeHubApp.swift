@@ -154,14 +154,19 @@ class AppState: ObservableObject {
         sessions.filter { $0.projectPath == project.path }
     }
 
-    func createSession(for project: Project) -> Session {
-        // Generate name like "Chat 1", "Chat 2", etc
-        let existingCount = sessionsFor(project: project).filter { !$0.isProjectLinked }.count
-        let chatName = "Chat \(existingCount + 1)"
+    func createSession(for project: Project, name: String? = nil) -> Session {
+        // Use provided name or generate default "Task 1", "Task 2", etc
+        let taskName: String
+        if let name = name, !name.isEmpty {
+            taskName = name
+        } else {
+            let existingCount = sessionsFor(project: project).filter { !$0.isProjectLinked }.count
+            taskName = "Task \(existingCount + 1)"
+        }
 
         let session = Session(
             id: UUID(),
-            name: chatName,
+            name: taskName,
             projectPath: project.path,
             createdAt: Date()
         )
