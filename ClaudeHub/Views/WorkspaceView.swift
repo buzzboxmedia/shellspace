@@ -20,11 +20,11 @@ struct WorkspaceView: View {
         HSplitView {
             // Sidebar
             SessionSidebar(project: project, goBack: goBack)
-                .frame(minWidth: 200, idealWidth: 250, maxWidth: 300)
+                .frame(minWidth: 280, idealWidth: 320, maxWidth: 500)
 
             // Terminal area
             TerminalArea(project: project)
-                .frame(minWidth: 500)
+                .frame(minWidth: 400)
         }
         .background {
             VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
