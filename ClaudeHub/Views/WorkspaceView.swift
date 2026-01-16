@@ -131,33 +131,34 @@ struct SessionSidebar: View {
             VStack(alignment: .leading, spacing: 0) {
                 // Header row - fixed height
                 VStack(alignment: .leading, spacing: 12) {
-                    // Back button - subtle
+                    // Back button
                     Button(action: goBack) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 6) {
                             Image(systemName: "chevron.left")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: 14, weight: .medium))
                             Text("Back")
-                                .font(.system(size: 11))
+                                .font(.system(size: 14))
                         }
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                         .background(
-                            RoundedRectangle(cornerRadius: 4)
+                            RoundedRectangle(cornerRadius: 6)
                                 .fill(isBackHovered ? Color.white.opacity(0.12) : Color.clear)
                         )
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .onHover { isBackHovered = $0 }
 
                     // Project name with icon - prominent
-                    HStack(spacing: 10) {
+                    HStack(spacing: 12) {
                         Image(systemName: project.icon)
-                            .font(.system(size: 20))
+                            .font(.system(size: 24))
                             .foregroundStyle(.primary)
 
                         Text(project.name)
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 22, weight: .semibold))
                     }
                 }
                 .padding(.horizontal, 16)
@@ -203,17 +204,17 @@ struct SessionSidebar: View {
                                 Button {
                                     isCreatingTask = true
                                 } label: {
-                                    HStack(spacing: 6) {
+                                    HStack(spacing: 8) {
                                         Image(systemName: "plus")
-                                            .font(.system(size: 11, weight: .semibold))
+                                            .font(.system(size: 14, weight: .semibold))
                                         Text("Task")
-                                            .font(.system(size: 12, weight: .medium))
+                                            .font(.system(size: 14, weight: .medium))
                                     }
                                     .foregroundStyle(.white)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 18)
+                                    .padding(.vertical, 12)
                                     .background(Color.blue)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -248,22 +249,22 @@ struct SessionSidebar: View {
                                 Button {
                                     isCreatingGroup = true
                                 } label: {
-                                    HStack(spacing: 6) {
+                                    HStack(spacing: 8) {
                                         Image(systemName: "folder.badge.plus")
-                                            .font(.system(size: 11, weight: .semibold))
+                                            .font(.system(size: 14, weight: .semibold))
                                         Text("Project")
-                                            .font(.system(size: 12, weight: .medium))
+                                            .font(.system(size: 14, weight: .medium))
                                     }
                                     .foregroundStyle(.white)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 18)
+                                    .padding(.vertical, 12)
                                     .background(Color.purple)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 16)
 
                         // Active Projects Section (from ACTIVE-PROJECTS.md)
                         if !projectLinkedSessions.isEmpty {
@@ -287,13 +288,13 @@ struct SessionSidebar: View {
                         }
 
                         // Standalone Tasks Section (drop here to remove from group)
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 6) {
                             Text("TASKS")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(.secondary)
                                 .tracking(1.2)
                                 .padding(.horizontal, 16)
-                                .padding(.top, 4)
+                                .padding(.top, 8)
 
                             if standaloneTasks.isEmpty {
                                 // Drop zone when empty
@@ -363,7 +364,7 @@ struct ProjectGroupSection: View {
 
                 // Folder icon
                 Image(systemName: "folder.fill")
-                    .font(.system(size: 12))
+                    .font(.system(size: 16))
                     .foregroundStyle(.purple)
 
                 // Group name
@@ -373,10 +374,10 @@ struct ProjectGroupSection: View {
                         isEditing = false
                     })
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 15, weight: .medium))
                 } else {
                     Text(group.name)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(.primary)
                 }
 
@@ -393,14 +394,16 @@ struct ProjectGroupSection: View {
 
                 // Actions on hover
                 if isHovered {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 8) {
                         // Add task to group
                         Button {
                             isCreatingTask = true
                         } label: {
                             Image(systemName: "plus")
-                                .font(.system(size: 10))
+                                .font(.system(size: 14))
                                 .foregroundStyle(.blue)
+                                .frame(width: 28, height: 28)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
 
@@ -410,8 +413,10 @@ struct ProjectGroupSection: View {
                             isEditing = true
                         } label: {
                             Image(systemName: "pencil")
-                                .font(.system(size: 10))
+                                .font(.system(size: 14))
                                 .foregroundStyle(.secondary)
+                                .frame(width: 28, height: 28)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
 
@@ -420,8 +425,10 @@ struct ProjectGroupSection: View {
                             appState.deleteProjectGroup(group)
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 11))
+                                .font(.system(size: 16))
                                 .foregroundStyle(.secondary)
+                                .frame(width: 28, height: 28)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
@@ -586,10 +593,10 @@ struct TaskRow: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
             } else {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
                         Text(session.name)
-                            .font(.system(size: 13))
+                            .font(.system(size: 15))
                             .foregroundStyle(isActive ? .primary : .secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -643,7 +650,7 @@ struct TaskRow: View {
 
             // Action buttons on hover
             if isHovered && !isEditing {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     // Update/Resume button - only show if session has a log
                     if hasLog {
                         Button {
@@ -651,12 +658,14 @@ struct TaskRow: View {
                         } label: {
                             if isResuming {
                                 ProgressView()
-                                    .scaleEffect(0.5)
-                                    .frame(width: 14, height: 14)
+                                    .scaleEffect(0.6)
+                                    .frame(width: 28, height: 28)
                             } else {
                                 Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 14))
                                     .foregroundStyle(.blue)
+                                    .frame(width: 28, height: 28)
+                                    .contentShape(Rectangle())
                             }
                         }
                         .buttonStyle(.plain)
@@ -668,8 +677,10 @@ struct TaskRow: View {
                         isEditing = true
                     } label: {
                         Image(systemName: "pencil")
-                            .font(.system(size: 11))
+                            .font(.system(size: 14))
                             .foregroundStyle(.secondary)
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
 
@@ -681,8 +692,10 @@ struct TaskRow: View {
                         appState.deleteSession(session)
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 12))
+                            .font(.system(size: 16))
                             .foregroundStyle(.secondary)
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
