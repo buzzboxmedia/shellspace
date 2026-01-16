@@ -726,10 +726,66 @@ struct WindowContent: View {
                 LauncherView()
             }
         }
-        .scaleEffect(appState.uiScale)
-        .frame(
-            minWidth: 900 * appState.uiScale,
-            minHeight: 600 * appState.uiScale
-        )
+        .background(WindowResizer(scale: appState.uiScale))
+    }
+}
+
+/// Helper to resize the window when scale changes
+struct WindowResizer: NSViewRepresentable {
+    let scale: CGFloat
+
+    private static let baseWidth: CGFloat = 1100
+    private static let baseHeight: CGFloat = 700
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            self.resizeWindow(view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            self.resizeWindow(nsView.window)
+        }
+    }
+
+    private func resizeWindow(_ window: NSWindow?) {
+        guard let window = window else { return }
+
+        let newWidth = Self.baseWidth * scale
+        let newHeight = Self.baseHeight * scale
+
+        // Get current frame and screen
+        var frame = window.frame
+        guard let screen = window.screen else { return }
+
+        // Calculate new frame, keeping top-left corner in place
+        let oldMaxY = frame.maxY
+        frame.size.width = newWidth
+        frame.size.height = newHeight
+        frame.origin.y = oldMaxY - newHeight  // Keep top edge fixed
+
+        // Ensure window stays on screen
+        let visibleFrame = screen.visibleFrame
+        if frame.maxX > visibleFrame.maxX {
+            frame.origin.x = visibleFrame.maxX - frame.width
+        }
+        if frame.origin.x < visibleFrame.origin.x {
+            frame.origin.x = visibleFrame.origin.x
+        }
+        if frame.origin.y < visibleFrame.origin.y {
+            frame.origin.y = visibleFrame.origin.y
+        }
+        if frame.maxY > visibleFrame.maxY {
+            frame.origin.y = visibleFrame.maxY - frame.height
+        }
+
+        // Animate the resize
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            window.animator().setFrame(frame, display: true)
+        }
     }
 }
