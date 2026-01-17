@@ -7,19 +7,21 @@ actor QuickReplyService {
 
     // Tailscale server settings
     private let port: Int = 8847
-    private var macIP: String {
-        UserDefaults.standard.string(forKey: "mac_tailscale_ip") ?? ""
+    private let defaultMacHost = "barons-mac-studio.tail0277a9.ts.net"
+
+    private var macHost: String {
+        UserDefaults.standard.string(forKey: "mac_tailscale_ip") ?? defaultMacHost
     }
 
     private var baseURL: String {
-        "http://\(macIP):\(port)"
+        "http://\(macHost):\(port)"
     }
 
     // MARK: - API Methods
 
     /// Send a quick reply to a session
     func send(reply: String, to session: Session) async throws {
-        guard !macIP.isEmpty else {
+        guard !macHost.isEmpty else {
             throw ServerError.notConfigured
         }
 
@@ -43,7 +45,7 @@ actor QuickReplyService {
 
     /// Get server status
     func getStatus() async throws -> ServerStatus {
-        guard !macIP.isEmpty else {
+        guard !macHost.isEmpty else {
             throw ServerError.notConfigured
         }
 
@@ -70,7 +72,7 @@ actor QuickReplyService {
 
     /// Get active sessions from Mac
     func getSessions() async throws -> [[String: Any]] {
-        guard !macIP.isEmpty else {
+        guard !macHost.isEmpty else {
             throw ServerError.notConfigured
         }
 
@@ -91,7 +93,7 @@ actor QuickReplyService {
 
     /// Get terminal content for a session
     func getTerminalContent(sessionId: UUID) async throws -> String {
-        guard !macIP.isEmpty else {
+        guard !macHost.isEmpty else {
             throw ServerError.notConfigured
         }
 
@@ -112,7 +114,7 @@ actor QuickReplyService {
 
     /// Mark a session as complete
     func completeSession(_ session: Session) async throws {
-        guard !macIP.isEmpty else {
+        guard !macHost.isEmpty else {
             throw ServerError.notConfigured
         }
 
@@ -131,12 +133,16 @@ actor QuickReplyService {
 
     // MARK: - Configuration
 
-    func setMacIP(_ ip: String) {
-        UserDefaults.standard.set(ip, forKey: "mac_tailscale_ip")
+    func setMacHost(_ host: String) {
+        UserDefaults.standard.set(host, forKey: "mac_tailscale_ip")
     }
 
-    func getMacIP() -> String {
-        macIP
+    func getMacHost() -> String {
+        macHost
+    }
+
+    func getDefaultHost() -> String {
+        defaultMacHost
     }
 
     // MARK: - CloudKit Fallback (for when not on Tailscale)
@@ -190,40 +196,20 @@ struct ConnectionStatusView: View {
     @State private var status: ServerStatus?
     @State private var isChecking = false
     @State private var error: String?
-    @State private var macIP: String = ""
+    @State private var macHost: String = ""
+    @State private var isUsingDefault = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Mac IP Configuration
-            HStack {
-                Image(systemName: "network")
-                    .foregroundStyle(.blue)
-
-                TextField("Mac Tailscale IP (e.g., 100.x.x.x)", text: $macIP)
-                    .textFieldStyle(.roundedBorder)
-                    .keyboardType(.decimalPad)
-                    .autocorrectionDisabled()
-
-                Button("Save") {
-                    Task {
-                        await QuickReplyService.shared.setMacIP(macIP)
-                        await checkStatus()
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(macIP.isEmpty)
-            }
-
-            Divider()
-
             // Connection Status
             HStack {
                 Image(systemName: statusIcon)
+                    .font(.title2)
                     .foregroundStyle(statusColor)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Mac Connection")
-                        .font(.subheadline)
+                    Text("barons-mac-studio")
+                        .font(.subheadline.bold())
 
                     Text(statusText)
                         .font(.caption)
@@ -240,6 +226,7 @@ struct ConnectionStatusView: View {
                         Task { await checkStatus() }
                     }
                     .font(.caption)
+                    .buttonStyle(.bordered)
                 }
             }
 
@@ -255,10 +242,8 @@ struct ConnectionStatusView: View {
         }
         .onAppear {
             Task {
-                macIP = await QuickReplyService.shared.getMacIP()
-                if !macIP.isEmpty {
-                    await checkStatus()
-                }
+                macHost = await QuickReplyService.shared.getMacHost()
+                await checkStatus()
             }
         }
     }
@@ -277,13 +262,12 @@ struct ConnectionStatusView: View {
     }
 
     var statusText: String {
-        if isChecking { return "Connecting..." }
+        if isChecking { return "Connecting via Tailscale..." }
         if let error = error { return error }
         if let status = status, status.isOnline {
-            return "Connected (v\(status.version))"
+            return "Connected - ClaudeHub v\(status.version)"
         }
-        if macIP.isEmpty { return "Enter Mac Tailscale IP" }
-        return "Not connected"
+        return "Tap Test to connect"
     }
 
     func checkStatus() async {
