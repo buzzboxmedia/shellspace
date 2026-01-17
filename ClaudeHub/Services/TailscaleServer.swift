@@ -31,18 +31,24 @@ class TailscaleServer {
         self.appState = appState
 
         do {
+            // Simple TCP listener - NWListener should bind to all interfaces by default
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true
 
             listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
+            serverLogger.info("Created listener on port \(self.port)")
 
             listener?.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .ready:
-                    serverLogger.info("Server ready on port \(self?.port ?? 0)")
-                    if let ip = self?.getTailscaleIP() {
-                        serverLogger.info("Tailscale IP: \(ip)")
+                    if let port = self?.listener?.port {
+                        serverLogger.info("Server ready on port \(port.rawValue)")
                     }
+                    if let ip = self?.getTailscaleIP() {
+                        serverLogger.info("Tailscale URL: http://\(ip):\(self?.port ?? 0)")
+                    }
+                    // Log what we're actually listening on
+                    serverLogger.info("Listener parameters: \(String(describing: self?.listener?.parameters))")
                 case .failed(let error):
                     serverLogger.error("Server failed: \(error.localizedDescription)")
                 case .cancelled:
@@ -324,6 +330,60 @@ class TailscaleServer {
     // MARK: - Tailscale IP Detection
 
     func getTailscaleIP() -> String? {
+        // Try tailscale CLI first (works with userspace networking)
+        if let cliIP = getTailscaleIPFromCLI() {
+            return cliIP
+        }
+
+        // Fallback to interface scan (legacy kernel networking mode)
+        return getTailscaleIPFromInterfaces()
+    }
+
+    private func getTailscaleIPFromCLI() -> String? {
+        let process = Process()
+        let pipe = Pipe()
+
+        // Try the CLI in common locations
+        let paths = [
+            "/usr/local/bin/tailscale",
+            "/opt/homebrew/bin/tailscale",
+            "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+        ]
+
+        var tailscalePath: String?
+        for path in paths {
+            if FileManager.default.fileExists(atPath: path) {
+                tailscalePath = path
+                break
+            }
+        }
+
+        guard let path = tailscalePath else {
+            return nil
+        }
+
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = ["ip", "-4"]
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               output.hasPrefix("100.") {
+                return output
+            }
+        } catch {
+            serverLogger.debug("Failed to get IP from tailscale CLI: \(error.localizedDescription)")
+        }
+
+        return nil
+    }
+
+    private func getTailscaleIPFromInterfaces() -> String? {
         var addresses: [String] = []
 
         var ifaddr: UnsafeMutablePointer<ifaddrs>?
