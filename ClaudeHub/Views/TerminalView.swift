@@ -914,8 +914,12 @@ class TerminalContainerView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        focusTerminal()
-        super.mouseDown(with: event)
+        // Forward mouse event to terminal for text selection to work
+        if let terminal = terminalView {
+            terminal.mouseDown(with: event)
+        } else {
+            super.mouseDown(with: event)
+        }
     }
 
     // Detect URL at a point in terminal coordinates
