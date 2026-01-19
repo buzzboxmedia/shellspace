@@ -104,15 +104,6 @@ struct WorkspaceView: View {
         session.taskGroup = group
         modelContext.insert(session)
 
-        // Sync to Google Sheets
-        Task {
-            await GoogleSheetsService.shared.createTask(
-                workspace: project.name,
-                project: group?.name,
-                task: taskName
-            )
-        }
-
         return session
     }
 }
@@ -186,27 +177,27 @@ struct SessionSidebar: View {
         isCreatingTask = false
         newTaskName = ""
         newTaskDescription = ""
+
+        // Create task folder with TASK.md
+        let clientName = extractClientName(from: project.path) ?? project.name
+        let projectName = selectedGroupForNewTask?.name
         selectedGroupForNewTask = nil
 
-        // Create task file in client's tasks folder
-        let clientName = extractClientName(from: project.path) ?? project.name
         Task {
             do {
-                _ = try TaskFileService.shared.createTaskFile(
+                let taskFolder = try TaskFolderService.shared.createTask(
                     clientName: clientName,
+                    projectName: projectName,
                     taskName: name,
                     description: description.isEmpty ? nil : description
                 )
+                // Link session to task folder
+                await MainActor.run {
+                    session.taskFolderPath = taskFolder.path
+                }
             } catch {
-                print("Failed to create task file: \(error)")
+                print("Failed to create task folder: \(error)")
             }
-
-            // Sync to Google Sheets
-            await GoogleSheetsService.shared.createTask(
-                workspace: project.name,
-                project: selectedGroupForNewTask?.name,
-                task: name
-            )
         }
     }
 
@@ -236,9 +227,17 @@ struct SessionSidebar: View {
         isCreatingGroup = false
         newGroupName = ""
 
-        // Sync to Google Sheets
+        // Create project folder
+        let clientName = extractClientName(from: project.path) ?? project.name
         Task {
-            await GoogleSheetsService.shared.createProject(workspace: project.name, project: name)
+            do {
+                _ = try TaskFolderService.shared.createProject(
+                    clientName: clientName,
+                    projectName: name
+                )
+            } catch {
+                print("Failed to create project folder: \(error)")
+            }
         }
     }
 
@@ -852,6 +851,7 @@ struct TaskRow: View {
     @State private var isResuming = false
     @State private var isCompleting = false
     @State private var showingTaskDetail = false
+    @State private var showingBillingSheet = false
 
     var isActive: Bool {
         windowState.activeSession?.id == session.id
@@ -1035,6 +1035,19 @@ struct TaskRow: View {
                     }
                     .buttonStyle(.plain)
                     .help("Reopen this task")
+
+                    // Send to Billing button
+                    Button {
+                        showingBillingSheet = true
+                    } label: {
+                        Image(systemName: "dollarsign.circle")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.green)
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Send to billing")
                 }
 
                 // Update/Resume button - only show if session has a log and not completed
@@ -1125,6 +1138,9 @@ struct TaskRow: View {
             TaskDetailView(session: session, project: project, isPresented: $showingTaskDetail)
                 .environmentObject(appState)
         }
+        .sheet(isPresented: $showingBillingSheet) {
+            SendToBillingSheet(session: session, project: project)
+        }
     }
 
     /// Resume a task by loading context and sending update prompt to Claude
@@ -1201,35 +1217,62 @@ struct TaskRow: View {
         }
     }
 
-    /// Save session summary to task markdown file
+    /// Save session summary to task TASK.md file
     private func saveToTaskFile(summary: String, isCompleted: Bool = false) {
-        // Extract client name from project path
-        let components = project.path.components(separatedBy: "/")
-        guard let clientsIndex = components.firstIndex(of: "clients"),
-              clientsIndex + 1 < components.count else {
-            return
-        }
-        let clientName = components[clientsIndex + 1]
+        // If session has a linked task folder, use that
+        if let taskFolderPath = session.taskFolderPath {
+            let folderURL = URL(fileURLWithPath: taskFolderPath)
+            do {
+                // Append progress to TASK.md
+                let taskFile = folderURL.appendingPathComponent("TASK.md")
+                if FileManager.default.fileExists(atPath: taskFile.path) {
+                    var content = try String(contentsOf: taskFile, encoding: .utf8)
 
-        do {
-            // Append session summary
-            try TaskFileService.shared.appendSessionSummary(
-                clientName: clientName,
-                taskName: session.name,
-                summary: summary
-            )
+                    let dateFormatter = DateFormatter()
+                    dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
+                    let timestamp = dateFormatter.string(from: Date())
 
-            // Update status if completed
-            if isCompleted {
-                try TaskFileService.shared.updateTaskStatus(
+                    content += "\n### \(timestamp)\n\(summary)\n"
+                    try content.write(to: taskFile, atomically: true, encoding: .utf8)
+                }
+
+                // Update status if completed
+                if isCompleted {
+                    try TaskFolderService.shared.updateTaskStatus(
+                        at: folderURL,
+                        status: "done"
+                    )
+                }
+            } catch {
+                print("Failed to save to task file: \(error)")
+            }
+        } else {
+            // Fallback: try old TaskFileService for legacy tasks
+            let components = project.path.components(separatedBy: "/")
+            guard let clientsIndex = components.firstIndex(of: "clients"),
+                  clientsIndex + 1 < components.count else {
+                return
+            }
+            let clientName = components[clientsIndex + 1]
+
+            do {
+                try TaskFileService.shared.appendSessionSummary(
                     clientName: clientName,
                     taskName: session.name,
-                    status: "done",
-                    completedDate: Date()
+                    summary: summary
                 )
+
+                if isCompleted {
+                    try TaskFileService.shared.updateTaskStatus(
+                        clientName: clientName,
+                        taskName: session.name,
+                        status: "done",
+                        completedDate: Date()
+                    )
+                }
+            } catch {
+                print("Failed to save to legacy task file: \(error)")
             }
-        } catch {
-            print("Failed to save to task file: \(error)")
         }
     }
 }
@@ -1706,37 +1749,28 @@ struct LogTaskSheet: View {
                 }
             }
 
-            // Sync to Google Sheets (optional, may fail)
+            // Sync to Google Sheets billing (optional, may fail)
             do {
-                let result = try await GoogleSheetsService.shared.logTask(
-                    workspace: project.name,
-                    project: nil,  // TODO: Add project support
+                let result = try await GoogleSheetsService.shared.logBilling(
+                    client: project.name,
+                    project: nil,
                     task: session.name,
-                    billableDescription: billableDescription,
-                    estimatedHours: estHrs,
+                    description: billableDescription,
+                    estHours: estHrs,
                     actualHours: actHrs,
-                    status: "completed",
-                    notes: notes
+                    status: "billed"
                 )
 
                 await MainActor.run {
                     isSaving = false
-                    savedSuccessfully = true  // Local save always succeeds at this point
+                    savedSuccessfully = true
 
                     if result.success {
-                        // Full success - close immediately
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                             isPresented = false
                         }
-                    } else if result.needs_auth == true {
-                        saveError = "Saved locally. Google Sheets not authorized."
-                        // Still close after showing message
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            isPresented = false
-                        }
                     } else {
-                        saveError = "Saved locally. Sheets sync: \(result.error ?? "unknown error")"
-                        // Still close after showing message
+                        saveError = "Saved locally. Billing sync: \(result.error ?? "unknown error")"
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                             isPresented = false
                         }
@@ -1745,9 +1779,8 @@ struct LogTaskSheet: View {
             } catch {
                 await MainActor.run {
                     isSaving = false
-                    savedSuccessfully = true  // Local save succeeded
-                    saveError = "Saved locally. Sheets sync failed."
-                    // Still close after showing message
+                    savedSuccessfully = true
+                    saveError = "Saved locally. Billing sync failed."
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                         isPresented = false
                     }

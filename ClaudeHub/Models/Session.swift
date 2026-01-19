@@ -29,6 +29,9 @@ final class Session {
     // Last time the log was saved
     var lastLogSavedAt: Date?
 
+    // Link to task folder (e.g., ~/Dropbox/.../tasks/001-task-name/)
+    var taskFolderPath: String?
+
     // Completion tracking
     var isCompleted: Bool
     var completedAt: Date?
