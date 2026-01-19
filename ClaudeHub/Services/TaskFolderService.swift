@@ -5,7 +5,7 @@ private let logger = Logger(subsystem: "com.buzzbox.claudehub", category: "TaskF
 
 /// Service for managing task folders with TASK.md files
 /// Structure:
-///   ~/Dropbox/Buzzbox/clients/{client}/tasks/
+///   {projectPath}/tasks/
 ///   ├── project-name/                    ← Project folder (no number)
 ///   │   ├── 001-task-name/
 ///   │   │   └── TASK.md
@@ -13,40 +13,38 @@ private let logger = Logger(subsystem: "com.buzzbox.claudehub", category: "TaskF
 ///   │       └── TASK.md
 ///   └── 001-standalone-task/             ← Task without project
 ///       └── TASK.md
+///
+/// Works with any project path (Talkspresso, Buzzbox clients, etc.)
 class TaskFolderService {
     static let shared = TaskFolderService()
 
     private let fileManager = FileManager.default
-    private let clientsBasePath: String
 
-    private init() {
-        clientsBasePath = NSString("~/Library/CloudStorage/Dropbox/Buzzbox/Clients").expandingTildeInPath
-    }
+    private init() {}
 
     // MARK: - Path Helpers
 
-    /// Get the tasks directory for a client
-    func tasksDirectory(for clientName: String) -> URL {
-        URL(fileURLWithPath: clientsBasePath)
-            .appendingPathComponent(clientName)
+    /// Get the tasks directory for a project path
+    func tasksDirectory(for projectPath: String) -> URL {
+        URL(fileURLWithPath: projectPath)
             .appendingPathComponent("tasks")
     }
 
-    /// Get the project directory within a client's tasks
-    func projectDirectory(clientName: String, projectName: String) -> URL {
-        tasksDirectory(for: clientName)
+    /// Get the sub-project directory within a project's tasks
+    func projectDirectory(projectPath: String, projectName: String) -> URL {
+        tasksDirectory(for: projectPath)
             .appendingPathComponent(slugify(projectName))
     }
 
     /// Get the task folder path (includes number prefix)
-    func taskFolderPath(clientName: String, projectName: String?, taskNumber: Int, taskName: String) -> URL {
+    func taskFolderPath(projectPath: String, subProjectName: String?, taskNumber: Int, taskName: String) -> URL {
         let folderName = String(format: "%03d-%@", taskNumber, slugify(taskName))
 
-        if let project = projectName {
-            return projectDirectory(clientName: clientName, projectName: project)
+        if let subProject = subProjectName {
+            return projectDirectory(projectPath: projectPath, projectName: subProject)
                 .appendingPathComponent(folderName)
         } else {
-            return tasksDirectory(for: clientName)
+            return tasksDirectory(for: projectPath)
                 .appendingPathComponent(folderName)
         }
     }
@@ -62,9 +60,9 @@ class TaskFolderService {
 
     // MARK: - Project Operations
 
-    /// Create a project folder
-    func createProject(clientName: String, projectName: String) throws -> URL {
-        let projectDir = projectDirectory(clientName: clientName, projectName: projectName)
+    /// Create a sub-project folder within a project's tasks
+    func createProject(projectPath: String, projectName: String) throws -> URL {
+        let projectDir = projectDirectory(projectPath: projectPath, projectName: projectName)
 
         if !fileManager.fileExists(atPath: projectDir.path) {
             try fileManager.createDirectory(at: projectDir, withIntermediateDirectories: true)
@@ -74,9 +72,9 @@ class TaskFolderService {
         return projectDir
     }
 
-    /// List all projects for a client
-    func listProjects(for clientName: String) -> [String] {
-        let tasksDir = tasksDirectory(for: clientName)
+    /// List all sub-projects for a project
+    func listProjects(for projectPath: String) -> [String] {
+        let tasksDir = tasksDirectory(for: projectPath)
 
         guard fileManager.fileExists(atPath: tasksDir.path) else {
             return []
@@ -104,12 +102,12 @@ class TaskFolderService {
     // MARK: - Task Operations
 
     /// Get the next task number for a project (or root level)
-    func nextTaskNumber(clientName: String, projectName: String?) -> Int {
+    func nextTaskNumber(projectPath: String, subProjectName: String?) -> Int {
         let searchDir: URL
-        if let project = projectName {
-            searchDir = projectDirectory(clientName: clientName, projectName: project)
+        if let subProject = subProjectName {
+            searchDir = projectDirectory(projectPath: projectPath, projectName: subProject)
         } else {
-            searchDir = tasksDirectory(for: clientName)
+            searchDir = tasksDirectory(for: projectPath)
         }
 
         guard fileManager.fileExists(atPath: searchDir.path) else {
@@ -134,24 +132,25 @@ class TaskFolderService {
 
     /// Create a new task folder with TASK.md
     func createTask(
-        clientName: String,
-        projectName: String?,
+        projectPath: String,
+        projectName: String,
+        subProjectName: String?,
         taskName: String,
         description: String?
     ) throws -> URL {
         // Create parent directories if needed
-        let tasksDir = tasksDirectory(for: clientName)
+        let tasksDir = tasksDirectory(for: projectPath)
         if !fileManager.fileExists(atPath: tasksDir.path) {
             try fileManager.createDirectory(at: tasksDir, withIntermediateDirectories: true)
         }
 
-        if let project = projectName {
-            _ = try createProject(clientName: clientName, projectName: project)
+        if let subProject = subProjectName {
+            _ = try createProject(projectPath: projectPath, projectName: subProject)
         }
 
         // Get next task number
-        let taskNumber = nextTaskNumber(clientName: clientName, projectName: projectName)
-        let taskFolder = taskFolderPath(clientName: clientName, projectName: projectName, taskNumber: taskNumber, taskName: taskName)
+        let taskNumber = nextTaskNumber(projectPath: projectPath, subProjectName: subProjectName)
+        let taskFolder = taskFolderPath(projectPath: projectPath, subProjectName: subProjectName, taskNumber: taskNumber, taskName: taskName)
 
         // Create task folder
         try fileManager.createDirectory(at: taskFolder, withIntermediateDirectories: true)
@@ -160,8 +159,8 @@ class TaskFolderService {
         let taskFile = taskFolder.appendingPathComponent("TASK.md")
         let content = generateTaskContent(
             taskName: taskName,
-            clientName: clientName,
             projectName: projectName,
+            subProjectName: subProjectName,
             description: description
         )
 
@@ -174,8 +173,8 @@ class TaskFolderService {
     /// Generate the TASK.md content
     func generateTaskContent(
         taskName: String,
-        clientName: String,
-        projectName: String?,
+        projectName: String,
+        subProjectName: String?,
         description: String?
     ) -> String {
         let dateFormatter = DateFormatter()
@@ -187,8 +186,8 @@ class TaskFolderService {
 
         **Status:** active
         **Created:** \(today)
-        **Client:** \(clientName)
-        \(projectName != nil ? "**Project:** \(projectName!)\n" : "")
+        **Project:** \(projectName)
+        \(subProjectName != nil ? "**Sub-project:** \(subProjectName!)\n" : "")
         ## Description
         \(description ?? "No description provided.")
 
@@ -348,14 +347,14 @@ class TaskFolderService {
 
     /// Append progress to a task
     func appendProgress(
-        clientName: String,
-        projectName: String?,
+        projectPath: String,
+        subProjectName: String?,
         taskNumber: Int,
         taskSlug: String,
         content: String,
         duration: String? = nil
     ) throws {
-        let taskFolder = taskFolderPath(clientName: clientName, projectName: projectName, taskNumber: taskNumber, taskName: taskSlug)
+        let taskFolder = taskFolderPath(projectPath: projectPath, subProjectName: subProjectName, taskNumber: taskNumber, taskName: taskSlug)
         let taskFile = taskFolder.appendingPathComponent("TASK.md")
 
         guard fileManager.fileExists(atPath: taskFile.path) else {
@@ -423,9 +422,9 @@ class TaskFolderService {
         try content.write(to: taskFile, atomically: true, encoding: .utf8)
     }
 
-    /// List all tasks for a client (across all projects)
-    func listAllTasks(for clientName: String) -> [TaskContent] {
-        let tasksDir = tasksDirectory(for: clientName)
+    /// List all tasks for a project (across all sub-projects)
+    func listAllTasks(for projectPath: String) -> [TaskContent] {
+        let tasksDir = tasksDirectory(for: projectPath)
         var tasks: [TaskContent] = []
 
         guard fileManager.fileExists(atPath: tasksDir.path) else {
@@ -449,9 +448,9 @@ class TaskFolderService {
                         tasks.append(task)
                     }
                 } else {
-                    // It's a project folder - scan for tasks inside
-                    let projectTasks = listTasksInProject(clientName: clientName, projectName: name)
-                    tasks.append(contentsOf: projectTasks)
+                    // It's a sub-project folder - scan for tasks inside
+                    let subProjectTasks = listTasksInSubProject(projectPath: projectPath, subProjectName: name)
+                    tasks.append(contentsOf: subProjectTasks)
                 }
             }
         } catch {
@@ -461,9 +460,9 @@ class TaskFolderService {
         return tasks.sorted { ($0.taskNumber ?? 0) < ($1.taskNumber ?? 0) }
     }
 
-    /// List tasks within a specific project
-    func listTasksInProject(clientName: String, projectName: String) -> [TaskContent] {
-        let projectDir = projectDirectory(clientName: clientName, projectName: projectName)
+    /// List tasks within a specific sub-project
+    func listTasksInSubProject(projectPath: String, subProjectName: String) -> [TaskContent] {
+        let projectDir = projectDirectory(projectPath: projectPath, projectName: subProjectName)
         var tasks: [TaskContent] = []
 
         guard fileManager.fileExists(atPath: projectDir.path) else {
@@ -484,51 +483,51 @@ class TaskFolderService {
                 }
             }
         } catch {
-            logger.error("Failed to list tasks in project: \(error.localizedDescription)")
+            logger.error("Failed to list tasks in sub-project: \(error.localizedDescription)")
         }
 
         return tasks.sorted { ($0.taskNumber ?? 0) < ($1.taskNumber ?? 0) }
     }
 
-    /// Move a task to a different project
-    func moveTask(from sourcePath: URL, toProject projectName: String?, clientName: String) throws {
+    /// Move a task to a different sub-project
+    func moveTask(from sourcePath: URL, toSubProject subProjectName: String?, projectPath: String) throws {
         guard readTask(at: sourcePath) != nil else {
             return
         }
 
         let taskSlug = sourcePath.lastPathComponent.replacingOccurrences(of: "^\\d{3}-", with: "", options: .regularExpression)
-        let newNumber = nextTaskNumber(clientName: clientName, projectName: projectName)
-        let newFolder = taskFolderPath(clientName: clientName, projectName: projectName, taskNumber: newNumber, taskName: taskSlug)
+        let newNumber = nextTaskNumber(projectPath: projectPath, subProjectName: subProjectName)
+        let newFolder = taskFolderPath(projectPath: projectPath, subProjectName: subProjectName, taskNumber: newNumber, taskName: taskSlug)
 
         // Create parent if needed
-        if let project = projectName {
-            _ = try createProject(clientName: clientName, projectName: project)
+        if let subProject = subProjectName {
+            _ = try createProject(projectPath: projectPath, projectName: subProject)
         }
 
         try fileManager.moveItem(at: sourcePath, to: newFolder)
 
-        // Update project in TASK.md
+        // Update sub-project in TASK.md
         let taskFile = newFolder.appendingPathComponent("TASK.md")
         var content = try String(contentsOf: taskFile, encoding: .utf8)
 
-        if let project = projectName {
-            if content.contains("**Project:**") {
+        if let subProject = subProjectName {
+            if content.contains("**Sub-project:**") {
                 content = content.replacingOccurrences(
-                    of: "\\*\\*Project:\\*\\* [^\\n]+",
-                    with: "**Project:** \(project)",
+                    of: "\\*\\*Sub-project:\\*\\* [^\\n]+",
+                    with: "**Sub-project:** \(subProject)",
                     options: .regularExpression
                 )
             } else {
                 content = content.replacingOccurrences(
-                    of: "(\\*\\*Client:\\*\\* [^\\n]+)",
-                    with: "$1\n**Project:** \(project)",
+                    of: "(\\*\\*Project:\\*\\* [^\\n]+)",
+                    with: "$1\n**Sub-project:** \(subProject)",
                     options: .regularExpression
                 )
             }
         } else {
-            // Remove project line
+            // Remove sub-project line
             content = content.replacingOccurrences(
-                of: "\\*\\*Project:\\*\\* [^\\n]+\\n?",
+                of: "\\*\\*Sub-project:\\*\\* [^\\n]+\\n?",
                 with: "",
                 options: .regularExpression
             )

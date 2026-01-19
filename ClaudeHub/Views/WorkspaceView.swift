@@ -140,15 +140,15 @@ struct SessionSidebar: View {
         newTaskDescription = ""
 
         // Create task folder with TASK.md
-        let clientName = extractClientName(from: project.path) ?? project.name
-        let projectName = selectedGroupForNewTask?.name
+        let subProjectName = selectedGroupForNewTask?.name
         selectedGroupForNewTask = nil
 
         Task {
             do {
                 let taskFolder = try TaskFolderService.shared.createTask(
-                    clientName: clientName,
-                    projectName: projectName,
+                    projectPath: project.path,
+                    projectName: project.name,
+                    subProjectName: subProjectName,
                     taskName: name,
                     description: description.isEmpty ? nil : description
                 )
@@ -160,17 +160,6 @@ struct SessionSidebar: View {
                 print("Failed to create task folder: \(error)")
             }
         }
-    }
-
-    /// Extract client name from path like ~/Dropbox/Buzzbox/Clients/INFAB
-    func extractClientName(from path: String) -> String? {
-        let components = path.components(separatedBy: "/")
-        // Case-insensitive search for "Clients" folder
-        if let clientsIndex = components.firstIndex(where: { $0.lowercased() == "clients" }),
-           clientsIndex + 1 < components.count {
-            return components[clientsIndex + 1]
-        }
-        return nil
     }
 
     func createGroup() {
@@ -189,12 +178,11 @@ struct SessionSidebar: View {
         isCreatingGroup = false
         newGroupName = ""
 
-        // Create project folder
-        let clientName = extractClientName(from: project.path) ?? project.name
+        // Create sub-project folder
         Task {
             do {
                 _ = try TaskFolderService.shared.createProject(
-                    clientName: clientName,
+                    projectPath: project.path,
                     projectName: name
                 )
             } catch {
