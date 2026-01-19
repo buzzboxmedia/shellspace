@@ -127,10 +127,12 @@ struct SessionSidebar: View {
     @State private var isCreatingTask = false
     @State private var isCreatingGroup = false
     @State private var newTaskName = ""
+    @State private var newTaskDescription = ""
     @State private var newGroupName = ""
     @State private var selectedGroupForNewTask: ProjectGroup?
     @State private var draggedGroupId: UUID?
     @State private var isCompletedExpanded: Bool = false
+    @State private var showingAddTaskSheet = false
     @FocusState private var isTaskFieldFocused: Bool
     @FocusState private var isGroupFieldFocused: Bool
 
@@ -161,9 +163,11 @@ struct SessionSidebar: View {
 
     func createTask() {
         let name = newTaskName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let description = newTaskDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
             isCreatingTask = false
             newTaskName = ""
+            newTaskDescription = ""
             selectedGroupForNewTask = nil
             return
         }
@@ -173,6 +177,7 @@ struct SessionSidebar: View {
             projectPath: project.path,
             userNamed: true
         )
+        session.sessionDescription = description.isEmpty ? nil : description
         session.project = project
         session.taskGroup = selectedGroupForNewTask
         modelContext.insert(session)
@@ -180,16 +185,39 @@ struct SessionSidebar: View {
         windowState.activeSession = session
         isCreatingTask = false
         newTaskName = ""
+        newTaskDescription = ""
         selectedGroupForNewTask = nil
 
-        // Sync to Google Sheets
+        // Create task file in client's tasks folder
+        let clientName = extractClientName(from: project.path) ?? project.name
         Task {
+            do {
+                _ = try TaskFileService.shared.createTaskFile(
+                    clientName: clientName,
+                    taskName: name,
+                    description: description.isEmpty ? nil : description
+                )
+            } catch {
+                print("Failed to create task file: \(error)")
+            }
+
+            // Sync to Google Sheets
             await GoogleSheetsService.shared.createTask(
                 workspace: project.name,
                 project: selectedGroupForNewTask?.name,
                 task: name
             )
         }
+    }
+
+    /// Extract client name from path like ~/Dropbox/Buzzbox/clients/INFAB
+    func extractClientName(from path: String) -> String? {
+        let components = path.components(separatedBy: "/")
+        if let clientsIndex = components.firstIndex(of: "clients"),
+           clientsIndex + 1 < components.count {
+            return components[clientsIndex + 1]
+        }
+        return nil
     }
 
     func createGroup() {
@@ -285,21 +313,51 @@ struct SessionSidebar: View {
                         HStack(spacing: 8) {
                             // New Task button
                             if isCreatingTask {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(.blue)
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(.blue)
 
-                                    TextField("Task name...", text: $newTaskName)
+                                        TextField("Task name...", text: $newTaskName)
+                                            .textFieldStyle(.plain)
+                                            .font(.system(size: 13))
+                                            .focused($isTaskFieldFocused)
+                                            .onSubmit { createTask() }
+                                            .onExitCommand {
+                                                isCreatingTask = false
+                                                newTaskName = ""
+                                                newTaskDescription = ""
+                                                selectedGroupForNewTask = nil
+                                            }
+                                    }
+
+                                    TextField("Description (optional)...", text: $newTaskDescription)
                                         .textFieldStyle(.plain)
-                                        .font(.system(size: 13))
-                                        .focused($isTaskFieldFocused)
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.secondary)
                                         .onSubmit { createTask() }
-                                        .onExitCommand {
+
+                                    HStack {
+                                        Button("Cancel") {
                                             isCreatingTask = false
                                             newTaskName = ""
-                                            selectedGroupForNewTask = nil
+                                            newTaskDescription = ""
                                         }
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.secondary)
+                                        .buttonStyle(.plain)
+
+                                        Spacer()
+
+                                        Button("Create") {
+                                            createTask()
+                                        }
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(.blue)
+                                        .buttonStyle(.plain)
+                                        .disabled(newTaskName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                    }
                                 }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 10)
@@ -793,6 +851,7 @@ struct TaskRow: View {
     @State private var editedName: String = ""
     @State private var isResuming = false
     @State private var isCompleting = false
+    @State private var showingTaskDetail = false
 
     var isActive: Bool {
         windowState.activeSession?.id == session.id
@@ -913,6 +972,19 @@ struct TaskRow: View {
 
             // Action buttons - always in layout, opacity controlled by hover
             HStack(spacing: 4) {
+                // Task Detail button - show task description and session history
+                Button {
+                    showingTaskDetail = true
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.blue)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("View task details and session history")
+
                 // View Log button - only show if session has a log
                 if hasLog {
                     Button {
@@ -1049,6 +1121,10 @@ struct TaskRow: View {
         .onDrag {
             NSItemProvider(object: session.id.uuidString as NSString)
         }
+        .sheet(isPresented: $showingTaskDetail) {
+            TaskDetailView(session: session, project: project, isPresented: $showingTaskDetail)
+                .environmentObject(appState)
+        }
     }
 
     /// Resume a task by loading context and sending update prompt to Claude
@@ -1094,6 +1170,9 @@ struct TaskRow: View {
                     session.completedAt = Date()
                     if let summary = summary {
                         session.lastSessionSummary = summary
+
+                        // Also save to task file
+                        self.saveToTaskFile(summary: summary, isCompleted: true)
                     }
 
                     // Save the log one final time
@@ -1119,6 +1198,38 @@ struct TaskRow: View {
             }
 
             isCompleting = false
+        }
+    }
+
+    /// Save session summary to task markdown file
+    private func saveToTaskFile(summary: String, isCompleted: Bool = false) {
+        // Extract client name from project path
+        let components = project.path.components(separatedBy: "/")
+        guard let clientsIndex = components.firstIndex(of: "clients"),
+              clientsIndex + 1 < components.count else {
+            return
+        }
+        let clientName = components[clientsIndex + 1]
+
+        do {
+            // Append session summary
+            try TaskFileService.shared.appendSessionSummary(
+                clientName: clientName,
+                taskName: session.name,
+                summary: summary
+            )
+
+            // Update status if completed
+            if isCompleted {
+                try TaskFileService.shared.updateTaskStatus(
+                    clientName: clientName,
+                    taskName: session.name,
+                    status: "done",
+                    completedDate: Date()
+                )
+            }
+        } catch {
+            print("Failed to save to task file: \(error)")
         }
     }
 }
@@ -1559,6 +1670,16 @@ struct LogTaskSheet: View {
         }
     }
 
+    /// Extract client name from project path
+    var clientName: String? {
+        let components = project.path.components(separatedBy: "/")
+        if let clientsIndex = components.firstIndex(of: "clients"),
+           clientsIndex + 1 < components.count {
+            return components[clientsIndex + 1]
+        }
+        return nil
+    }
+
     func saveLog() {
         guard canSave else { return }
 
@@ -1571,6 +1692,19 @@ struct LogTaskSheet: View {
         Task {
             // Save locally first - this is the critical part
             session.lastSessionSummary = billableDescription
+
+            // Also save to task markdown file
+            if let clientName = clientName {
+                do {
+                    try TaskFileService.shared.appendSessionSummary(
+                        clientName: clientName,
+                        taskName: session.name,
+                        summary: billableDescription
+                    )
+                } catch {
+                    print("Failed to save to task file: \(error)")
+                }
+            }
 
             // Sync to Google Sheets (optional, may fail)
             do {

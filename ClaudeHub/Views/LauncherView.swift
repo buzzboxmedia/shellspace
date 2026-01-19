@@ -130,9 +130,11 @@ struct LauncherView: View {
                 .environmentObject(appState)
         }
         .onAppear {
-            // Create default projects if none exist (first launch after migration)
-            if allProjects.isEmpty {
+            // Create default projects only on first launch (use UserDefaults flag, not query)
+            let hasCreatedDefaults = UserDefaults.standard.bool(forKey: "hasCreatedDefaultProjects")
+            if !hasCreatedDefaults {
                 createDefaultProjects()
+                UserDefaults.standard.set(true, forKey: "hasCreatedDefaultProjects")
             }
         }
     }
