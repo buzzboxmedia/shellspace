@@ -777,17 +777,26 @@ struct ProjectGroupSection: View {
         for provider in providers {
             if provider.canLoadObject(ofClass: NSString.self) {
                 provider.loadObject(ofClass: NSString.self) { reading, _ in
-                    if let idString = reading as? String,
-                       idString.hasPrefix("group:") {
+                    guard let idString = reading as? String else { return }
+
+                    if idString.hasPrefix("group:") {
+                        // Handle group reordering
                         let groupIdString = String(idString.dropFirst("group:".count))
                         if let draggedId = UUID(uuidString: groupIdString),
                            draggedId != group.id {
                             DispatchQueue.main.async {
-                                // Find the dragged group and reorder
                                 if let draggedGroup = project.taskGroups.first(where: { $0.id == draggedId }) {
                                     reorderGroup(draggedGroup, toIndex: index)
                                 }
                                 draggedGroupId = nil
+                            }
+                        }
+                    } else {
+                        // Handle task drop into this group
+                        if let sessionId = UUID(uuidString: idString),
+                           let session = project.sessions.first(where: { $0.id == sessionId }) {
+                            DispatchQueue.main.async {
+                                session.taskGroup = group
                             }
                         }
                     }
