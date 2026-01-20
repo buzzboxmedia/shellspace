@@ -53,17 +53,13 @@ cp ".build/debug/$APP_NAME" "$APP_PATH/Contents/MacOS/"
 # Copy entitlements
 cp "$SCRIPT_DIR/ClaudeHub.entitlements" "$APP_PATH/Contents/"
 
-# Sign the app with entitlements for CloudKit
-echo "Signing with entitlements..."
-codesign --force --sign - --entitlements "$APP_PATH/Contents/ClaudeHub.entitlements" "$APP_PATH"
-
 # Copy icon
 if [ -f "$SCRIPT_DIR/ClaudeHub/Resources/AppIcon.icns" ]; then
     mkdir -p "$APP_PATH/Contents/Resources"
     cp "$SCRIPT_DIR/ClaudeHub/Resources/AppIcon.icns" "$APP_PATH/Contents/Resources/"
 fi
 
-# Always update Info.plist (version changes each build)
+# Always update Info.plist (version changes each build) - MUST be before codesign
 cat > "$APP_PATH/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -90,6 +86,10 @@ cat > "$APP_PATH/Contents/Info.plist" << PLIST
 </dict>
 </plist>
 PLIST
+
+# Sign the app with entitlements for CloudKit (after Info.plist exists)
+echo "Signing with entitlements..."
+codesign --force --sign - --entitlements "$APP_PATH/Contents/ClaudeHub.entitlements" "$APP_PATH"
 
 # Register with Launch Services
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_PATH"
