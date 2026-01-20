@@ -29,6 +29,9 @@ final class Session {
     // Last time the log was saved
     var lastLogSavedAt: Date?
 
+    // Last time user saved a progress note (for 15-min reminder)
+    var lastProgressSavedAt: Date?
+
     // Link to task folder (e.g., ~/Dropbox/.../tasks/001-task-name/)
     var taskFolderPath: String?
 

@@ -36,6 +36,9 @@ struct DataMigration {
             // 5. Mark migration complete
             defaults.set(true, forKey: migrationKey)
 
+            // Also set the default projects flag to prevent LauncherView from creating duplicates
+            defaults.set(true, forKey: "hasCreatedDefaultProjects")
+
             migrationLogger.info("Migration completed successfully!")
 
         } catch {
@@ -212,5 +215,53 @@ struct DataMigration {
             return URL(fileURLWithPath: configPath).appendingPathComponent("taskgroups.json")
         }
         return URL(fileURLWithPath: projectPath).appendingPathComponent(".claudehub-taskgroups.json")
+    }
+
+    // MARK: - Deduplication
+
+    /// Remove duplicate projects (keeps the first one by creation order)
+    @MainActor
+    static func deduplicateProjectsIfNeeded(modelContext: ModelContext) {
+        let defaults = UserDefaults.standard
+        let dedupeKey = "projects_deduplicated_v1"
+
+        guard !defaults.bool(forKey: dedupeKey) else {
+            return
+        }
+
+        migrationLogger.info("Checking for duplicate projects...")
+
+        do {
+            let descriptor = FetchDescriptor<Project>(sortBy: [SortDescriptor(\.name)])
+            let allProjects = try modelContext.fetch(descriptor)
+
+            // Group by path (path should be unique)
+            var projectsByPath: [String: [Project]] = [:]
+            for project in allProjects {
+                projectsByPath[project.path, default: []].append(project)
+            }
+
+            // Delete duplicates (keep first, delete rest)
+            var deletedCount = 0
+            for (path, projects) in projectsByPath where projects.count > 1 {
+                migrationLogger.info("Found \(projects.count) duplicates for path: \(path)")
+                for duplicate in projects.dropFirst() {
+                    modelContext.delete(duplicate)
+                    deletedCount += 1
+                }
+            }
+
+            if deletedCount > 0 {
+                try modelContext.save()
+                migrationLogger.info("Deleted \(deletedCount) duplicate projects")
+            } else {
+                migrationLogger.info("No duplicate projects found")
+            }
+
+            defaults.set(true, forKey: dedupeKey)
+
+        } catch {
+            migrationLogger.error("Deduplication failed: \(error.localizedDescription)")
+        }
     }
 }
