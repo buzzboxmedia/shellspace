@@ -352,20 +352,25 @@ class TerminalController: ObservableObject {
         logger.info("Stopped waiting state monitor")
     }
 
-    /// Check if Claude is waiting for input
+    /// Check if Claude is waiting for input or actively working
     private func checkWaitingState() {
         let content = getTerminalContent()
 
         // Check if content has changed
         if content == lastTerminalContent {
             contentUnchangedCount += 1
+
+            // Content stable - Claude stopped outputting
+            if let session = currentSession {
+                appState?.clearSessionWorking(session)
+            }
         } else {
             contentUnchangedCount = 0
             lastTerminalContent = content
 
-            // Content changed - Claude might be responding, clear waiting state
+            // Content changed - Claude is actively working
             if let session = currentSession {
-                appState?.clearSessionWaiting(session)
+                appState?.markSessionWorking(session)
             }
         }
 
@@ -966,6 +971,24 @@ class TerminalContainerView: NSView {
             terminal.mouseDown(with: event)
         } else {
             super.mouseDown(with: event)
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        // Forward drag events to terminal for text selection
+        if let terminal = terminalView {
+            terminal.mouseDragged(with: event)
+        } else {
+            super.mouseDragged(with: event)
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        // Forward mouse up to terminal to complete selection
+        if let terminal = terminalView {
+            terminal.mouseUp(with: event)
+        } else {
+            super.mouseUp(with: event)
         }
     }
 

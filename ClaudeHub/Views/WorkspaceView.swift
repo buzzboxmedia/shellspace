@@ -7,12 +7,44 @@ struct WorkspaceView: View {
     @EnvironmentObject var windowState: WindowState
     let project: Project
 
+    // Track when this workspace was opened (for unsaved progress check)
+    @State private var workspaceOpenedAt: Date = Date()
+    @State private var showUnsavedAlert = false
+    @State private var showSaveNoteBeforeClose = false
+    @State private var pendingCloseSession: Session?
+
     // Use the project's sessions relationship instead of a separate query
     var sessions: [Session] {
         project.sessions
     }
 
+    /// Check if the active session has unsaved progress (no note saved since opening)
+    func hasUnsavedProgress(for session: Session?) -> Bool {
+        guard let session = session else { return false }
+
+        // If no task folder, nothing to save to
+        guard session.taskFolderPath != nil else { return false }
+
+        // Check if progress was saved after the workspace was opened
+        if let lastSaved = session.lastProgressSavedAt {
+            return lastSaved < workspaceOpenedAt
+        }
+
+        // No progress saved ever - only prompt if session was created before this workspace opened
+        return session.createdAt < workspaceOpenedAt
+    }
+
     func goBack() {
+        // Check for unsaved progress before going back
+        if let session = windowState.activeSession, hasUnsavedProgress(for: session) {
+            pendingCloseSession = session
+            showUnsavedAlert = true
+        } else {
+            performGoBack()
+        }
+    }
+
+    private func performGoBack() {
         withAnimation(.spring(response: 0.3)) {
             windowState.selectedProject = nil
             windowState.activeSession = nil
@@ -34,6 +66,8 @@ struct WorkspaceView: View {
                 .ignoresSafeArea()
         }
         .onAppear {
+            workspaceOpenedAt = Date()
+
             if project.sessions.isEmpty {
                 // No sessions, create a generic one
                 let newSession = createSession(name: nil, inGroup: nil)
@@ -41,6 +75,35 @@ struct WorkspaceView: View {
             } else if windowState.activeSession == nil {
                 // Select the first session if none active
                 windowState.activeSession = project.sessions.first
+            }
+        }
+        .alert("Save progress before closing?", isPresented: $showUnsavedAlert) {
+            Button("Don't Save") {
+                performGoBack()
+            }
+            Button("Add Note") {
+                showSaveNoteBeforeClose = true
+            }
+            .keyboardShortcut(.defaultAction)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let session = pendingCloseSession {
+                Text("You haven't saved a progress note for \"\(session.name)\" this session.")
+            }
+        }
+        .sheet(isPresented: $showSaveNoteBeforeClose) {
+            if let session = pendingCloseSession {
+                SaveNoteSheetWrapper(
+                    session: session,
+                    project: project,
+                    onSave: {
+                        showSaveNoteBeforeClose = false
+                        performGoBack()
+                    },
+                    onCancel: {
+                        showSaveNoteBeforeClose = false
+                    }
+                )
             }
         }
     }
@@ -832,6 +895,10 @@ struct TaskRow: View {
         appState.waitingSessions.contains(session.id)
     }
 
+    var isWorking: Bool {
+        appState.workingSessions.contains(session.id)
+    }
+
     var isLogged: Bool {
         session.lastSessionSummary != nil && !session.lastSessionSummary!.isEmpty
     }
@@ -844,8 +911,9 @@ struct TaskRow: View {
         session.isCompleted
     }
 
-    /// Status color: green (active/logged), orange (waiting), gray (inactive)
+    /// Status color: blue (working), green (active/logged), orange (waiting), gray (inactive)
     var statusColor: Color {
+        if isWorking { return .blue }
         if isActive { return .green }
         if isWaiting { return .orange }
         if isLogged { return .green.opacity(0.6) }
@@ -856,17 +924,30 @@ struct TaskRow: View {
         HStack(spacing: 10) {
             // Status indicator with logged checkmark
             ZStack {
-                if isActive {
+                if isWorking {
+                    // Pulsing blue circle when Claude is working
+                    Circle()
+                        .fill(Color.blue.opacity(0.3))
+                        .frame(width: 16, height: 16)
+                    Circle()
+                        .fill(Color.blue)
+                        .frame(width: 8, height: 8)
+                        .modifier(PulseAnimation())
+                } else if isActive {
                     Circle()
                         .fill(Color.green.opacity(0.3))
                         .frame(width: 16, height: 16)
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 8, height: 8)
                 } else if isWaiting {
                     Circle()
                         .fill(Color.orange.opacity(0.3))
                         .frame(width: 16, height: 16)
-                }
-
-                if isLogged && !isActive {
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 8, height: 8)
+                } else if isLogged && !isActive {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 14))
                         .foregroundStyle(.green)
@@ -894,8 +975,19 @@ struct TaskRow: View {
                             .lineLimit(1)
                             .truncationMode(.tail)
 
+                        // Show "working" badge when Claude is actively outputting
+                        if isWorking {
+                            Text("working")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(.blue)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Color.blue.opacity(0.15))
+                                .clipShape(Capsule())
+                        }
+
                         // Show "waiting" badge when Claude needs input
-                        if isWaiting {
+                        if isWaiting && !isWorking {
                             Text("waiting")
                                 .font(.system(size: 9, weight: .medium))
                                 .foregroundStyle(.orange)
@@ -906,7 +998,7 @@ struct TaskRow: View {
                         }
 
                         // Show "Logged" badge for tasks with summaries
-                        if isLogged && !isWaiting {
+                        if isLogged && !isWaiting && !isWorking {
                             Text("Logged")
                                 .font(.system(size: 9, weight: .medium))
                                 .foregroundStyle(.green)
@@ -1253,7 +1345,9 @@ struct TerminalHeader: View {
     let session: Session
     let project: Project
     @Binding var showLogSheet: Bool
+    @Binding var showSaveNotePopover: Bool
     @State private var isLogHovered = false
+    @State private var isSaveNoteHovered = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -1289,6 +1383,28 @@ struct TerminalHeader: View {
             }
 
             Spacer()
+
+            // Save Note button (📌)
+            Button {
+                showSaveNotePopover = true
+            } label: {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(isSaveNoteHovered ? .blue : .secondary)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        Circle()
+                            .fill(isSaveNoteHovered ? Color.blue.opacity(0.15) : Color.white.opacity(0.08))
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(isSaveNoteHovered ? Color.blue.opacity(0.3) : Color.white.opacity(0.1), lineWidth: 1)
+                    )
+                    .scaleEffect(isSaveNoteHovered ? 1.05 : 1.0)
+            }
+            .buttonStyle(.plain)
+            .onHover { isSaveNoteHovered = $0 }
+            .help("Save a progress note")
 
             // Log Task button
             Button {
@@ -1357,49 +1473,99 @@ struct TerminalHeader: View {
 struct TerminalArea: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var windowState: WindowState
+    @StateObject private var progressManager = ProgressNoteManager.shared
     let project: Project
     @State private var showLogSheet = false
+    @State private var showSaveNotePopover = false
+    @State private var showProgressReminder = false
+    @State private var reminderTimer: Timer?
 
     var body: some View {
         Group {
             if let session = windowState.activeSession {
-                VStack(spacing: 0) {
-                    TerminalHeader(session: session, project: project, showLogSheet: $showLogSheet)
+                ZStack(alignment: .bottom) {
+                    VStack(spacing: 0) {
+                        TerminalHeader(session: session, project: project, showLogSheet: $showLogSheet, showSaveNotePopover: $showSaveNotePopover)
 
-                    // Subtle separator line with gradient
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.2), Color.blue.opacity(0.3)],
-                                startPoint: .leading,
-                                endPoint: .trailing
+                        // Subtle separator line with gradient
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.2), Color.blue.opacity(0.3)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
                             )
-                        )
-                        .frame(height: 1)
+                            .frame(height: 1)
 
-                    TerminalView(session: session)
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.2),
-                                    Color.white.opacity(0.05),
-                                    Color.white.opacity(0.1)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1
+                        TerminalView(session: session)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.2),
+                                        Color.white.opacity(0.05),
+                                        Color.white.opacity(0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+                    .shadow(color: .black.opacity(0.4), radius: 12, x: 0, y: 6)
+                    .shadow(color: Color.blue.opacity(0.1), radius: 20, x: 0, y: 0)
+                    .padding(14)
+                    .sheet(isPresented: $showLogSheet) {
+                        LogTaskSheet(session: session, project: project, isPresented: $showLogSheet)
+                    }
+                    .popover(isPresented: $showSaveNotePopover, arrowEdge: .top) {
+                        SaveNotePopover(
+                            session: session,
+                            project: project,
+                            onSave: {
+                                showSaveNotePopover = false
+                                showProgressReminder = false
+                                progressManager.noteSaved(for: session)
+                            },
+                            onCancel: {
+                                showSaveNotePopover = false
+                            }
                         )
-                )
-                .shadow(color: .black.opacity(0.4), radius: 12, x: 0, y: 6)
-                .shadow(color: Color.blue.opacity(0.1), radius: 20, x: 0, y: 0)
-                .padding(14)
-                .sheet(isPresented: $showLogSheet) {
-                    LogTaskSheet(session: session, project: project, isPresented: $showLogSheet)
+                    }
+
+                    // Progress reminder toast
+                    if showProgressReminder {
+                        ProgressReminderToast(
+                            onAddNote: {
+                                showProgressReminder = false
+                                showSaveNotePopover = true
+                            },
+                            onDismiss: {
+                                showProgressReminder = false
+                                progressManager.dismissReminder(for: session)
+                            }
+                        )
+                        .padding(.bottom, 24)
+                        .padding(.horizontal, 40)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+                .onAppear {
+                    startReminderTimer(for: session)
+                }
+                .onDisappear {
+                    stopReminderTimer()
+                }
+                .onChange(of: windowState.activeSession?.id) { _, _ in
+                    // Reset when switching sessions
+                    showProgressReminder = false
+                    if let newSession = windowState.activeSession {
+                        startReminderTimer(for: newSession)
+                    }
                 }
             } else {
                 // Enhanced empty state
@@ -1446,6 +1612,43 @@ struct TerminalArea: View {
                         )
                     }
                 )
+            }
+        }
+    }
+
+    // MARK: - Reminder Timer
+
+    private func startReminderTimer(for session: Session) {
+        stopReminderTimer()
+
+        // Check immediately
+        checkReminder(for: session)
+
+        // Then check every minute
+        reminderTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
+            checkReminder(for: session)
+        }
+    }
+
+    private func stopReminderTimer() {
+        reminderTimer?.invalidate()
+        reminderTimer = nil
+    }
+
+    private func checkReminder(for session: Session) {
+        if progressManager.shouldShowReminder(for: session) {
+            withAnimation(.spring(response: 0.4)) {
+                showProgressReminder = true
+            }
+
+            // Auto-dismiss after 10 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+                if showProgressReminder {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        showProgressReminder = false
+                    }
+                    progressManager.dismissReminder(for: session)
+                }
             }
         }
     }
@@ -1758,6 +1961,26 @@ struct LogTaskSheet: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Pulse Animation for Working Indicator
+
+struct PulseAnimation: ViewModifier {
+    @State private var isPulsing = false
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isPulsing ? 1.3 : 1.0)
+            .opacity(isPulsing ? 0.7 : 1.0)
+            .animation(
+                Animation.easeInOut(duration: 0.8)
+                    .repeatForever(autoreverses: true),
+                value: isPulsing
+            )
+            .onAppear {
+                isPulsing = true
+            }
     }
 }
 

@@ -52,6 +52,8 @@ struct ClaudeHubApp: App {
                     // Run migration on first launch
                     let context = sharedModelContainer.mainContext
                     DataMigration.migrateIfNeeded(modelContext: context)
+                    // Clean up any duplicate projects
+                    DataMigration.deduplicateProjectsIfNeeded(modelContext: context)
                 }
         }
         .modelContainer(sharedModelContainer)
@@ -118,6 +120,9 @@ class AppState: ObservableObject {
 
     /// Track which sessions are waiting for user input
     var waitingSessions: Set<UUID> = []
+
+    /// Track which sessions have Claude actively working (outputting text)
+    var workingSessions: Set<UUID> = []
 
     /// Terminal controllers by session ID (not synced - recreated per device)
     var terminalControllers: [UUID: TerminalController] = [:]
@@ -188,6 +193,19 @@ class AppState: ObservableObject {
 
         NotificationManager.shared.clearNotification(for: session.id)
         NotificationManager.shared.updateDockBadge(count: waitingSessions.count)
+    }
+
+    // MARK: - Working State Management
+
+    func markSessionWorking(_ session: Session) {
+        guard !workingSessions.contains(session.id) else { return }
+        workingSessions.insert(session.id)
+        // Clear waiting state when Claude starts working
+        clearSessionWaiting(session)
+    }
+
+    func clearSessionWorking(_ session: Session) {
+        workingSessions.remove(session.id)
     }
 
     // MARK: - Log Management
