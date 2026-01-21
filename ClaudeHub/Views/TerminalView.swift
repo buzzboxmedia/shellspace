@@ -806,8 +806,10 @@ class TerminalContainerView: NSView {
         options: []
     )
 
-    override var acceptsFirstResponder: Bool { true }
-    override var canBecomeKeyView: Bool { true }
+    // Let the terminal handle first responder - don't intercept at container level
+    // This is critical for text selection to work in SwiftTerm
+    override var acceptsFirstResponder: Bool { false }
+    override var canBecomeKeyView: Bool { false }
 
     private var isShowingHandCursor = false
     private var trackingArea: NSTrackingArea?
@@ -965,32 +967,10 @@ class TerminalContainerView: NSView {
         }
     }
 
-    override func mouseDown(with event: NSEvent) {
-        // Forward mouse event to terminal for text selection to work
-        if let terminal = terminalView {
-            terminal.mouseDown(with: event)
-        } else {
-            super.mouseDown(with: event)
-        }
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        // Forward drag events to terminal for text selection
-        if let terminal = terminalView {
-            terminal.mouseDragged(with: event)
-        } else {
-            super.mouseDragged(with: event)
-        }
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        // Forward mouse up to terminal to complete selection
-        if let terminal = terminalView {
-            terminal.mouseUp(with: event)
-        } else {
-            super.mouseUp(with: event)
-        }
-    }
+    // NOTE: Do NOT override mouseDown/mouseDragged/mouseUp here!
+    // Overriding them and manually forwarding to terminal breaks SwiftTerm's
+    // native selection handling. Let events flow naturally to the terminal view.
+    // The click/drag monitors handle URL detection without blocking selection.
 
     // Detect URL at a point in terminal coordinates
     private func detectURLAtPoint(_ point: CGPoint) -> URL? {
@@ -1356,24 +1336,8 @@ class TerminalContainerView: NSView {
         }
     }
 
-    override func keyDown(with event: NSEvent) {
-        // Forward key directly to terminal via send()
-        if let terminal = terminalView {
-            // For Enter/Return key, send carriage return
-            if event.keyCode == 36 {  // Return key
-                terminal.send(txt: "\r")
-                return
-            }
-            // For other keys, let terminal handle via first responder
-            if let window = window {
-                window.makeFirstResponder(terminal)
-            }
-        }
-    }
-
-    override func keyUp(with event: NSEvent) {
-        // No action needed
-    }
+    // NOTE: Do NOT override keyDown/keyUp here!
+    // The terminal view handles all key events directly as first responder.
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -1391,11 +1355,8 @@ class TerminalContainerView: NSView {
     }
 
     override func becomeFirstResponder() -> Bool {
-        // When we become first responder, immediately pass to terminal
-        DispatchQueue.main.async { [weak self] in
-            self?.focusTerminal()
-        }
-        return true
+        // Container shouldn't become first responder - let terminal handle it
+        return false
     }
 
     func focusTerminal() {
