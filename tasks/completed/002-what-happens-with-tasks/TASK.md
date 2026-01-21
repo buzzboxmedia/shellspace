@@ -1,6 +1,6 @@
-# Ability to highlight terminal text
+# WHat happens with tasks
 
-**Status:** active
+**Status:** completed
 **Created:** 2026-01-20
 **Project:** ClaudeHub
 
