@@ -743,44 +743,28 @@ class TerminalController: ObservableObject {
 struct SwiftTermView: NSViewRepresentable {
     @ObservedObject var controller: TerminalController
 
-    func makeNSView(context: Context) -> NSView {
-        let containerView = TerminalContainerView()
-        containerView.wantsLayer = true
-        containerView.layer?.backgroundColor = NSColor(calibratedRed: 0.1, green: 0.1, blue: 0.12, alpha: 1.0).cgColor
-
+    func makeNSView(context: Context) -> LocalProcessTerminalView {
         if controller.terminalView == nil {
             controller.terminalView = LocalProcessTerminalView(frame: .zero)
         }
 
-        if let terminalView = controller.terminalView {
-            terminalView.translatesAutoresizingMaskIntoConstraints = false
-            containerView.addSubview(terminalView)
-            containerView.terminalView = terminalView
-            containerView.controller = controller  // For screenshot path
+        let terminalView = controller.terminalView!
 
-            NSLayoutConstraint.activate([
-                terminalView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
-                terminalView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
-                terminalView.topAnchor.constraint(equalTo: containerView.topAnchor),
-                terminalView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
-            ])
+        // Disable mouse reporting so text selection works
+        terminalView.allowMouseReporting = false
 
-            // Enable selection and URL detection
-            containerView.configureForSelection()
-
-            // Auto-focus the terminal
-            DispatchQueue.main.async {
-                terminalView.window?.makeFirstResponder(terminalView)
-            }
+        // Auto-focus the terminal
+        DispatchQueue.main.async {
+            terminalView.window?.makeFirstResponder(terminalView)
         }
 
-        return containerView
+        return terminalView
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {
+    func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
         // Focus terminal when view updates
-        if let container = nsView as? TerminalContainerView {
-            container.focusTerminal()
+        if let window = nsView.window {
+            window.makeFirstResponder(nsView)
         }
     }
 }
