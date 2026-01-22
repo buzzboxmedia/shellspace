@@ -791,8 +791,8 @@ class TerminalContainerView: NSView {
     weak var controller: TerminalController?  // Reference to get project path
     private let logger = Logger(subsystem: "com.buzzbox.claudehub", category: "TerminalContainer")
 
-    // Use flipped coordinates to match SwiftUI's coordinate system
-    override var isFlipped: Bool { true }
+    // Don't flip coordinates - SwiftTerm expects standard macOS coordinates (origin bottom-left)
+    // override var isFlipped: Bool { true }
 
     // URL regex for detecting any links (full URLs, domains, subdomains, paths)
     private static let urlPattern = try! NSRegularExpression(
