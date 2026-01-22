@@ -759,8 +759,8 @@ class CoordinateFixingContainer: NSView {
             NSEvent.removeMonitor(monitor)
         }
 
-        // Monitor mouse events and fix coordinates before SwiftTerm sees them
-        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
+        // Monitor mouse events and log coordinates for debugging
+        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
             guard let self = self,
                   let terminal = self.terminalView,
                   let window = self.window,
@@ -768,55 +768,42 @@ class CoordinateFixingContainer: NSView {
                 return event
             }
 
-            // Check if the event is within our terminal
-            let locationInTerminal = terminal.convert(event.locationInWindow, from: nil)
-            guard terminal.bounds.contains(locationInTerminal) else {
-                return event
+            // Log all the coordinate info we can
+            let windowPoint = event.locationInWindow
+            let localPoint = terminal.convert(windowPoint, from: nil)
+            let terminalFrame = terminal.frame
+            let terminalBounds = terminal.bounds
+            let containerBounds = self.bounds
+
+            // Get backing scale factor
+            let backingScale = window.backingScaleFactor
+
+            print("=== MOUSE CLICK DEBUG ===")
+            print("Window point: \(windowPoint)")
+            print("Local point (in terminal): \(localPoint)")
+            print("Terminal frame: \(terminalFrame)")
+            print("Terminal bounds: \(terminalBounds)")
+            print("Container bounds: \(containerBounds)")
+            print("Backing scale factor: \(backingScale)")
+
+            // Check if there's a layer transform
+            if let layer = terminal.layer {
+                print("Terminal layer transform: \(layer.affineTransform())")
+                print("Terminal layer contentsScale: \(layer.contentsScale)")
             }
 
-            // The problem: SwiftTerm uses frame.height - point.y to calculate row
-            // When embedded in SwiftUI, the frame/bounds relationship gets messed up
-
-            // Fix: Create event with coordinates that SwiftTerm will interpret correctly
-            // SwiftTerm does: convert(event.locationInWindow, from: nil) to get local coords
-            // Then: row = (frame.height - point.y) / cellHeight
-
-            // We need locationInWindow such that convert() gives us the correct local point
-            // The local point should be where the user actually clicked within the terminal bounds
-
-            // Get the terminal's frame origin in window coordinates
-            let terminalOriginInWindow = terminal.convert(CGPoint.zero, to: nil)
-
-            // Create adjusted window location
-            // locationInTerminal is correct, so we build a window location that converts back to it
-            let adjustedLocation = CGPoint(
-                x: terminalOriginInWindow.x + locationInTerminal.x,
-                y: terminalOriginInWindow.y + locationInTerminal.y
-            )
-
-            // Only adjust if there's actually a difference (avoid infinite precision issues)
-            let diff = abs(adjustedLocation.y - event.locationInWindow.y)
-            if diff < 1 {
-                return event  // No significant adjustment needed
+            // Check superview chain
+            var view: NSView? = terminal
+            var depth = 0
+            while let v = view {
+                print("View[\(depth)]: \(type(of: v)), frame: \(v.frame), bounds: \(v.bounds)")
+                view = v.superview
+                depth += 1
+                if depth > 10 { break }
             }
+            print("=========================")
 
-            self.logger.debug("Fixing coords: original=\(event.locationInWindow.y, privacy: .public), adjusted=\(adjustedLocation.y, privacy: .public), diff=\(diff, privacy: .public)")
-
-            guard let newEvent = NSEvent.mouseEvent(
-                with: event.type,
-                location: adjustedLocation,
-                modifierFlags: event.modifierFlags,
-                timestamp: event.timestamp,
-                windowNumber: event.windowNumber,
-                context: nil,
-                eventNumber: event.eventNumber,
-                clickCount: event.clickCount,
-                pressure: event.pressure
-            ) else {
-                return event
-            }
-
-            return newEvent
+            return event  // Don't modify, just log
         }
     }
 
