@@ -739,78 +739,133 @@ class TerminalController: ObservableObject {
     }
 }
 
-// MARK: - AppKit Terminal View Controller
-// Using NSViewController gives AppKit full control over coordinate systems
+// MARK: - Container that fixes mouse coordinates for SwiftTerm
+// The issue: SwiftTerm's coordinate calculation assumes standard AppKit positioning,
+// but SwiftUI embedding causes a mismatch. We intercept events and fix them.
 
-class TerminalViewController: NSViewController {
-    weak var controller: TerminalController?
-    private let logger = Logger(subsystem: "com.buzzbox.claudehub", category: "TerminalVC")
+class CoordinateFixingContainer: NSView {
+    weak var terminalView: LocalProcessTerminalView?
+    private var mouseMonitor: Any?
+    private let logger = Logger(subsystem: "com.buzzbox.claudehub", category: "CoordFix")
 
-    override func loadView() {
-        // Create the view - this is required when not using a nib
-        self.view = NSView()
-        self.view.wantsLayer = true
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        setupMouseMonitor()
     }
 
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        setupTerminal()
-    }
-
-    private func setupTerminal() {
-        guard let controller = controller else {
-            logger.error("No controller set")
-            return
+    private func setupMouseMonitor() {
+        // Remove old monitor
+        if let monitor = mouseMonitor {
+            NSEvent.removeMonitor(monitor)
         }
 
-        if controller.terminalView == nil {
-            controller.terminalView = LocalProcessTerminalView(frame: view.bounds)
+        // Monitor mouse events and fix coordinates before SwiftTerm sees them
+        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
+            guard let self = self,
+                  let terminal = self.terminalView,
+                  let window = self.window,
+                  event.window == window else {
+                return event
+            }
+
+            // Check if the event is within our terminal
+            let locationInTerminal = terminal.convert(event.locationInWindow, from: nil)
+            guard terminal.bounds.contains(locationInTerminal) else {
+                return event
+            }
+
+            // The problem: SwiftTerm uses frame.height - point.y to calculate row
+            // When embedded in SwiftUI, the frame/bounds relationship gets messed up
+
+            // Fix: Create event with coordinates that SwiftTerm will interpret correctly
+            // SwiftTerm does: convert(event.locationInWindow, from: nil) to get local coords
+            // Then: row = (frame.height - point.y) / cellHeight
+
+            // We need locationInWindow such that convert() gives us the correct local point
+            // The local point should be where the user actually clicked within the terminal bounds
+
+            // Get the terminal's frame origin in window coordinates
+            let terminalOriginInWindow = terminal.convert(CGPoint.zero, to: nil)
+
+            // Create adjusted window location
+            // locationInTerminal is correct, so we build a window location that converts back to it
+            let adjustedLocation = CGPoint(
+                x: terminalOriginInWindow.x + locationInTerminal.x,
+                y: terminalOriginInWindow.y + locationInTerminal.y
+            )
+
+            // Only adjust if there's actually a difference (avoid infinite precision issues)
+            let diff = abs(adjustedLocation.y - event.locationInWindow.y)
+            if diff < 1 {
+                return event  // No significant adjustment needed
+            }
+
+            self.logger.debug("Fixing coords: original=\(event.locationInWindow.y, privacy: .public), adjusted=\(adjustedLocation.y, privacy: .public), diff=\(diff, privacy: .public)")
+
+            guard let newEvent = NSEvent.mouseEvent(
+                with: event.type,
+                location: adjustedLocation,
+                modifierFlags: event.modifierFlags,
+                timestamp: event.timestamp,
+                windowNumber: event.windowNumber,
+                context: nil,
+                eventNumber: event.eventNumber,
+                clickCount: event.clickCount,
+                pressure: event.pressure
+            ) else {
+                return event
+            }
+
+            return newEvent
         }
-
-        guard let terminalView = controller.terminalView else { return }
-
-        // Disable mouse reporting so text selection works
-        terminalView.allowMouseReporting = false
-
-        // Add terminal as subview
-        view.addSubview(terminalView)
-
-        logger.info("Terminal view added to controller")
     }
 
-    override func viewDidLayout() {
-        super.viewDidLayout()
-        // Set terminal frame directly - matching SwiftTerm's sample app
-        controller?.terminalView?.frame = view.bounds
-        controller?.terminalView?.needsLayout = true
+    override func layout() {
+        super.layout()
+        terminalView?.frame = bounds
+        terminalView?.needsLayout = true
     }
 
-    override func viewDidAppear() {
-        super.viewDidAppear()
-        // Focus terminal when view appears
-        if let terminal = controller?.terminalView {
-            view.window?.makeFirstResponder(terminal)
+    deinit {
+        if let monitor = mouseMonitor {
+            NSEvent.removeMonitor(monitor)
         }
     }
 }
 
-// MARK: - SwiftUI Wrapper using NSViewControllerRepresentable
+// MARK: - SwiftUI Wrapper
 
-struct SwiftTermView: NSViewControllerRepresentable {
+struct SwiftTermView: NSViewRepresentable {
     @ObservedObject var controller: TerminalController
 
-    func makeNSViewController(context: Context) -> TerminalViewController {
-        let vc = TerminalViewController()
-        vc.controller = controller
-        return vc
+    func makeNSView(context: Context) -> NSView {
+        let container = CoordinateFixingContainer()
+        container.wantsLayer = true
+
+        if controller.terminalView == nil {
+            controller.terminalView = LocalProcessTerminalView(frame: .zero)
+        }
+
+        let terminalView = controller.terminalView!
+        container.terminalView = terminalView
+
+        // Disable mouse reporting so text selection works
+        terminalView.allowMouseReporting = false
+
+        container.addSubview(terminalView)
+
+        return container
     }
 
-    func updateNSViewController(_ nsViewController: TerminalViewController, context: Context) {
-        // Ensure terminal fills view on updates
-        if let terminal = controller.terminalView {
-            terminal.frame = nsViewController.view.bounds
-            // Focus terminal
-            nsViewController.view.window?.makeFirstResponder(terminal)
+    func updateNSView(_ nsView: NSView, context: Context) {
+        // Set terminal frame to fill container
+        if let container = nsView as? CoordinateFixingContainer {
+            container.terminalView?.frame = container.bounds
+        }
+
+        // Focus terminal
+        if let terminalView = controller.terminalView, let window = nsView.window {
+            window.makeFirstResponder(terminalView)
         }
     }
 }
