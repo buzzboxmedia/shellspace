@@ -81,30 +81,34 @@ struct LauncherView: View {
                                 .foregroundStyle(.orange)
                                 .tracking(1.5)
 
-                            Button {
-                                openTerminalAtPath("\(NSHomeDirectory())/Dropbox/claudehub")
-                            } label: {
-                                VStack(spacing: 14) {
-                                    Image(systemName: "hammer.fill")
-                                        .font(.system(size: 36))
-                                        .foregroundStyle(.primary)
-                                    Text("ClaudeHub")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundStyle(.primary)
+                            HStack {
+                                Button {
+                                    openTerminalAtPath("\(NSHomeDirectory())/Dropbox/claudehub")
+                                } label: {
+                                    VStack(spacing: 14) {
+                                        Image(systemName: "hammer.fill")
+                                            .font(.system(size: 36))
+                                            .foregroundStyle(.primary)
+                                        Text("ClaudeHub")
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundStyle(.primary)
+                                    }
+                                    .frame(width: 120, height: 120)
+                                    .background {
+                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            .fill(.ultraThinMaterial)
+                                            .shadow(color: .black.opacity(0.1), radius: 10)
+                                    }
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            .stroke(.white.opacity(0.2), lineWidth: 1)
+                                    }
                                 }
-                                .frame(width: 120, height: 120)
-                                .background {
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .fill(.ultraThinMaterial)
-                                        .shadow(color: .black.opacity(0.1), radius: 10)
-                                }
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .stroke(.white.opacity(0.2), lineWidth: 1)
-                                }
+                                .buttonStyle(.plain)
+                                Spacer()
                             }
-                            .buttonStyle(.plain)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .padding(48)
