@@ -324,11 +324,9 @@ struct SessionSidebar: View {
                                             // Update session with new path
                                             let taskSlug = URL(fileURLWithPath: currentPath).lastPathComponent
                                                 .replacingOccurrences(of: "^\\d{3}-", with: "", options: .regularExpression)
-                                            let newNumber = TaskFolderService.shared.nextTaskNumber(projectPath: project.path, subProjectName: nil) - 1
                                             let newPath = TaskFolderService.shared.taskFolderPath(
                                                 projectPath: project.path,
                                                 subProjectName: nil,
-                                                taskNumber: newNumber,
                                                 taskName: taskSlug
                                             )
                                             await MainActor.run {
@@ -816,11 +814,9 @@ struct ProjectGroupSection: View {
                                             // Update session with new path
                                             let taskSlug = URL(fileURLWithPath: currentPath).lastPathComponent
                                                 .replacingOccurrences(of: "^\\d{3}-", with: "", options: .regularExpression)
-                                            let newNumber = TaskFolderService.shared.nextTaskNumber(projectPath: project.path, subProjectName: toGroup?.name) - 1
                                             let newPath = TaskFolderService.shared.taskFolderPath(
                                                 projectPath: project.path,
                                                 subProjectName: toGroup?.name,
-                                                taskNumber: newNumber,
                                                 taskName: taskSlug
                                             )
                                             await MainActor.run {
@@ -877,11 +873,9 @@ struct ProjectGroupSection: View {
                                             // Update session with new path
                                             let taskSlug = URL(fileURLWithPath: currentPath).lastPathComponent
                                                 .replacingOccurrences(of: "^\\d{3}-", with: "", options: .regularExpression)
-                                            let newNumber = TaskFolderService.shared.nextTaskNumber(projectPath: project.path, subProjectName: group.name) - 1
                                             let newPath = TaskFolderService.shared.taskFolderPath(
                                                 projectPath: project.path,
                                                 subProjectName: group.name,
-                                                taskNumber: newNumber,
                                                 taskName: taskSlug
                                             )
                                             await MainActor.run {

@@ -6,12 +6,12 @@ private let logger = Logger(subsystem: "com.buzzbox.claudehub", category: "TaskF
 /// Service for managing task folders with TASK.md files
 /// Structure:
 ///   {projectPath}/tasks/
-///   ├── project-name/                    ← Project folder (no number)
-///   │   ├── 001-task-name/
+///   ├── project-name/                    ← Project folder
+///   │   ├── task-name/
 ///   │   │   └── TASK.md
-///   │   └── 002-another-task/
+///   │   └── another-task/
 ///   │       └── TASK.md
-///   └── 001-standalone-task/             ← Task without project
+///   └── standalone-task/                 ← Task without project
 ///       └── TASK.md
 ///
 /// Works with any project path (Talkspresso, Buzzbox clients, etc.)
@@ -36,9 +36,9 @@ class TaskFolderService {
             .appendingPathComponent(slugify(projectName))
     }
 
-    /// Get the task folder path (includes number prefix)
-    func taskFolderPath(projectPath: String, subProjectName: String?, taskNumber: Int, taskName: String) -> URL {
-        let folderName = String(format: "%03d-%@", taskNumber, slugify(taskName))
+    /// Get the task folder path
+    func taskFolderPath(projectPath: String, subProjectName: String?, taskName: String) -> URL {
+        let folderName = slugify(taskName)
 
         if let subProject = subProjectName {
             return projectDirectory(projectPath: projectPath, projectName: subProject)
@@ -101,35 +101,6 @@ class TaskFolderService {
 
     // MARK: - Task Operations
 
-    /// Get the next task number for a project (or root level)
-    func nextTaskNumber(projectPath: String, subProjectName: String?) -> Int {
-        let searchDir: URL
-        if let subProject = subProjectName {
-            searchDir = projectDirectory(projectPath: projectPath, projectName: subProject)
-        } else {
-            searchDir = tasksDirectory(for: projectPath)
-        }
-
-        guard fileManager.fileExists(atPath: searchDir.path) else {
-            return 1
-        }
-
-        do {
-            let contents = try fileManager.contentsOfDirectory(at: searchDir, includingPropertiesForKeys: nil)
-            let taskNumbers = contents.compactMap { url -> Int? in
-                let name = url.lastPathComponent
-                // Extract number from "001-task-name" format
-                if let match = name.range(of: "^\\d{3}", options: .regularExpression) {
-                    return Int(name[match])
-                }
-                return nil
-            }
-            return (taskNumbers.max() ?? 0) + 1
-        } catch {
-            return 1
-        }
-    }
-
     /// Create a new task folder with TASK.md
     func createTask(
         projectPath: String,
@@ -148,9 +119,7 @@ class TaskFolderService {
             _ = try createProject(projectPath: projectPath, projectName: subProject)
         }
 
-        // Get next task number
-        let taskNumber = nextTaskNumber(projectPath: projectPath, subProjectName: subProjectName)
-        let taskFolder = taskFolderPath(projectPath: projectPath, subProjectName: subProjectName, taskNumber: taskNumber, taskName: taskName)
+        let taskFolder = taskFolderPath(projectPath: projectPath, subProjectName: subProjectName, taskName: taskName)
 
         // Create task folder
         try fileManager.createDirectory(at: taskFolder, withIntermediateDirectories: true)
@@ -300,12 +269,6 @@ class TaskFolderService {
         task.progressLog = progressLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         task.progressEntries = parseProgressEntries(from: task.progressLog ?? "")
 
-        // Extract task number from folder name
-        let folderName = folderPath.lastPathComponent
-        if let match = folderName.range(of: "^\\d{3}", options: .regularExpression) {
-            task.taskNumber = Int(folderName[match])
-        }
-
         return task
     }
 
@@ -354,12 +317,11 @@ class TaskFolderService {
     func appendProgress(
         projectPath: String,
         subProjectName: String?,
-        taskNumber: Int,
         taskSlug: String,
         content: String,
         duration: String? = nil
     ) throws {
-        let taskFolder = taskFolderPath(projectPath: projectPath, subProjectName: subProjectName, taskNumber: taskNumber, taskName: taskSlug)
+        let taskFolder = taskFolderPath(projectPath: projectPath, subProjectName: subProjectName, taskName: taskSlug)
         let taskFile = taskFolder.appendingPathComponent("TASK.md")
 
         guard fileManager.fileExists(atPath: taskFile.path) else {
@@ -443,7 +405,7 @@ class TaskFolderService {
             logger.error("Failed to list tasks: \(error.localizedDescription)")
         }
 
-        return tasks.sorted { ($0.taskNumber ?? 0) < ($1.taskNumber ?? 0) }
+        return tasks.sorted { $0.folderPath.localizedStandardCompare($1.folderPath) == .orderedAscending }
     }
 
     /// List tasks within a specific sub-project
@@ -472,7 +434,7 @@ class TaskFolderService {
             logger.error("Failed to list tasks in sub-project: \(error.localizedDescription)")
         }
 
-        return tasks.sorted { ($0.taskNumber ?? 0) < ($1.taskNumber ?? 0) }
+        return tasks.sorted { $0.folderPath.localizedStandardCompare($1.folderPath) == .orderedAscending }
     }
 
     /// Move a task to a different sub-project
@@ -481,9 +443,9 @@ class TaskFolderService {
             return
         }
 
+        // Strip any existing number prefix from folder name (for legacy folders)
         let taskSlug = sourcePath.lastPathComponent.replacingOccurrences(of: "^\\d{3}-", with: "", options: .regularExpression)
-        let newNumber = nextTaskNumber(projectPath: projectPath, subProjectName: subProjectName)
-        let newFolder = taskFolderPath(projectPath: projectPath, subProjectName: subProjectName, taskNumber: newNumber, taskName: taskSlug)
+        let newFolder = taskFolderPath(projectPath: projectPath, subProjectName: subProjectName, taskName: taskSlug)
 
         // Create parent if needed
         if let subProject = subProjectName {
@@ -573,7 +535,6 @@ class TaskFolderService {
 struct TaskContent: Identifiable {
     var id: String { folderPath }
     var folderPath: String
-    var taskNumber: Int?
     var title: String?
     var status: String?
     var created: String?
