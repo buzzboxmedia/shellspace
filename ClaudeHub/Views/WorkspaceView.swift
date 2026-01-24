@@ -118,6 +118,18 @@ struct WorkspaceView: View {
                 // Select the first session if none active
                 windowState.activeSession = project.sessions.first
             }
+
+            // Start real-time file watching for the tasks directory
+            FileWatcherService.shared.onChangesDetected = { [self] in
+                let imported = TaskImportService.shared.importTasks(for: project, modelContext: modelContext)
+                if imported > 0 {
+                    print("File watcher: imported \(imported) tasks")
+                }
+            }
+            FileWatcherService.shared.startWatching(projectPath: project.path)
+        }
+        .onDisappear {
+            FileWatcherService.shared.stopWatching()
         }
         .alert("Summarize before leaving?", isPresented: $showUnsavedAlert) {
             Button("Don't Save") {
