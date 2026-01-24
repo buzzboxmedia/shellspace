@@ -135,15 +135,22 @@ class TaskImportService {
                 continue
             }
 
-            // Check if it has TASK.md (meaning it's actually a task, not a group)
+            // Check if it has TASK.md - but projects now have TASK.md too
+            // Only remove if it's a task (not a project) based on **Type:** field
             let taskFile = groupPath.appendingPathComponent("TASK.md")
             if fileManager.fileExists(atPath: taskFile.path) {
-                logger.info("Group is actually a task folder (has TASK.md), removing group: \(group.name)")
-                // Move sessions out of this group before deleting
-                for session in group.sessions {
-                    session.taskGroup = nil
+                // Read the file and check if it's a project or task
+                if let content = try? String(contentsOf: taskFile, encoding: .utf8) {
+                    let isProject = content.contains("**Type:** project")
+                    if !isProject {
+                        // It's a task folder, not a project - remove the group
+                        logger.info("Group is actually a task folder (has TASK.md without Type: project), removing group: \(group.name)")
+                        for session in group.sessions {
+                            session.taskGroup = nil
+                        }
+                        groupsToDelete.append(group)
+                    }
                 }
-                groupsToDelete.append(group)
             }
         }
 
