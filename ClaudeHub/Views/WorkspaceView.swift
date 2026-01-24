@@ -1096,6 +1096,11 @@ struct TaskRow: View {
             isEditing = true
         }
         .onTapGesture(count: 1) {
+            // Reopen completed tasks when clicked
+            if session.isCompleted {
+                session.isCompleted = false
+                session.completedAt = nil
+            }
             windowState.activeSession = session
             // Clear waiting state when user views this session
             appState.clearSessionWaiting(session)
