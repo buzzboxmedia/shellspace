@@ -61,7 +61,8 @@ class TaskFolderService {
     // MARK: - Project Operations
 
     /// Create a sub-project folder within a project's tasks
-    func createProject(projectPath: String, projectName: String) throws -> URL {
+    /// Now creates TASK.md and CLAUDE.md so projects can be opened like tasks
+    func createProject(projectPath: String, projectName: String, clientName: String? = nil, description: String? = nil) throws -> URL {
         let projectDir = projectDirectory(projectPath: projectPath, projectName: projectName)
 
         if !fileManager.fileExists(atPath: projectDir.path) {
@@ -69,7 +70,66 @@ class TaskFolderService {
             logger.info("Created project folder: \(projectDir.path)")
         }
 
+        // Create TASK.md for the project (so it can be opened like a task)
+        let taskFile = projectDir.appendingPathComponent("TASK.md")
+        if !fileManager.fileExists(atPath: taskFile.path) {
+            let content = generateProjectContent(
+                projectName: projectName,
+                clientName: clientName,
+                description: description
+            )
+            try content.write(to: taskFile, atomically: true, encoding: .utf8)
+        }
+
+        // Create CLAUDE.md with context paths
+        let claudeMdFile = projectDir.appendingPathComponent("CLAUDE.md")
+        if !fileManager.fileExists(atPath: claudeMdFile.path) {
+            let claudeMdContent = generateProjectClaudeMdContent(projectName: projectName)
+            try claudeMdContent.write(to: claudeMdFile, atomically: true, encoding: .utf8)
+        }
+
         return projectDir
+    }
+
+    /// Generate TASK.md content for a project folder
+    func generateProjectContent(projectName: String, clientName: String?, description: String?) -> String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let today = dateFormatter.string(from: Date())
+
+        return """
+        # \(projectName)
+
+        **Status:** active
+        **Type:** project
+        **Created:** \(today)
+        \(clientName != nil ? "**Client:** \(clientName!)\n" : "")
+        ## Description
+        \(description ?? "Project folder for organizing related tasks.")
+
+        ## Progress
+
+        """
+    }
+
+    /// Generate CLAUDE.md content for a project folder
+    func generateProjectClaudeMdContent(projectName: String) -> String {
+        return """
+        # Project: \(projectName)
+
+        ## Context Paths
+        - **Client root:** ../../
+        - **Credentials:** ../../credentials/
+
+        ## Project File
+        See TASK.md in this folder for project description, status, and progress log.
+
+        ## Sub-tasks
+        Tasks within this project are in subfolders. Each has its own TASK.md.
+
+        ---
+        *Parent CLAUDE.md files are automatically loaded for team and client context.*
+        """
     }
 
     /// List all sub-projects for a project

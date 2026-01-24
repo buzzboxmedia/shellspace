@@ -285,16 +285,36 @@ struct SessionSidebar: View {
         group.project = project
         modelContext.insert(group)
 
+        // Create a session for the project itself (so it can be opened like a task)
+        let session = Session(
+            name: name,
+            projectPath: project.path,
+            userNamed: true
+        )
+        session.project = project
+        session.taskGroup = group
+        session.sessionDescription = "Project folder for organizing related tasks."
+        modelContext.insert(session)
+
+        // Export to Dropbox (if sync enabled)
+        SessionSyncService.shared.exportSession(session)
+
         isCreatingGroup = false
         newGroupName = ""
 
-        // Create sub-project folder
+        // Create sub-project folder with TASK.md and CLAUDE.md
         Task {
             do {
-                _ = try TaskFolderService.shared.createProject(
+                let projectFolder = try TaskFolderService.shared.createProject(
                     projectPath: project.path,
-                    projectName: name
+                    projectName: name,
+                    clientName: project.name,
+                    description: nil
                 )
+                // Link session to project folder
+                await MainActor.run {
+                    session.taskFolderPath = projectFolder.path
+                }
             } catch {
                 print("Failed to create project folder: \(error)")
             }
