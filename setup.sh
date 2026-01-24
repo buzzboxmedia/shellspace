@@ -1,19 +1,21 @@
 #!/bin/bash
 # One-liner setup for new computers:
 # curl -sL https://raw.githubusercontent.com/buzzboxmedia/claudehub/main/setup.sh | bash
+#
+# Note: After Dropbox syncs, use ~/Dropbox/claudehub/go.sh instead
 
 set -e
 
 echo "Setting up ClaudeHub..."
 
 # Clone if not exists
-if [ ! -d ~/code/claudehub ]; then
-    mkdir -p ~/code
-    git clone https://github.com/buzzboxmedia/claudehub.git ~/code/claudehub
+if [ ! -d ~/Code/claudehub ]; then
+    mkdir -p ~/Code
+    git clone git@github.com:buzzboxmedia/claudehub.git ~/Code/claudehub
 fi
 
 # Run install
-~/code/claudehub/install.sh
+~/Code/claudehub/install.sh
 
 echo ""
-echo "Done! Type 'build' anytime to update."
+echo "Done! Once Dropbox syncs, use: ~/Dropbox/claudehub/go.sh"
