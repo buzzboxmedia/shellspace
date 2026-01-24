@@ -1125,22 +1125,19 @@ struct TaskRow: View {
                     .help("Complete this task")
                 }
 
-                // Delete button - moves task to completed folder so it won't reimport
+                // Delete button - permanently deletes task and folder
                 Button {
                     if windowState.activeSession?.id == session.id {
                         windowState.activeSession = nil
                     }
                     appState.removeController(for: session)
 
-                    // Move task folder to completed/ so it won't be reimported
+                    // Delete the task folder permanently
                     if let taskFolderPath = session.taskFolderPath {
                         do {
-                            _ = try TaskFolderService.shared.moveToCompleted(
-                                taskFolderPath: taskFolderPath,
-                                projectPath: session.projectPath
-                            )
+                            try FileManager.default.removeItem(atPath: taskFolderPath)
                         } catch {
-                            print("Failed to move task to completed: \(error)")
+                            print("Failed to delete task folder: \(error)")
                         }
                     }
 
@@ -1153,7 +1150,7 @@ struct TaskRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Archive this task")
+                .help("Delete this task")
             }
             .opacity(isHovered && !isEditing ? 1 : 0)
         }
