@@ -323,9 +323,10 @@ struct SessionSidebar: View {
                     clientName: project.name,
                     description: nil
                 )
-                // Link session to project folder
+                // Link session to project folder and make it active
                 await MainActor.run {
                     session.taskFolderPath = projectFolder.path
+                    windowState.activeSession = session
                 }
             } catch {
                 print("Failed to create project folder: \(error)")
@@ -693,32 +694,36 @@ struct ProjectGroupSection: View {
                 .buttonStyle(.plain)
 
                 // Folder icon + name - clickable to open project
-                Button {
-                    if let session = projectSession {
-                        windowState.activeSession = session
+                if isEditing {
+                    HStack(spacing: 8) {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.purple)
+
+                        TextField("Project name", text: $editedName, onCommit: {
+                            group.name = editedName
+                            isEditing = false
+                        })
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 15, weight: .medium))
                     }
-                } label: {
+                } else {
                     HStack(spacing: 8) {
                         Image(systemName: "folder.fill")
                             .font(.system(size: 16))
                             .foregroundStyle(isProjectActive ? .blue : .purple)
 
-                        if isEditing {
-                            TextField("Project name", text: $editedName, onCommit: {
-                                group.name = editedName
-                                isEditing = false
-                            })
-                            .textFieldStyle(.plain)
+                        Text(group.name)
                             .font(.system(size: 15, weight: .medium))
-                        } else {
-                            Text(group.name)
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundStyle(isProjectActive ? .blue : .primary)
+                            .foregroundStyle(isProjectActive ? .blue : .primary)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if let session = projectSession {
+                            windowState.activeSession = session
                         }
                     }
                 }
-                .buttonStyle(.plain)
-                .disabled(projectSession == nil)
 
                 Spacer()
 
