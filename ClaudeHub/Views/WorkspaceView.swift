@@ -1045,10 +1045,6 @@ struct TaskRow: View {
         session.lastSessionSummary != nil && !session.lastSessionSummary!.isEmpty
     }
 
-    var hasLog: Bool {
-        session.hasLog
-    }
-
     var isCompleted: Bool {
         session.isCompleted
     }
@@ -1267,16 +1263,6 @@ struct TaskRow: View {
             NSItemProvider(object: session.id.uuidString as NSString)
         }
         .contextMenu {
-            if hasLog {
-                Button {
-                    NSWorkspace.shared.open(session.actualLogPath)
-                } label: {
-                    Label("View Log", systemImage: "doc.text")
-                }
-            }
-
-            Divider()
-
             Button {
                 editedName = session.name
                 isEditing = true
