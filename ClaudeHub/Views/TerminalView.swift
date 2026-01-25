@@ -593,40 +593,6 @@ class TerminalController: ObservableObject {
                 window.makeFirstResponder(terminal)
             }
         }
-
-        // Send task context after Claude is ready
-        if let taskPath = taskFolderPath {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
-                self?.sendTaskContext(from: taskPath)
-            }
-        }
-    }
-
-    /// Read TASK.md and send context to Claude
-    private func sendTaskContext(from taskFolderPath: String) {
-        let taskFile = URL(fileURLWithPath: taskFolderPath).appendingPathComponent("TASK.md")
-
-        guard FileManager.default.fileExists(atPath: taskFile.path),
-              let content = try? String(contentsOf: taskFile, encoding: .utf8) else {
-            logger.info("No TASK.md found at \(taskFile.path)")
-            return
-        }
-
-        // Build the initial prompt with task context
-        let prompt = """
-        Here's the task I'm working on:
-
-        \(content)
-
-        Please continue from where we left off, or if this is a new session, review this task and let me know you understand.
-        """
-
-        logger.info("Sending task context from \(taskFile.path)")
-        // Send text first, then carriage return to submit (Enter key = \r in terminals)
-        sendToTerminal(prompt)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.sendToTerminal("\r")
-        }
     }
 
     private func configureTerminal() {
