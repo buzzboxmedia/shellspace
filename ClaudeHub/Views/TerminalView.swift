@@ -792,18 +792,14 @@ class TerminalContainerView: NSView {
 
     private var isShowingHandCursor = false
     private var trackingArea: NSTrackingArea?
-    private var clickMonitor: Any?
-    private var dragMonitor: Any?
-    private var mouseDownPoint: CGPoint?
-    private var wasDragging = false
 
     // Configure terminal for selection and drag-drop
     func configureForSelection() {
         // Disable mouse reporting so selection works
         terminalView?.allowMouseReporting = false
-        setupClickMonitor()
         setupDragDrop()
         setupKeyMonitor()
+        // Note: Removed click monitors that were breaking text selection
     }
 
     private func setupDragDrop() {
@@ -835,72 +831,7 @@ class TerminalContainerView: NSView {
         return true
     }
 
-    private func setupClickMonitor() {
-        // Track mouse down position to detect drags vs clicks
-        dragMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged]) { [weak self] event in
-            guard let self = self else { return event }
-
-            if event.type == .leftMouseDown {
-                self.mouseDownPoint = event.locationInWindow
-                self.wasDragging = false
-            } else if event.type == .leftMouseDragged {
-                // If mouse moved more than 5 pixels, it's a drag (selection)
-                if let downPoint = self.mouseDownPoint {
-                    let distance = hypot(event.locationInWindow.x - downPoint.x,
-                                        event.locationInWindow.y - downPoint.y)
-                    if distance > 5 {
-                        self.wasDragging = true
-                    }
-                }
-            }
-            return event
-        }
-
-        // Monitor clicks to intercept URL clicks and double-clicks for file paths
-        clickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseUp]) { [weak self] event in
-            guard let self = self,
-                  let terminal = self.terminalView,
-                  let window = self.window,
-                  event.window == window else {
-                return event
-            }
-
-            // Don't open URL if user was dragging to select
-            if self.wasDragging {
-                self.wasDragging = false
-                return event
-            }
-
-            // Check if click is within terminal bounds
-            let locationInTerminal = terminal.convert(event.locationInWindow, from: nil)
-            if terminal.bounds.contains(locationInTerminal) {
-                // Double-click: try to open file path
-                if event.clickCount == 2 {
-                    if let filePath = self.detectFilePathAtPoint(locationInTerminal) {
-                        self.logger.info("Double-click opening file: \(filePath)")
-                        NSWorkspace.shared.open(URL(fileURLWithPath: filePath))
-                        return nil  // Consume the event
-                    }
-                }
-
-                // Single-click: open URLs
-                if let url = self.detectURLAtPoint(locationInTerminal) {
-                    self.logger.info("Opening URL: \(url)")
-                    NSWorkspace.shared.open(url)
-                    return nil  // Consume the event
-                }
-            }
-            return event
-        }
-    }
-
     deinit {
-        if let monitor = clickMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
-        if let monitor = dragMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
         if let monitor = keyMonitor {
             NSEvent.removeMonitor(monitor)
         }
