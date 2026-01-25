@@ -785,10 +785,15 @@ class TerminalContainerView: NSView {
         options: []
     )
 
-    // Let the terminal handle first responder - don't intercept at container level
-    // This is critical for text selection to work in SwiftTerm
-    override var acceptsFirstResponder: Bool { false }
-    override var canBecomeKeyView: Bool { false }
+    // Let events pass through to the embedded terminal view
+    override var acceptsFirstResponder: Bool { true }
+    override var canBecomeKeyView: Bool { true }
+
+    override func becomeFirstResponder() -> Bool {
+        // Forward first responder to the terminal
+        terminalView?.window?.makeFirstResponder(terminalView)
+        return true
+    }
 
     private var isShowingHandCursor = false
     private var trackingArea: NSTrackingArea?
@@ -1268,11 +1273,6 @@ class TerminalContainerView: NSView {
             }
             self.focusTerminal()
         }
-    }
-
-    override func becomeFirstResponder() -> Bool {
-        // Container shouldn't become first responder - let terminal handle it
-        return false
     }
 
     func focusTerminal() {
