@@ -133,12 +133,6 @@ class AppState: ObservableObject {
     /// Terminal controllers by session ID (for embedded SwiftTerm)
     var terminalControllers: [UUID: TerminalController] = [:]
 
-    /// Track when each terminal was last accessed (for LRU eviction)
-    var terminalAccessTimes: [UUID: Date] = [:]
-
-    /// Maximum number of active terminals to keep alive
-    let maxActiveTerminals = 6
-
     /// Per-window states keyed by window ID
     private var windowStates: [UUID: WindowState] = [:]
 
@@ -161,54 +155,16 @@ class AppState: ObservableObject {
     // MARK: - Terminal Controllers (for embedded SwiftTerm)
 
     func getOrCreateController(for session: Session) -> TerminalController {
-        // Update access time for LRU tracking
-        terminalAccessTimes[session.id] = Date()
-
         if let existing = terminalControllers[session.id] {
-            appLogger.info("Reusing existing terminal for session: \(session.name)")
             return existing
         }
-
-        // Evict oldest terminals if over limit
-        evictOldTerminalsIfNeeded()
-
         let controller = TerminalController()
         terminalControllers[session.id] = controller
-        appLogger.info("Created new terminal for session: \(session.name) (total: \(self.terminalControllers.count))")
         return controller
     }
 
     func removeController(for session: Session) {
         terminalControllers.removeValue(forKey: session.id)
-        terminalAccessTimes.removeValue(forKey: session.id)
-    }
-
-    /// Evict least recently used terminals when over the limit
-    private func evictOldTerminalsIfNeeded() {
-        guard terminalControllers.count >= maxActiveTerminals else { return }
-
-        // Sort by access time (oldest first)
-        let sortedSessions = terminalAccessTimes.sorted { $0.value < $1.value }
-
-        // Evict oldest terminals to get under limit (keep maxActiveTerminals - 1 to make room for new one)
-        let toEvict = terminalControllers.count - maxActiveTerminals + 1
-        for (sessionId, _) in sortedSessions.prefix(toEvict) {
-            // Don't evict terminals that are currently waiting for input
-            if waitingSessions.contains(sessionId) {
-                appLogger.info("Skipping eviction of waiting session: \(sessionId)")
-                continue
-            }
-
-            // Don't evict terminals that are actively working
-            if workingSessions.contains(sessionId) {
-                appLogger.info("Skipping eviction of working session: \(sessionId)")
-                continue
-            }
-
-            appLogger.info("Evicting old terminal: \(sessionId)")
-            terminalControllers.removeValue(forKey: sessionId)
-            terminalAccessTimes.removeValue(forKey: sessionId)
-        }
     }
 
     // MARK: - Session Launch Tracking
