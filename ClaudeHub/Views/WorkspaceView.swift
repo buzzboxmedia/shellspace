@@ -1487,46 +1487,56 @@ struct TerminalArea: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var windowState: WindowState
     let project: Project
+    @State private var launchedExternalSessions: Set<UUID> = []
 
     var body: some View {
         Group {
             if let session = windowState.activeSession {
-                VStack(spacing: 0) {
-                    TerminalHeader(session: session, project: project)
+                // Check if this project uses external terminal
+                if project.usesExternalTerminal {
+                    ExternalTerminalView(
+                        session: session,
+                        project: project,
+                        launchedSessions: $launchedExternalSessions
+                    )
+                } else {
+                    VStack(spacing: 0) {
+                        TerminalHeader(session: session, project: project)
 
-                    // Subtle separator line with gradient
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.2), Color.blue.opacity(0.3)],
-                                startPoint: .leading,
-                                endPoint: .trailing
+                        // Subtle separator line with gradient
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.2), Color.blue.opacity(0.3)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
                             )
-                        )
-                        .frame(height: 1)
+                            .frame(height: 1)
 
-                    TerminalView(session: session)
+                        TerminalView(session: session)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.2),
+                                        Color.white.opacity(0.05),
+                                        Color.white.opacity(0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                            .allowsHitTesting(false)  // Don't intercept mouse events
+                    )
+                    .shadow(color: .black.opacity(0.4), radius: 12, x: 0, y: 6)
+                    .shadow(color: Color.blue.opacity(0.1), radius: 20, x: 0, y: 0)
+                    .padding(14)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.2),
-                                    Color.white.opacity(0.05),
-                                    Color.white.opacity(0.1)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1
-                        )
-                        .allowsHitTesting(false)  // Don't intercept mouse events
-                )
-                .shadow(color: .black.opacity(0.4), radius: 12, x: 0, y: 6)
-                .shadow(color: Color.blue.opacity(0.1), radius: 20, x: 0, y: 0)
-                .padding(14)
             } else {
                 // Enhanced empty state
                 VStack(spacing: 20) {
@@ -1574,6 +1584,196 @@ struct TerminalArea: View {
                 )
             }
         }
+    }
+}
+
+// MARK: - External Terminal View (for projects that open in Terminal.app)
+
+struct ExternalTerminalView: View {
+    let session: Session
+    let project: Project
+    @Binding var launchedSessions: Set<UUID>
+
+    var isLaunched: Bool {
+        launchedSessions.contains(session.id)
+    }
+
+    var body: some View {
+        VStack(spacing: 24) {
+            // Header
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(isLaunched ? Color.green.opacity(0.2) : Color.blue.opacity(0.2))
+                        .frame(width: 18, height: 18)
+
+                    Circle()
+                        .fill(isLaunched ? Color.green : Color.blue)
+                        .frame(width: 8, height: 8)
+                }
+
+                Text(session.name)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                if isLaunched {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 6, height: 6)
+                        Text("Running in Terminal")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(.green)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.green.opacity(0.12))
+                    .clipShape(Capsule())
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(
+                VisualEffectView(material: .headerView, blendingMode: .withinWindow)
+            )
+
+            Spacer()
+
+            // Main content area
+            VStack(spacing: 20) {
+                ZStack {
+                    Circle()
+                        .fill(Color.blue.opacity(0.1))
+                        .frame(width: 100, height: 100)
+                        .blur(radius: 25)
+
+                    Image(systemName: "terminal.fill")
+                        .font(.system(size: 48))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [Color.blue.opacity(0.8), Color.blue.opacity(0.5)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
+
+                if isLaunched {
+                    VStack(spacing: 8) {
+                        Text("Session Running Externally")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.primary)
+
+                        Text("Check Terminal.app for this session")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button {
+                        // Bring Terminal to front
+                        let script = """
+                        tell application "Terminal"
+                            activate
+                        end tell
+                        """
+                        if let appleScript = NSAppleScript(source: script) {
+                            var error: NSDictionary?
+                            appleScript.executeAndReturnError(&error)
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.up.forward.app")
+                            Text("Switch to Terminal")
+                        }
+                        .font(.system(size: 13, weight: .medium))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.blue.opacity(0.2))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    VStack(spacing: 8) {
+                        Text("Ready to Launch")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.primary)
+
+                        Text("This will open in a new Terminal window")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button {
+                        launchInExternalTerminal()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "play.fill")
+                            Text("Open in Terminal")
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(Color.blue)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            ZStack {
+                Color.black.opacity(0.4)
+                RadialGradient(
+                    colors: [Color.blue.opacity(0.08), Color.clear],
+                    center: .center,
+                    startRadius: 50,
+                    endRadius: 300
+                )
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.2),
+                            Color.white.opacity(0.05),
+                            Color.white.opacity(0.1)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: .black.opacity(0.4), radius: 12, x: 0, y: 6)
+        .padding(14)
+    }
+
+    private func launchInExternalTerminal() {
+        // Use task folder if available, otherwise project path
+        let workingDir = session.taskFolderPath ?? project.path
+
+        let script = """
+        tell application "Terminal"
+            activate
+            do script "cd '\(workingDir)' && claude"
+        end tell
+        """
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
+        }
+
+        // Mark as launched
+        launchedSessions.insert(session.id)
     }
 }
 

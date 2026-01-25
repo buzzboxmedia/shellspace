@@ -60,6 +60,19 @@ struct LauncherView: View {
                     }
 
                     VStack(spacing: 36) {
+                        // Development Section - Claude Hub itself
+                        VStack(alignment: .leading, spacing: 20) {
+                            Text("DEVELOPMENT")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .tracking(1.5)
+
+                            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 16) {
+                                ClaudeHubCard()
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
                         // Main Projects Section
                         if !mainProjects.isEmpty {
                             ProjectSection(
@@ -158,6 +171,73 @@ struct ProjectSection: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// Special card for Claude Hub - opens project view with external terminal mode
+struct ClaudeHubCard: View {
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject var windowState: WindowState
+    @Query(filter: #Predicate<Project> { $0.name == "Claude Hub" }) private var claudeHubProjects: [Project]
+    @State private var isHovered = false
+
+    private let claudeHubPath = "\(NSHomeDirectory())/Code/claudehub"
+
+    var body: some View {
+        Button {
+            openClaudeHubProject()
+        } label: {
+            VStack(spacing: 14) {
+                Image(systemName: "terminal.fill")
+                    .font(.system(size: 36))
+                    .foregroundStyle(.blue)
+
+                Text("Claude Hub")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.primary)
+            }
+            .frame(width: 120, height: 120)
+            .background {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: .black.opacity(isHovered ? 0.2 : 0.1), radius: isHovered ? 16 : 10)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+            }
+            .scaleEffect(isHovered ? 1.05 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isHovered = hovering
+            }
+        }
+    }
+
+    private func openClaudeHubProject() {
+        // Find or create the Claude Hub project
+        let project: Project
+        if let existing = claudeHubProjects.first {
+            project = existing
+            // Ensure it uses external terminal
+            project.usesExternalTerminal = true
+        } else {
+            // Create Claude Hub project with external terminal flag
+            project = Project(
+                name: "Claude Hub",
+                path: claudeHubPath,
+                icon: "terminal.fill",
+                category: .main,
+                usesExternalTerminal: true
+            )
+            modelContext.insert(project)
+        }
+
+        withAnimation(.spring(response: 0.3)) {
+            windowState.selectedProject = project
+        }
     }
 }
 

@@ -9,6 +9,9 @@ final class Project {
     var icon: String
     var category: ProjectCategory
 
+    /// When true, sessions open in external Terminal.app instead of embedded terminal
+    var usesExternalTerminal: Bool = false
+
     // Remember last active session when returning to project
     var lastActiveSessionId: UUID?
 
@@ -24,12 +27,13 @@ final class Project {
         URL(fileURLWithPath: path)
     }
 
-    init(name: String, path: String, icon: String, category: ProjectCategory = .main) {
+    init(name: String, path: String, icon: String, category: ProjectCategory = .main, usesExternalTerminal: Bool = false) {
         self.id = UUID()
         self.name = name
         self.path = path
         self.icon = icon
         self.category = category
+        self.usesExternalTerminal = usesExternalTerminal
     }
 }
 
