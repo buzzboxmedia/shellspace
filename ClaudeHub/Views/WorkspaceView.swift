@@ -1027,7 +1027,6 @@ struct TaskRow: View {
     @State private var isHovered = false
     @State private var isEditing = false
     @State private var editedName: String = ""
-    @State private var isResuming = false
     @State private var isCompleting = false
 
     var isActive: Bool {
@@ -1274,14 +1273,6 @@ struct TaskRow: View {
                 } label: {
                     Label("View Log", systemImage: "doc.text")
                 }
-
-                if !isCompleted {
-                    Button {
-                        resumeTask()
-                    } label: {
-                        Label("Resume Task", systemImage: "arrow.clockwise")
-                    }
-                }
             }
 
             Divider()
@@ -1313,28 +1304,6 @@ struct TaskRow: View {
             } label: {
                 Label("Delete", systemImage: "trash")
             }
-        }
-    }
-
-    /// Resume a task by loading context and sending update prompt to Claude
-    private func resumeTask() {
-        isResuming = true
-
-        // First, select this session
-        windowState.activeSession = session
-        appState.clearSessionWaiting(session)
-
-        // Wait for terminal to be ready, then send the resume prompt
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            // Generate the resume prompt
-            let prompt = appState.generateResumePrompt(for: session)
-
-            // Get the terminal controller and send the prompt
-            if let controller = appState.terminalControllers[session.id] {
-                controller.sendToTerminal(prompt + "\n")
-            }
-
-            isResuming = false
         }
     }
 
@@ -1468,9 +1437,6 @@ struct TerminalHeader: View {
     @EnvironmentObject var appState: AppState
     let session: Session
     let project: Project
-    @State private var isSummarizing = false
-    @State private var showSavedConfirmation = false
-    @State private var isButtonHovered = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -1495,46 +1461,6 @@ struct TerminalHeader: View {
                 .truncationMode(.tail)
 
             Spacer()
-
-            // Summarize & Save button
-            Button {
-                summarizeAndSave()
-            } label: {
-                HStack(spacing: 6) {
-                    if isSummarizing {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                            .frame(width: 14, height: 14)
-                    } else if showSavedConfirmation {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
-                    } else {
-                        Image(systemName: "square.and.arrow.down")
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    Text(showSavedConfirmation ? "Saved" : "Summarize & Save")
-                        .font(.system(size: 12, weight: .medium))
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background(
-                    LinearGradient(
-                        colors: showSavedConfirmation
-                            ? [Color.green, Color.green.opacity(0.8)]
-                            : [Color.blue, Color.blue.opacity(0.8)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .clipShape(Capsule())
-                .shadow(color: (showSavedConfirmation ? Color.green : Color.blue).opacity(isButtonHovered ? 0.5 : 0.3), radius: isButtonHovered ? 8 : 4)
-                .scaleEffect(isButtonHovered ? 1.03 : 1.0)
-            }
-            .buttonStyle(.plain)
-            .onHover { isButtonHovered = $0 }
-            .disabled(isSummarizing || session.taskFolderPath == nil)
-            .help(session.taskFolderPath == nil ? "No task folder linked" : "Generate AI summary and save to TASK.md")
 
             // Running badge
             HStack(spacing: 5) {
@@ -1568,30 +1494,6 @@ struct TerminalHeader: View {
         )
     }
 
-    private func summarizeAndSave() {
-        guard session.taskFolderPath != nil else { return }
-
-        isSummarizing = true
-
-        // Get terminal controller and ask Claude to summarize
-        let controller = appState.getOrCreateController(for: session)
-
-        // Send prompt to Claude asking it to update TASK.md
-        let prompt = "Please add a brief 1-2 sentence summary of what we accomplished to the Progress section of TASK.md (append with today's date as ### heading). Just update the file, no need to show me the contents.\n"
-        controller.sendToTerminal(prompt)
-
-        // Wait for Claude to process
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            session.lastProgressSavedAt = Date()
-            isSummarizing = false
-            showSavedConfirmation = true
-
-            // Reset confirmation after 2 seconds
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                showSavedConfirmation = false
-            }
-        }
-    }
 
 }
 
