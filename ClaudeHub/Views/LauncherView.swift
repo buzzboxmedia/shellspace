@@ -146,9 +146,11 @@ struct LauncherView: View {
     private func createDefaultProjects() {
         let dropboxPath = NSString("~/Library/CloudStorage/Dropbox").expandingTildeInPath
         let clientsPath = NSString("~/Library/CloudStorage/Dropbox/Buzzbox/Clients").expandingTildeInPath
+        let codePath = NSString("~/Code").expandingTildeInPath
 
         // Main projects
         let mainDefaults = [
+            ("ClaudeHub", "\(codePath)/claudehub", "hammer.fill"),
             ("Miller", "\(dropboxPath)/Miller", "person.fill"),
             ("Talkspresso", "\(dropboxPath)/Talkspresso", "cup.and.saucer.fill"),
             ("Buzzbox", "\(dropboxPath)/Buzzbox", "shippingbox.fill")
@@ -163,9 +165,7 @@ struct LauncherView: View {
         let clientDefaults = [
             ("AAGL", "\(clientsPath)/AAGL", "cross.case.fill"),
             ("AFL", "\(clientsPath)/AFL", "building.columns.fill"),
-            ("Citadel", "\(clientsPath)/Citadel", "car.fill"),
             ("INFAB", "\(clientsPath)/INFAB", "shield.fill"),
-            ("MAGicALL", "\(clientsPath)/MAGicALL", "airplane"),
             ("TDS", "\(clientsPath)/TDS", "eye.fill")
         ]
 
@@ -173,9 +173,6 @@ struct LauncherView: View {
             let project = Project(name: name, path: path, icon: icon, category: .client)
             modelContext.insert(project)
         }
-
-        // ClaudeHub dev work is done in terminal, not in the app
-        // (changes require rebuild/restart anyway)
     }
 }
 
