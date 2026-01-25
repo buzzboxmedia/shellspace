@@ -60,19 +60,6 @@ struct LauncherView: View {
                     }
 
                     VStack(spacing: 36) {
-                        // Development Section - Claude Hub itself
-                        VStack(alignment: .leading, spacing: 20) {
-                            Text("DEVELOPMENT")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .tracking(1.5)
-
-                            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 16) {
-                                ClaudeHubCard()
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
                         // Main Projects Section
                         if !mainProjects.isEmpty {
                             ProjectSection(
@@ -90,6 +77,19 @@ struct LauncherView: View {
                                 columns: gridColumns
                             )
                         }
+
+                        // Development Section - Claude Hub itself (at the bottom)
+                        VStack(alignment: .leading, spacing: 20) {
+                            Text("DEVELOPMENT")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .tracking(1.5)
+
+                            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 16) {
+                                ClaudeHubCard()
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .padding(48)
