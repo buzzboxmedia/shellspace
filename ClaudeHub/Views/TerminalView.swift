@@ -720,18 +720,13 @@ class TerminalController: ObservableObject {
     }
 }
 
-// SwiftUI wrapper for LocalProcessTerminalView - uses wrapper for proper event handling
+// SwiftUI wrapper for LocalProcessTerminalView using TerminalContainerView for proper focus handling
 struct SwiftTermView: NSViewRepresentable {
     @ObservedObject var controller: TerminalController
-    private let logger = Logger(subsystem: "com.buzzbox.claudehub", category: "SwiftTermView")
 
-    func makeNSView(context: Context) -> NSView {
-        // Create a wrapper view that will hold the terminal
-        let wrapper = TerminalWrapperView()
-
+    func makeNSView(context: Context) -> TerminalContainerView {
         if controller.terminalView == nil {
-            // Create terminal with a reasonable initial size
-            controller.terminalView = LocalProcessTerminalView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+            controller.terminalView = LocalProcessTerminalView(frame: .zero)
         }
 
         let terminalView = controller.terminalView!
@@ -742,72 +737,34 @@ struct SwiftTermView: NSViewRepresentable {
         // Configure appearance
         terminalView.configureNativeColors()
 
-        // Add terminal to wrapper
-        wrapper.terminalView = terminalView
-        terminalView.translatesAutoresizingMaskIntoConstraints = false
-        wrapper.addSubview(terminalView)
+        // Create container view to handle focus and keyboard input
+        let containerView = TerminalContainerView()
+        containerView.terminalView = terminalView
+        containerView.controller = controller
 
-        // Constrain terminal to fill wrapper
+        // Add terminal as subview, filling the container
+        terminalView.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(terminalView)
         NSLayoutConstraint.activate([
-            terminalView.topAnchor.constraint(equalTo: wrapper.topAnchor),
-            terminalView.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
-            terminalView.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor),
-            terminalView.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor)
+            terminalView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            terminalView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            terminalView.topAnchor.constraint(equalTo: containerView.topAnchor),
+            terminalView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
         ])
 
-        // Auto-focus after a delay
+        // Configure for selection and keyboard input
+        containerView.configureForSelection()
+
+        // Auto-focus after a delay (but don't steal from text fields)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            if let window = terminalView.window {
-                window.makeFirstResponder(terminalView)
-            }
+            containerView.focusTerminal()
         }
 
-        return wrapper
+        return containerView
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {
-        // Ensure terminal stays properly sized
-        if let wrapper = nsView as? TerminalWrapperView,
-           let terminal = wrapper.terminalView {
-            terminal.frame = wrapper.bounds
-        }
-    }
-}
-
-// Simple wrapper view that properly forwards mouse events to the terminal
-class TerminalWrapperView: NSView {
-    weak var terminalView: LocalProcessTerminalView?
-
-    override var isFlipped: Bool { true }
-    override var acceptsFirstResponder: Bool { true }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        // Forward all hits to the terminal view for selection to work
-        if bounds.contains(point), let terminal = terminalView {
-            return terminal.hitTest(convert(point, to: terminal)) ?? terminal
-        }
-        return super.hitTest(point)
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        // Make terminal first responder and forward event
-        if let terminal = terminalView {
-            window?.makeFirstResponder(terminal)
-            terminal.mouseDown(with: event)
-        }
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        terminalView?.mouseDragged(with: event)
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        terminalView?.mouseUp(with: event)
-    }
-
-    override func layout() {
-        super.layout()
-        terminalView?.frame = bounds
+    func updateNSView(_ nsView: TerminalContainerView, context: Context) {
+        // Don't steal focus on every update
     }
 }
 
