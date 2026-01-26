@@ -589,6 +589,9 @@ class TerminalController: ObservableObject {
 
         let claudeCommand = "cd '\(workingDir)' && claude\(resumeFlag) --dangerously-skip-permissions\n"
         logger.info("Starting Claude in: \(workingDir), resume flag: \(resumeFlag.isEmpty ? "none" : resumeFlag)")
+        // Debug: show what we're doing
+        let debugMsg = resumeFlag.isEmpty ? "# Starting NEW session (no existing sessions found)" : "# Resuming: \(resumeFlag)"
+        terminalView?.send(txt: "echo '\(debugMsg)'\n")
         terminalView?.send(txt: claudeCommand)
 
         // Ensure terminal has focus after Claude starts (only if no text field is active)
