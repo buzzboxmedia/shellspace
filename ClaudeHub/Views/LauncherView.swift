@@ -10,6 +10,7 @@ struct LauncherView: View {
     @Query(sort: \Project.name) private var allProjects: [Project]
 
     @State private var showSettings = false
+    @State private var showCleanup = false
 
     // Dropbox path (check both locations)
     private var dropboxPath: String {
@@ -88,6 +89,16 @@ struct LauncherView: View {
                     .overlay(alignment: .trailing) {
                         HStack(spacing: 12) {
                             Button {
+                                showCleanup = true
+                            } label: {
+                                Image(systemName: "tray.full.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Manage Sessions")
+
+                            Button {
                                 showSettings = true
                             } label: {
                                 Image(systemName: "gearshape.fill")
@@ -138,6 +149,9 @@ struct LauncherView: View {
                 }
                 .padding(48)
             }
+        }
+        .sheet(isPresented: $showCleanup) {
+            SessionCleanupView()
         }
     }
 }
