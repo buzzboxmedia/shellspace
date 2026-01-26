@@ -140,9 +140,13 @@ class AppState: ObservableObject {
     // MARK: - Terminal Controllers (for embedded SwiftTerm)
 
     func getOrCreateController(for session: Session) -> TerminalController {
+        appLogger.info("getOrCreateController for session: \(session.name) id: \(session.id)")
+        appLogger.info("DEBUG: terminalControllers count: \(self.terminalControllers.count), keys: \(self.terminalControllers.keys.map { $0.uuidString })")
         if let existing = terminalControllers[session.id] {
+            appLogger.info("DEBUG: Found existing controller for session \(session.id)")
             return existing
         }
+        appLogger.info("DEBUG: Creating NEW controller for session \(session.id)")
         let controller = TerminalController()
         terminalControllers[session.id] = controller
         return controller

@@ -59,13 +59,31 @@ struct LauncherView: View {
 
             ScrollView {
                 VStack(spacing: 40) {
-                    // Header with settings button
+                    // Header with settings button and running sessions indicator
                     HStack {
                         Spacer()
                         Text("Claude Hub")
                             .font(.system(size: 42, weight: .bold, design: .rounded))
                             .foregroundStyle(.primary)
                         Spacer()
+                    }
+                    .overlay(alignment: .leading) {
+                        // Show running sessions indicator
+                        if !appState.terminalControllers.isEmpty {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(appState.workingSessions.isEmpty ? Color.blue : Color.green)
+                                    .frame(width: 8, height: 8)
+                                Text("\(appState.terminalControllers.count) running")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Capsule())
+                            .padding(.leading, 8)
+                        }
                     }
                     .overlay(alignment: .trailing) {
                         HStack(spacing: 12) {
@@ -156,6 +174,7 @@ struct DefaultProjectCard: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var windowState: WindowState
+    @Query private var allSessions: [Session]
 
     let name: String
     let path: String
@@ -163,14 +182,61 @@ struct DefaultProjectCard: View {
 
     @State private var isHovered = false
 
+    /// Sessions for this project path
+    private var projectSessions: [Session] {
+        allSessions.filter { $0.projectPath == path }
+    }
+
+    /// Count of sessions with active terminal controllers (running in background)
+    private var runningCount: Int {
+        projectSessions.filter { appState.terminalControllers[$0.id] != nil }.count
+    }
+
+    /// Count of sessions waiting for user input
+    private var waitingCount: Int {
+        projectSessions.filter { appState.waitingSessions.contains($0.id) }.count
+    }
+
+    /// Count of sessions with Claude actively working
+    private var workingCount: Int {
+        projectSessions.filter { appState.workingSessions.contains($0.id) }.count
+    }
+
     var body: some View {
         Button {
             openProject()
         } label: {
             VStack(spacing: 14) {
-                Image(systemName: icon)
-                    .font(.system(size: 36))
-                    .foregroundStyle(.primary)
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: icon)
+                        .font(.system(size: 36))
+                        .foregroundStyle(.primary)
+
+                    // Show badge for waiting sessions (orange) or working sessions (green)
+                    if waitingCount > 0 {
+                        Text("\(waitingCount)")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 22, height: 22)
+                            .background(Color.orange)
+                            .clipShape(Circle())
+                            .offset(x: 10, y: -10)
+                    } else if workingCount > 0 {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 12, height: 12)
+                            .overlay {
+                                Circle()
+                                    .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                            }
+                            .offset(x: 6, y: -6)
+                    } else if runningCount > 0 {
+                        Circle()
+                            .fill(Color.blue.opacity(0.7))
+                            .frame(width: 10, height: 10)
+                            .offset(x: 5, y: -5)
+                    }
+                }
 
                 Text(name)
                     .font(.system(size: 16, weight: .medium))
@@ -309,6 +375,16 @@ struct ProjectCard: View {
         project.sessions.filter { appState.waitingSessions.contains($0.id) }.count
     }
 
+    /// Count of sessions with active terminal controllers (running in background)
+    var runningCount: Int {
+        project.sessions.filter { appState.terminalControllers[$0.id] != nil }.count
+    }
+
+    /// Count of sessions with Claude actively working
+    var workingCount: Int {
+        project.sessions.filter { appState.workingSessions.contains($0.id) }.count
+    }
+
     var body: some View {
         Button {
             withAnimation(.spring(response: 0.3)) {
@@ -321,7 +397,7 @@ struct ProjectCard: View {
                         .font(.system(size: 36))
                         .foregroundStyle(.primary)
 
-                    // Show badge only when sessions need attention
+                    // Show badge for waiting sessions (orange), working sessions (green), or running (blue)
                     if waitingCount > 0 {
                         Text("\(waitingCount)")
                             .font(.system(size: 12, weight: .bold))
@@ -330,6 +406,20 @@ struct ProjectCard: View {
                             .background(Color.orange)
                             .clipShape(Circle())
                             .offset(x: 10, y: -10)
+                    } else if workingCount > 0 {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 12, height: 12)
+                            .overlay {
+                                Circle()
+                                    .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                            }
+                            .offset(x: 6, y: -6)
+                    } else if runningCount > 0 {
+                        Circle()
+                            .fill(Color.blue.opacity(0.7))
+                            .frame(width: 10, height: 10)
+                            .offset(x: 5, y: -5)
                     }
                 }
 

@@ -514,12 +514,15 @@ class TerminalController: ObservableObject {
 
     func startClaude(in directory: String, sessionId: UUID, claudeSessionId: String? = nil, parkerBriefing: String? = nil, taskFolderPath: String? = nil) {
         logger.info("startClaude called for directory: \(directory), sessionId: \(sessionId), claudeSessionId: \(claudeSessionId ?? "none")")
+        logger.info("DEBUG: currentSessionId=\(String(describing: self.currentSessionId)), terminalView=\(self.terminalView != nil ? "exists" : "nil")")
 
         // Don't restart if already running for this session
         if currentSessionId == sessionId && terminalView != nil {
             logger.info("Claude already running for this session, skipping")
             return
         }
+
+        logger.info("DEBUG: Will start new Claude session (currentSessionId mismatch or no terminalView)")
 
         currentSessionId = sessionId
         projectPath = directory  // Store for screenshot saving

@@ -7,6 +7,9 @@ struct WorkspaceView: View {
     @EnvironmentObject var windowState: WindowState
     let project: Project
 
+    // Query sessions by projectPath - works even for non-persisted projects
+    @Query private var allSessions: [Session]
+
     // Track when this workspace was opened (for unsaved progress check)
     @State private var workspaceOpenedAt: Date = Date()
     @State private var showUnsavedAlert = false
@@ -14,9 +17,9 @@ struct WorkspaceView: View {
     @State private var isSummarizingBeforeClose = false
     @State private var previousSessionId: UUID?
 
-    // Use the project's sessions relationship instead of a separate query
+    // Filter sessions by project path (works for both persisted and non-persisted projects)
     var sessions: [Session] {
-        project.sessions
+        allSessions.filter { $0.projectPath == project.path }
     }
 
     /// Check if the active session has unsaved progress (no note saved since opening)
@@ -92,17 +95,20 @@ struct WorkspaceView: View {
                 print("Auto-imported \(imported) tasks")
             }
 
-            if project.sessions.isEmpty {
+            if sessions.isEmpty {
                 // No sessions, create a generic one
                 let newSession = createSession(name: nil, inGroup: nil)
                 windowState.activeSession = newSession
             } else if windowState.activeSession == nil {
-                // Restore last active session, or fall back to first
-                if let lastId = project.lastActiveSessionId,
-                   let lastSession = project.sessions.first(where: { $0.id == lastId }) {
+                // Restore last active session - check both Project property and UserDefaults
+                let lastId = project.lastActiveSessionId ??
+                    (UserDefaults.standard.string(forKey: "lastSession:\(project.path)").flatMap { UUID(uuidString: $0) })
+
+                if let lastId = lastId,
+                   let lastSession = sessions.first(where: { $0.id == lastId }) {
                     windowState.activeSession = lastSession
                 } else {
-                    windowState.activeSession = project.sessions.first
+                    windowState.activeSession = sessions.first
                 }
             }
 
@@ -118,8 +124,11 @@ struct WorkspaceView: View {
         .onDisappear {
             FileWatcherService.shared.stopWatching()
 
-            // Remember last active session for next time
+            // Remember last active session for next time (both on Project and in UserDefaults)
             project.lastActiveSessionId = windowState.activeSession?.id
+            if let sessionId = windowState.activeSession?.id {
+                UserDefaults.standard.set(sessionId.uuidString, forKey: "lastSession:\(project.path)")
+            }
         }
         .alert("Summarize before leaving?", isPresented: $showUnsavedAlert) {
             Button("Don't Save") {
@@ -166,7 +175,7 @@ struct WorkspaceView: View {
             taskName = name
             isUserNamed = true
         } else {
-            let existingCount = project.sessions.filter { !$0.isProjectLinked }.count
+            let existingCount = sessions.filter { !$0.isProjectLinked }.count
             taskName = "Task \(existingCount + 1)"
             isUserNamed = false
         }
@@ -193,6 +202,7 @@ struct SessionSidebar: View {
     @EnvironmentObject var windowState: WindowState
     let project: Project
     let goBack: () -> Void
+    @Query private var allSessions: [Session]
     @State private var isBackHovered = false
     @State private var isCreatingTask = false
     @State private var isCreatingGroup = false
@@ -206,7 +216,7 @@ struct SessionSidebar: View {
     @FocusState private var isGroupFieldFocused: Bool
 
     var sessions: [Session] {
-        project.sessions
+        allSessions.filter { $0.projectPath == project.path }
     }
 
     var activeSessions: [Session] {
@@ -631,6 +641,7 @@ struct ProjectGroupSection: View {
     let project: Project
     let index: Int
     let totalGroups: Int
+    @Query private var allSessions: [Session]
     @Binding var draggedGroupId: UUID?
     @State private var isHovered = false
     @State private var isEditing = false
@@ -639,6 +650,11 @@ struct ProjectGroupSection: View {
     @State private var newTaskName = ""
     @State private var isDropTarget = false
     @FocusState private var isTaskFieldFocused: Bool
+
+    /// All sessions for this project (by path)
+    var projectSessions: [Session] {
+        allSessions.filter { $0.projectPath == project.path }
+    }
 
     var tasks: [Session] {
         group.sessions.filter { !$0.isCompleted && !isProjectSession($0) }
@@ -856,7 +872,7 @@ struct ProjectGroupSection: View {
                         if idString.hasPrefix("group:") { return }
 
                         if let sessionId = UUID(uuidString: idString),
-                           let session = project.sessions.first(where: { $0.id == sessionId }) {
+                           let session = projectSessions.first(where: { $0.id == sessionId }) {
                             DispatchQueue.main.async {
                                 // Move folder on disk if task has a folder
                                 if let currentPath = session.taskFolderPath {
@@ -915,7 +931,7 @@ struct ProjectGroupSection: View {
                     } else {
                         // Handle task drop into this group
                         if let sessionId = UUID(uuidString: idString),
-                           let session = project.sessions.first(where: { $0.id == sessionId }) {
+                           let session = projectSessions.first(where: { $0.id == sessionId }) {
                             DispatchQueue.main.async {
                                 // Move folder on disk if task has a folder
                                 if let currentPath = session.taskFolderPath {
