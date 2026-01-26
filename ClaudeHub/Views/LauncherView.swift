@@ -150,6 +150,9 @@ struct LauncherView: View {
             let project = Project(name: name, path: path, icon: icon, category: .client)
             modelContext.insert(project)
         }
+
+        // Explicitly save to ensure persistence
+        try? modelContext.save()
     }
 }
 
