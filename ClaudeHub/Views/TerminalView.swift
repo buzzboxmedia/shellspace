@@ -577,10 +577,18 @@ class TerminalController: ObservableObject {
         // Use task folder as working directory if available (enables per-task session isolation)
         let workingDir = taskFolderPath ?? directory
 
-        // Always use --continue to resume the most recent session in this directory
-        // Claude Code will start a new session if none exists
-        let claudeCommand = "cd '\(workingDir)' && claude --continue --dangerously-skip-permissions\n"
-        logger.info("Starting Claude in: \(workingDir) with --continue")
+        // Check if there's an existing session in this directory
+        let hasExistingSession = checkForExistingSession(in: workingDir)
+
+        // Only use --continue if there's an existing session to continue
+        let claudeCommand: String
+        if hasExistingSession {
+            claudeCommand = "cd '\(workingDir)' && claude --continue --dangerously-skip-permissions\n"
+            logger.info("Starting Claude in: \(workingDir) with --continue (existing session found)")
+        } else {
+            claudeCommand = "cd '\(workingDir)' && claude --dangerously-skip-permissions\n"
+            logger.info("Starting Claude in: \(workingDir) (new session)")
+        }
         terminalView?.send(txt: claudeCommand)
 
         // Ensure terminal has focus after Claude starts (only if no text field is active)
@@ -596,6 +604,24 @@ class TerminalController: ObservableObject {
                 window.makeFirstResponder(terminal)
             }
         }
+    }
+
+    /// Check if there's an existing Claude session for the given directory
+    private func checkForExistingSession(in directory: String) -> Bool {
+        // Convert path to Claude's folder format (slashes become hyphens)
+        let claudeProjectPath = directory.replacingOccurrences(of: "/", with: "-")
+        let claudeProjectsDir = "\(NSHomeDirectory())/.claude/projects/\(claudeProjectPath)"
+
+        // Check if the directory exists and has any .jsonl files
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: claudeProjectsDir),
+              let files = try? fileManager.contentsOfDirectory(atPath: claudeProjectsDir) else {
+            return false
+        }
+
+        let hasSessionFiles = files.contains { $0.hasSuffix(".jsonl") }
+        logger.info("Checking for existing session in \(claudeProjectsDir): \(hasSessionFiles ? "found" : "none")")
+        return hasSessionFiles
     }
 
     private func configureTerminal() {
