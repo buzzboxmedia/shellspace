@@ -1270,6 +1270,15 @@ struct TaskRow: View {
                 Label("Rename", systemImage: "pencil")
             }
 
+            // Only show "Promote to Project" for tasks not already in a group
+            if session.taskGroup == nil && !isCompleted {
+                Button {
+                    promoteToProject()
+                } label: {
+                    Label("Promote to Project", systemImage: "folder.badge.plus")
+                }
+            }
+
             if isCompleted {
                 Button {
                     session.isCompleted = false
@@ -1414,6 +1423,49 @@ struct TaskRow: View {
                 }
             } catch {
                 print("Failed to save to legacy task file: \(error)")
+            }
+        }
+    }
+
+    /// Promote this task to a project (sub-project within the current project)
+    private func promoteToProject() {
+        // Create a new ProjectGroup with the task's name
+        let group = ProjectGroup(
+            name: session.name,
+            projectPath: project.path,
+            sortOrder: (project.taskGroups.map(\.sortOrder).max() ?? -1) + 1
+        )
+        group.project = project
+        modelContext.insert(group)
+
+        // Move the session into the new group
+        session.taskGroup = group
+
+        // Create project folder on disk if task has a folder
+        if let taskFolderPath = session.taskFolderPath {
+            Task {
+                do {
+                    // Create the project folder structure
+                    let projectFolder = try TaskFolderService.shared.createProject(
+                        projectPath: project.path,
+                        projectName: session.name,
+                        clientName: project.name,
+                        description: nil
+                    )
+
+                    // Move task folder into the new project folder
+                    let taskFolderURL = URL(fileURLWithPath: taskFolderPath)
+                    let taskFolderName = taskFolderURL.lastPathComponent
+                    let newTaskLocation = projectFolder.appendingPathComponent(taskFolderName)
+
+                    try FileManager.default.moveItem(at: taskFolderURL, to: newTaskLocation)
+
+                    await MainActor.run {
+                        session.taskFolderPath = newTaskLocation.path
+                    }
+                } catch {
+                    print("Failed to create project folder structure: \(error)")
+                }
             }
         }
     }
