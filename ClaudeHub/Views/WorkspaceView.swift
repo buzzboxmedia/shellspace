@@ -676,13 +676,30 @@ struct ProjectGroupSection: View {
         allSessions.filter { $0.projectPath == project.path }
     }
 
+    /// Get tasks by folder path (more reliable than relationship)
     var tasks: [Session] {
-        group.sessions.filter { !$0.isCompleted && !isProjectSession($0) }
+        let groupFolderPath = TaskFolderService.shared.projectDirectory(
+            projectPath: project.path,
+            projectName: group.name
+        ).path
+
+        return projectSessions.filter { session in
+            guard !session.isCompleted,
+                  let path = session.taskFolderPath else { return false }
+            // Task is in this group if its parent folder matches the group folder
+            // AND it's not the project session itself
+            let isInGroup = path.hasPrefix(groupFolderPath + "/")
+            return isInGroup
+        }
     }
 
     /// The session representing the project itself (not a sub-task)
     var projectSession: Session? {
-        group.sessions.first { isProjectSession($0) }
+        let expectedProjectPath = TaskFolderService.shared.projectDirectory(
+            projectPath: project.path,
+            projectName: group.name
+        ).path
+        return projectSessions.first { $0.taskFolderPath == expectedProjectPath }
     }
 
     /// Check if a session is the project session (its folder is the project folder, not a sub-task)
