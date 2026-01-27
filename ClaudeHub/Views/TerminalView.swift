@@ -73,8 +73,11 @@ struct TerminalView: View {
                             sessionId: session.id,
                             claudeSessionId: session.claudeSessionId,
                             parkerBriefing: session.parkerBriefing,
-                            taskFolderPath: session.taskFolderPath
+                            taskFolderPath: session.taskFolderPath,
+                            hasBeenLaunched: session.hasBeenLaunched
                         )
+                        // Mark session as launched (for --continue logic on reopening)
+                        session.hasBeenLaunched = true
                         // Start waiting state monitor
                         terminalController.startWaitingStateMonitor(session: session, appState: appState)
                         // Trigger view refresh and capture session ID
@@ -512,7 +515,7 @@ class TerminalController: ObservableObject {
         return truncated
     }
 
-    func startClaude(in directory: String, sessionId: UUID, claudeSessionId: String? = nil, parkerBriefing: String? = nil, taskFolderPath: String? = nil) {
+    func startClaude(in directory: String, sessionId: UUID, claudeSessionId: String? = nil, parkerBriefing: String? = nil, taskFolderPath: String? = nil, hasBeenLaunched: Bool = false) {
         logger.info("startClaude called for directory: \(directory), sessionId: \(sessionId), claudeSessionId: \(claudeSessionId ?? "none")")
         logger.info("DEBUG: currentSessionId=\(String(describing: self.currentSessionId)), terminalView=\(self.terminalView != nil ? "exists" : "nil")")
 
@@ -565,30 +568,31 @@ class TerminalController: ObservableObject {
 
                 // Small delay before starting Claude so briefing is visible
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                    self?.startClaudeCommand(in: directory, claudeSessionId: claudeSessionId, taskFolderPath: taskFolderPath)
+                    self?.startClaudeCommand(in: directory, claudeSessionId: claudeSessionId, taskFolderPath: taskFolderPath, hasBeenLaunched: hasBeenLaunched)
                 }
             } else {
-                self?.startClaudeCommand(in: directory, claudeSessionId: claudeSessionId, taskFolderPath: taskFolderPath)
+                self?.startClaudeCommand(in: directory, claudeSessionId: claudeSessionId, taskFolderPath: taskFolderPath, hasBeenLaunched: hasBeenLaunched)
             }
         }
     }
 
-    private func startClaudeCommand(in directory: String, claudeSessionId: String?, taskFolderPath: String? = nil) {
+    private func startClaudeCommand(in directory: String, claudeSessionId: String?, taskFolderPath: String? = nil, hasBeenLaunched: Bool = false) {
         // Use task folder as working directory if available (enables per-task session isolation)
         let workingDir = taskFolderPath ?? directory
 
         // Only try to continue if:
-        // 1. This is a task with its own folder (taskFolderPath is set), AND
-        // 2. There's an existing session in that folder
-        let shouldContinue = taskFolderPath != nil && checkForExistingSession(in: workingDir)
+        // 1. This session has been launched before in ClaudeHub (hasBeenLaunched), AND
+        // 2. This is a task with its own folder (taskFolderPath is set), AND
+        // 3. There's an existing session in that folder
+        let shouldContinue = hasBeenLaunched && taskFolderPath != nil && checkForExistingSession(in: workingDir)
 
         let claudeCommand: String
         if shouldContinue {
             claudeCommand = "cd '\(workingDir)' && claude --continue --dangerously-skip-permissions\n"
-            logger.info("Starting Claude in: \(workingDir) with --continue (task has existing session)")
+            logger.info("Starting Claude in: \(workingDir) with --continue (task has been launched before)")
         } else {
             claudeCommand = "cd '\(workingDir)' && claude --dangerously-skip-permissions\n"
-            logger.info("Starting Claude in: \(workingDir) (new session - no task folder or no existing session)")
+            logger.info("Starting Claude in: \(workingDir) (new session or first launch)")
         }
         terminalView?.send(txt: claudeCommand)
 

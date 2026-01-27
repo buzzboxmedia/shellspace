@@ -42,6 +42,9 @@ final class Session {
     // Waiting for input (local state, synced for mobile notifications)
     var isWaitingForInput: Bool
 
+    // Track if Claude has been launched in this session (for --continue logic)
+    var hasBeenLaunched: Bool
+
     // Relationships
     var project: Project?
     var taskGroup: ProjectGroup?
@@ -99,6 +102,7 @@ final class Session {
         self.parkerBriefing = parkerBriefing
         self.isCompleted = false
         self.isWaitingForInput = false
+        self.hasBeenLaunched = false
     }
 }
 
@@ -134,6 +138,7 @@ struct SessionMetadata: Codable {
     var isCompleted: Bool
     var completedAt: Date?
     var isWaitingForInput: Bool
+    var hasBeenLaunched: Bool
 
     // Relationship references (stored as UUIDs, not objects)
     var projectId: UUID?
@@ -162,6 +167,7 @@ extension Session {
             isCompleted: isCompleted,
             completedAt: completedAt,
             isWaitingForInput: isWaitingForInput,
+            hasBeenLaunched: hasBeenLaunched,
             projectId: project?.id,
             taskGroupId: taskGroup?.id
         )
@@ -186,6 +192,7 @@ extension Session {
         self.isCompleted = metadata.isCompleted
         self.completedAt = metadata.completedAt
         self.isWaitingForInput = metadata.isWaitingForInput
+        self.hasBeenLaunched = metadata.hasBeenLaunched
 
         // Note: Project and TaskGroup relationships are resolved separately
         // by SessionSyncService during import
