@@ -356,6 +356,13 @@ class TaskImportService {
             session.taskFolderPath = taskFolder.path
             session.project = project
 
+            // Check if there's an existing Claude conversation for this task folder
+            // If so, mark as launched so --continue will work
+            if hasExistingClaudeSession(for: taskFolder.path) {
+                session.hasBeenLaunched = true
+                logger.info("Found existing Claude session for imported task: \(taskContent.title ?? "Unknown")")
+            }
+
             // Mark as completed if task status is done
             if taskContent.isDone {
                 session.isCompleted = true
@@ -449,5 +456,20 @@ class TaskImportService {
         let taskFolders = findTaskFolders(in: tasksDir)
 
         return taskFolders.filter { !existingTaskPaths.contains($0.path) }.count
+    }
+
+    /// Check if there's an existing Claude session (conversation) for a task folder path
+    private func hasExistingClaudeSession(for taskFolderPath: String) -> Bool {
+        // Convert path to Claude's folder format (slashes become hyphens)
+        let claudeProjectPath = taskFolderPath.replacingOccurrences(of: "/", with: "-")
+        let claudeProjectsDir = "\(NSHomeDirectory())/.claude/projects/\(claudeProjectPath)"
+
+        // Check if the directory exists and has any .jsonl files
+        guard fileManager.fileExists(atPath: claudeProjectsDir),
+              let files = try? fileManager.contentsOfDirectory(atPath: claudeProjectsDir) else {
+            return false
+        }
+
+        return files.contains { $0.hasSuffix(".jsonl") }
     }
 }
