@@ -325,9 +325,18 @@ class TaskImportService {
             return 0
         }
 
-        // Get existing sessions linked to task folders (lowercased for case-insensitive comparison)
+        // Query sessions directly from database by projectPath (don't rely on project.sessions relationship)
+        let projectPath = project.path
+        let descriptor = FetchDescriptor<Session>(
+            predicate: #Predicate<Session> { session in
+                session.projectPath == projectPath
+            }
+        )
+        let existingSessions = (try? modelContext.fetch(descriptor)) ?? []
+
+        // Get existing task folder paths (lowercased for case-insensitive comparison)
         let existingTaskPaths = Set(
-            (project.sessions ?? []).compactMap { $0.taskFolderPath?.lowercased() }
+            existingSessions.compactMap { $0.taskFolderPath?.lowercased() }
         )
 
         var importedCount = 0
