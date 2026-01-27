@@ -587,11 +587,9 @@ class TerminalController: ObservableObject {
         logger.info("DEBUG startClaudeCommand: hasBeenLaunched=\(hasBeenLaunched), taskFolderPath=\(taskFolderPath ?? "nil"), hasExistingSession=\(hasExistingSession)")
         print("DEBUG: hasBeenLaunched=\(hasBeenLaunched), taskFolderPath=\(taskFolderPath ?? "nil"), hasExistingSession=\(hasExistingSession)")
 
-        // Only try to continue if:
-        // 1. This session has been launched before in ClaudeHub (hasBeenLaunched), AND
-        // 2. This is a task with its own folder (taskFolderPath is set), AND
-        // 3. There's an existing session in that folder
-        let shouldContinue = hasBeenLaunched && taskFolderPath != nil && hasExistingSession
+        // Continue if there's a task folder with an existing Claude session
+        // (the presence of a session file is the reliable indicator, not hasBeenLaunched flag)
+        let shouldContinue = taskFolderPath != nil && hasExistingSession
 
         let claudeCommand: String
         if shouldContinue {
