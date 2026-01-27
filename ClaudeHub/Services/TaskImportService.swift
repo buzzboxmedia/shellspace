@@ -138,12 +138,9 @@ class TaskImportService {
         }
 
         // Validate project groups - they should be directories without TASK.md
-        logger.info("DEBUG: Validating \(project.taskGroups.count) groups for project \(project.name)")
         for group in project.taskGroups ?? [] {
             let groupSlug = taskFolderService.slugify(group.name)
             let groupPath = tasksDir.appendingPathComponent(groupSlug)
-            logger.info("DEBUG: Checking group '\(group.name)' -> slug '\(groupSlug)' -> path '\(groupPath.path)'")
-            logger.info("DEBUG: Group has \(group.sessions.count) sessions")
 
             // Check if directory exists
             var isDir: ObjCBool = false
@@ -162,12 +159,10 @@ class TaskImportService {
             // Check if it has TASK.md - but projects now have TASK.md too
             // Only remove if it's a task (not a project) based on **Type:** field
             let taskFile = groupPath.appendingPathComponent("TASK.md")
-            logger.info("DEBUG: Checking TASK.md at '\(taskFile.path)' exists=\(self.fileManager.fileExists(atPath: taskFile.path))")
             if fileManager.fileExists(atPath: taskFile.path) {
                 // Read the file and check if it's a project or task
                 if let content = try? String(contentsOf: taskFile, encoding: .utf8) {
                     let isProject = content.contains("**Type:** project")
-                    logger.info("DEBUG: TASK.md content check - isProject=\(isProject)")
                     if !isProject {
                         // It's a task folder, not a project - remove the group
                         logger.info("Group is actually a task folder (has TASK.md without Type: project), removing group: \(group.name)")
@@ -219,15 +214,7 @@ class TaskImportService {
                 group.projectPath == projectPath
             }
         )
-        guard let groups = try? modelContext.fetch(groupDescriptor), !groups.isEmpty else {
-            logger.info("DEBUG relink: No groups found for project")
-            return
-        }
-
-        logger.info("DEBUG relink: Found \(sessions.count) sessions and \(groups.count) groups")
-        for g in groups {
-            logger.info("DEBUG relink: Available group '\(g.name)' -> slug '\(self.taskFolderService.slugify(g.name))'")
-        }
+        guard let groups = try? modelContext.fetch(groupDescriptor), !groups.isEmpty else { return }
 
         var relinkedCount = 0
 
@@ -235,11 +222,7 @@ class TaskImportService {
             guard let taskPath = session.taskFolderPath else { continue }
 
             // Skip if already has a group
-            if session.taskGroup != nil {
-                logger.info("DEBUG relink: Session '\(session.name)' already has group '\(session.taskGroup?.name ?? "nil")'")
-                continue
-            }
-            logger.info("DEBUG relink: Session '\(session.name)' has NO group, taskPath=\(taskPath)")
+            if session.taskGroup != nil { continue }
 
             // Check if the task is inside a sub-project folder
             let taskURL = URL(fileURLWithPath: taskPath)
