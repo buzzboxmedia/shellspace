@@ -1065,20 +1065,25 @@ struct TaskRow: View {
         session.isCompleted
     }
 
-    /// Status color: blue (working), green (active/logged), orange (waiting), gray (inactive)
+    /// Status color: green (completed), blue (working/active), orange (waiting), gray (inactive)
     var statusColor: Color {
+        if isCompleted { return .green }
         if isWorking { return .blue }
-        if isActive { return .green }
+        if isActive { return .blue }
         if isWaiting { return .orange }
-        if isLogged { return .green.opacity(0.6) }
         return Color.gray.opacity(0.4)
     }
 
     var body: some View {
         HStack(spacing: 10) {
-            // Status indicator with logged checkmark
+            // Status indicator
             ZStack {
-                if isWorking {
+                if isCompleted {
+                    // Green checkmark for completed tasks
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.green)
+                } else if isWorking {
                     // Pulsing blue circle when Claude is working
                     Circle()
                         .fill(Color.blue.opacity(0.3))
@@ -1089,10 +1094,10 @@ struct TaskRow: View {
                         .modifier(PulseAnimation())
                 } else if isActive {
                     Circle()
-                        .fill(Color.green.opacity(0.3))
+                        .fill(Color.blue.opacity(0.3))
                         .frame(width: 16, height: 16)
                     Circle()
-                        .fill(statusColor)
+                        .fill(Color.blue)
                         .frame(width: 8, height: 8)
                 } else if isWaiting {
                     Circle()
@@ -1101,10 +1106,6 @@ struct TaskRow: View {
                     Circle()
                         .fill(statusColor)
                         .frame(width: 8, height: 8)
-                } else if isLogged && !isActive {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.green)
                 } else {
                     Circle()
                         .fill(statusColor)
@@ -1346,21 +1347,15 @@ struct TaskRow: View {
                 controller.saveLog(for: session)
             }
 
-            // Move task folder to completed directory
+            // Update TASK.md status to completed (don't move folder - keeps conversation path intact)
             if let taskFolderPath = session.taskFolderPath {
                 do {
                     try TaskFolderService.shared.updateTaskStatus(
                         at: URL(fileURLWithPath: taskFolderPath),
-                        status: "done"
+                        status: "completed"
                     )
-                    if let newPath = try TaskFolderService.shared.moveToCompleted(
-                        taskFolderPath: taskFolderPath,
-                        projectPath: project.path
-                    ) {
-                        session.taskFolderPath = newPath.path
-                    }
                 } catch {
-                    print("Failed to move task to completed: \(error)")
+                    print("Failed to update task status: \(error)")
                 }
             }
 
