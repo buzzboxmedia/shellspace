@@ -257,13 +257,21 @@ struct SessionSidebar: View {
         // Export to Dropbox (if sync enabled)
         SessionSyncService.shared.exportSession(session)
 
-        windowState.activeSession = session
-        isCreatingTask = false
-        newTaskName = ""
-
         // Create task folder with TASK.md
         let subProjectName = selectedGroupForNewTask?.name
         selectedGroupForNewTask = nil
+
+        // Set expected task folder path BEFORE creating it (prevents duplicate import)
+        let expectedPath = TaskFolderService.shared.taskFolderPath(
+            projectPath: project.path,
+            subProjectName: subProjectName,
+            taskName: name
+        )
+        session.taskFolderPath = expectedPath.path
+
+        windowState.activeSession = session
+        isCreatingTask = false
+        newTaskName = ""
 
         Task {
             do {
@@ -274,12 +282,18 @@ struct SessionSidebar: View {
                     taskName: name,
                     description: nil
                 )
-                // Link session to task folder
-                await MainActor.run {
-                    session.taskFolderPath = taskFolder.path
+                // Verify path matches (it should)
+                if taskFolder.path != expectedPath.path {
+                    await MainActor.run {
+                        session.taskFolderPath = taskFolder.path
+                    }
                 }
             } catch {
                 print("Failed to create task folder: \(error)")
+                // Clear the path since folder creation failed
+                await MainActor.run {
+                    session.taskFolderPath = nil
+                }
             }
         }
     }
@@ -1000,6 +1014,18 @@ struct ProjectGroupSection: View {
         )
         session.project = project
         session.taskGroup = group
+
+        // Create task folder with TASK.md (inside the project group folder)
+        let subProjectName = group.name
+
+        // Set expected task folder path BEFORE creating it (prevents duplicate import)
+        let expectedPath = TaskFolderService.shared.taskFolderPath(
+            projectPath: project.path,
+            subProjectName: subProjectName,
+            taskName: name
+        )
+        session.taskFolderPath = expectedPath.path
+
         modelContext.insert(session)
 
         // Export to Dropbox (if sync enabled)
@@ -1008,9 +1034,6 @@ struct ProjectGroupSection: View {
         windowState.activeSession = session
         isCreatingTask = false
         newTaskName = ""
-
-        // Create task folder with TASK.md (inside the project group folder)
-        let subProjectName = group.name
 
         Task {
             do {
@@ -1021,12 +1044,18 @@ struct ProjectGroupSection: View {
                     taskName: name,
                     description: nil
                 )
-                // Link session to task folder
-                await MainActor.run {
-                    session.taskFolderPath = taskFolder.path
+                // Verify path matches (it should)
+                if taskFolder.path != expectedPath.path {
+                    await MainActor.run {
+                        session.taskFolderPath = taskFolder.path
+                    }
                 }
             } catch {
                 print("Failed to create task folder: \(error)")
+                // Clear the path since folder creation failed
+                await MainActor.run {
+                    session.taskFolderPath = nil
+                }
             }
         }
     }
