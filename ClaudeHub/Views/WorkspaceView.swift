@@ -1044,6 +1044,8 @@ struct TaskRow: View {
     @State private var isEditing = false
     @State private var editedName: String = ""
     @State private var isCompleting = false
+    @State private var showBillingSheet = false
+    @State private var calculatedBilling: BillingHours?
 
     var isActive: Bool {
         windowState.activeSession?.id == session.id
@@ -1317,10 +1319,36 @@ struct TaskRow: View {
                 Label("Delete", systemImage: "trash")
             }
         }
+        .sheet(isPresented: $showBillingSheet) {
+            BillingSheetView(
+                taskName: session.name,
+                billing: calculatedBilling ?? BillingHours(actualHours: 0.25, suggestedHours: 0.25),
+                onConfirm: { billedHours in
+                    showBillingSheet = false
+                    finalizeCompletion(billedHours: billedHours)
+                },
+                onCancel: {
+                    showBillingSheet = false
+                }
+            )
+        }
     }
 
-    /// Complete a task - save log and mark as done
+    /// Complete a task - calculate billing hours and show confirmation
     private func completeTask() {
+        // Calculate billing hours from conversation timestamps
+        if let taskFolderPath = session.taskFolderPath {
+            calculatedBilling = TaskFolderService.shared.calculateBillingHours(taskFolderPath: taskFolderPath)
+        } else {
+            calculatedBilling = BillingHours(actualHours: 0.25, suggestedHours: 0.25)
+        }
+
+        // Show billing confirmation sheet
+        showBillingSheet = true
+    }
+
+    /// Actually complete the task after billing confirmation
+    private func finalizeCompletion(billedHours: Double) {
         isCompleting = true
 
         // Save the log first
@@ -1347,15 +1375,23 @@ struct TaskRow: View {
                 controller.saveLog(for: session)
             }
 
-            // Update TASK.md status to completed (don't move folder - keeps conversation path intact)
+            // Update TASK.md status and billing
             if let taskFolderPath = session.taskFolderPath {
+                let folderURL = URL(fileURLWithPath: taskFolderPath)
                 do {
                     try TaskFolderService.shared.updateTaskStatus(
-                        at: URL(fileURLWithPath: taskFolderPath),
+                        at: folderURL,
                         status: "completed"
                     )
+                    // Add billing info to TASK.md
+                    let actualHours = calculatedBilling?.actualHours ?? 0.25
+                    try TaskFolderService.shared.updateTaskBilling(
+                        at: folderURL,
+                        actualHours: actualHours,
+                        billedHours: billedHours
+                    )
                 } catch {
-                    print("Failed to update task status: \(error)")
+                    print("Failed to update task: \(error)")
                 }
             }
 
@@ -1857,6 +1893,160 @@ struct PulseAnimation: ViewModifier {
             .onAppear {
                 isPulsing = true
             }
+    }
+}
+
+// MARK: - Billing Sheet View
+
+struct BillingSheetView: View {
+    let taskName: String
+    let billing: BillingHours
+    let onConfirm: (Double) -> Void
+    let onCancel: () -> Void
+
+    @State private var selectedHours: Double = 0.25
+
+    // Available billing increments (0.25 to 8 hours)
+    private let hourOptions: [Double] = stride(from: 0.25, through: 8.0, by: 0.25).map { $0 }
+
+    var body: some View {
+        VStack(spacing: 24) {
+            // Header
+            VStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.green)
+
+                Text("Complete Task")
+                    .font(.system(size: 20, weight: .semibold))
+
+                Text(taskName)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(.top, 8)
+
+            Divider()
+
+            // Time breakdown
+            VStack(alignment: .leading, spacing: 16) {
+                // Actual time
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Actual Time")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        Text("Based on conversation timestamps")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                    Spacer()
+                    Text(billing.actualDisplay)
+                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.primary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.white.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                // Suggested time
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Suggested Billing")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        Text("Industry standard (1.5x actual)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                    Spacer()
+                    Text(billing.suggestedDisplay)
+                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.blue)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.blue.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                // Billed hours picker
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Bill for:")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.secondary)
+
+                    Picker("Hours", selection: $selectedHours) {
+                        ForEach(hourOptions, id: \.self) { hours in
+                            Text(formatHoursForPicker(hours))
+                                .tag(hours)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+            .padding(.horizontal, 8)
+
+            Divider()
+
+            // Buttons
+            HStack(spacing: 12) {
+                Button {
+                    onCancel()
+                } label: {
+                    Text("Cancel")
+                        .font(.system(size: 14, weight: .medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
+                .background(Color.white.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                Button {
+                    onConfirm(selectedHours)
+                } label: {
+                    Text("Complete")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
+                .background(Color.green)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .padding(.horizontal, 8)
+        }
+        .padding(24)
+        .frame(width: 360)
+        .background(VisualEffectView(material: .hudWindow, blendingMode: .behindWindow))
+        .onAppear {
+            // Default to suggested hours
+            selectedHours = billing.suggestedHours
+        }
+    }
+
+    private func formatHoursForPicker(_ hours: Double) -> String {
+        if hours < 1 {
+            return String(format: "%.0f minutes", hours * 60)
+        } else if hours == 1 {
+            return "1 hour"
+        } else {
+            let wholeHours = Int(hours)
+            let minutes = Int((hours - Double(wholeHours)) * 60)
+            if minutes == 0 {
+                return "\(wholeHours) hours"
+            } else {
+                return "\(wholeHours)h \(minutes)m"
+            }
+        }
     }
 }
 

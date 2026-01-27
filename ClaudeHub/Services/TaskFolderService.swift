@@ -619,3 +619,186 @@ struct ProgressEntry: Identifiable {
     var duration: String?
     var content: String
 }
+
+// MARK: - Billing Hours
+
+struct BillingHours {
+    /// Actual hours calculated from conversation timestamps
+    let actualHours: Double
+    /// Suggested industry standard hours (typically higher)
+    let suggestedHours: Double
+    /// Human-readable actual time
+    var actualDisplay: String {
+        formatHours(actualHours)
+    }
+    /// Human-readable suggested time
+    var suggestedDisplay: String {
+        formatHours(suggestedHours)
+    }
+
+    private func formatHours(_ hours: Double) -> String {
+        if hours < 1 {
+            let minutes = Int(hours * 60)
+            return "\(minutes) min"
+        } else {
+            let wholeHours = Int(hours)
+            let minutes = Int((hours - Double(wholeHours)) * 60)
+            if minutes == 0 {
+                return "\(wholeHours)h"
+            } else {
+                return "\(wholeHours)h \(minutes)m"
+            }
+        }
+    }
+}
+
+extension TaskFolderService {
+
+    /// Calculate billing hours from Claude conversation timestamps
+    /// - Parameter taskFolderPath: Path to the task folder
+    /// - Returns: BillingHours with actual and suggested hours, or nil if no conversation found
+    func calculateBillingHours(taskFolderPath: String) -> BillingHours? {
+        // Convert task folder path to Claude conversation path
+        // ~/.claude/projects/{path-with-hyphens}/
+        let conversationPath = claudeConversationPath(for: taskFolderPath)
+
+        guard fileManager.fileExists(atPath: conversationPath) else {
+            logger.info("No conversation directory found at: \(conversationPath)")
+            return nil
+        }
+
+        // Find all .jsonl files in the conversation directory
+        do {
+            let contents = try fileManager.contentsOfDirectory(atPath: conversationPath)
+            let jsonlFiles = contents.filter { $0.hasSuffix(".jsonl") }
+
+            guard !jsonlFiles.isEmpty else {
+                logger.info("No .jsonl files found in: \(conversationPath)")
+                return nil
+            }
+
+            var allTimestamps: [Date] = []
+            let isoFormatter = ISO8601DateFormatter()
+            isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+            // Parse timestamps from all conversation files
+            for jsonlFile in jsonlFiles {
+                let filePath = (conversationPath as NSString).appendingPathComponent(jsonlFile)
+                if let content = fileManager.contents(atPath: filePath),
+                   let text = String(data: content, encoding: .utf8) {
+                    let lines = text.components(separatedBy: "\n")
+                    for line in lines where !line.isEmpty {
+                        // Extract timestamp using regex
+                        if let range = line.range(of: "\"timestamp\":\"([^\"]+)\"", options: .regularExpression) {
+                            let match = line[range]
+                            // Extract just the timestamp value
+                            if let valueRange = match.range(of: "\\d{4}-\\d{2}-\\d{2}T[^\"]+", options: .regularExpression) {
+                                let timestampStr = String(match[valueRange])
+                                if let date = isoFormatter.date(from: timestampStr) {
+                                    allTimestamps.append(date)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            guard allTimestamps.count >= 2 else {
+                // Not enough timestamps to calculate duration
+                return BillingHours(actualHours: 0.25, suggestedHours: 0.25)
+            }
+
+            // Sort timestamps and calculate duration
+            allTimestamps.sort()
+            let firstTimestamp = allTimestamps.first!
+            let lastTimestamp = allTimestamps.last!
+
+            let durationSeconds = lastTimestamp.timeIntervalSince(firstTimestamp)
+            let durationHours = durationSeconds / 3600.0
+
+            // Round to 15-minute increments (0.25 hours)
+            let actualHours = roundToQuarterHour(durationHours)
+
+            // Suggested hours: industry standard is typically 1.5-2x actual conversation time
+            // Plus minimum of 0.25 hours for any task
+            let suggestedHours = max(0.25, roundToQuarterHour(actualHours * 1.5))
+
+            return BillingHours(actualHours: actualHours, suggestedHours: suggestedHours)
+
+        } catch {
+            logger.error("Failed to read conversation directory: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Convert a task folder path to the Claude conversation directory path
+    func claudeConversationPath(for taskFolderPath: String) -> String {
+        // Claude stores conversations in ~/.claude/projects/{path-with-hyphens}/
+        // The path is the absolute path with slashes replaced by hyphens
+        let homePath = FileManager.default.homeDirectoryForCurrentUser.path
+        let claudeProjectsPath = "\(homePath)/.claude/projects"
+
+        // Convert task folder path to hyphenated format
+        var pathForConversation = taskFolderPath
+        // Remove leading slash if present
+        if pathForConversation.hasPrefix("/") {
+            pathForConversation = String(pathForConversation.dropFirst())
+        }
+        // Replace slashes with hyphens
+        pathForConversation = pathForConversation.replacingOccurrences(of: "/", with: "-")
+
+        return "\(claudeProjectsPath)/-\(pathForConversation)"
+    }
+
+    /// Round hours to nearest 0.25 (15-minute increment)
+    private func roundToQuarterHour(_ hours: Double) -> Double {
+        return (hours * 4).rounded() / 4
+    }
+
+    /// Update TASK.md with billing information
+    func updateTaskBilling(at folderPath: URL, actualHours: Double, billedHours: Double) throws {
+        let taskFile = folderPath.appendingPathComponent("TASK.md")
+
+        guard fileManager.fileExists(atPath: taskFile.path) else {
+            return
+        }
+
+        var content = try String(contentsOf: taskFile, encoding: .utf8)
+
+        // Format hours for display
+        let formatHours: (Double) -> String = { hours in
+            if hours < 1 {
+                return String(format: "%.0f min", hours * 60)
+            } else {
+                return String(format: "%.2f hours", hours)
+            }
+        }
+
+        let billingSection = """
+
+        ## Billing
+        **Actual Time:** \(formatHours(actualHours))
+        **Billed:** \(formatHours(billedHours))
+        """
+
+        // Check if billing section already exists
+        if content.contains("## Billing") {
+            // Update existing billing section
+            content = content.replacingOccurrences(
+                of: "## Billing[\\s\\S]*?(?=##|$)",
+                with: billingSection.trimmingCharacters(in: .newlines) + "\n\n",
+                options: .regularExpression
+            )
+        } else {
+            // Add billing section before Progress section
+            if let progressRange = content.range(of: "## Progress") {
+                content.insert(contentsOf: billingSection + "\n\n", at: progressRange.lowerBound)
+            } else {
+                // Append to end if no Progress section
+                content += billingSection
+            }
+        }
+
+        try content.write(to: taskFile, atomically: true, encoding: .utf8)
+    }
+}
