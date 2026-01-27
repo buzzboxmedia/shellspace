@@ -172,6 +172,66 @@ class TaskImportService {
         }
     }
 
+    /// Re-link sessions to their correct task groups based on folder structure
+    /// This fixes sessions that lost their taskGroup assignment
+    @MainActor
+    func relinkSessionsToGroups(for project: Project, modelContext: ModelContext) {
+        let projectPath = project.path
+        let tasksDir = taskFolderService.tasksDirectory(for: project.path)
+
+        // Fetch all sessions for this project
+        let sessionDescriptor = FetchDescriptor<Session>(
+            predicate: #Predicate<Session> { session in
+                session.projectPath == projectPath && session.taskFolderPath != nil
+            }
+        )
+        guard let sessions = try? modelContext.fetch(sessionDescriptor) else { return }
+
+        // Fetch all groups for this project
+        let groupDescriptor = FetchDescriptor<ProjectGroup>(
+            predicate: #Predicate<ProjectGroup> { group in
+                group.projectPath == projectPath
+            }
+        )
+        guard let groups = try? modelContext.fetch(groupDescriptor), !groups.isEmpty else { return }
+
+        var relinkedCount = 0
+
+        for session in sessions {
+            guard let taskPath = session.taskFolderPath else { continue }
+
+            // Skip if already has a group
+            if session.taskGroup != nil { continue }
+
+            // Check if the task is inside a sub-project folder
+            let taskURL = URL(fileURLWithPath: taskPath)
+            let parentFolder = taskURL.deletingLastPathComponent()
+            let parentName = parentFolder.lastPathComponent
+
+            // Skip if parent is "tasks" (not in a sub-project)
+            if parentName == "tasks" { continue }
+
+            // Skip if parent is directly the tasks folder
+            if parentFolder.path == tasksDir.path { continue }
+
+            // Find matching group
+            if let group = groups.first(where: { taskFolderService.slugify($0.name) == parentName }) {
+                session.taskGroup = group
+                relinkedCount += 1
+                logger.info("Re-linked session to group: \(session.name) -> \(group.name)")
+            }
+        }
+
+        if relinkedCount > 0 {
+            do {
+                try modelContext.save()
+                logger.info("Re-linked \(relinkedCount) sessions to their groups")
+            } catch {
+                logger.error("Failed to save re-linked sessions: \(error.localizedDescription)")
+            }
+        }
+    }
+
     /// Remove duplicate sessions with the same taskFolderPath
     /// Keeps the session with hasBeenLaunched=true, or the first one if neither has it
     @MainActor
@@ -196,9 +256,15 @@ class TaskImportService {
         for (_, sessionsWithPath) in sessionsByPath {
             guard sessionsWithPath.count > 1 else { continue }
 
-            // Keep the one with hasBeenLaunched=true, or the first one
+            // Keep the one with taskGroup set, then hasBeenLaunched=true, or the first one
             let sorted = sessionsWithPath.sorted { s1, s2 in
-                // Prefer hasBeenLaunched=true
+                // Prefer sessions with taskGroup set (linked to a sub-project)
+                let s1HasGroup = s1.taskGroup != nil
+                let s2HasGroup = s2.taskGroup != nil
+                if s1HasGroup != s2HasGroup {
+                    return s1HasGroup
+                }
+                // Then prefer hasBeenLaunched=true
                 if s1.hasBeenLaunched != s2.hasBeenLaunched {
                     return s1.hasBeenLaunched
                 }
@@ -370,6 +436,9 @@ class TaskImportService {
         // Clean up any duplicate sessions (same taskFolderPath)
         cleanupDuplicateSessions(for: project, modelContext: modelContext)
 
+        // Re-link sessions that lost their group assignment
+        relinkSessionsToGroups(for: project, modelContext: modelContext)
+
         // Auto-discover project groups from folder structure
         discoverProjectGroups(for: project, modelContext: modelContext)
 
@@ -452,11 +521,16 @@ class TaskImportService {
             // Try to link to a task group based on parent folder
             let parentName = taskFolder.deletingLastPathComponent().lastPathComponent
             if parentName != "tasks" {
-                // Task is in a sub-project folder
-                if let group = (project.taskGroups ?? []).first(where: {
-                    taskFolderService.slugify($0.name) == parentName
-                }) {
+                // Task is in a sub-project folder - query database directly for the group
+                let groupDescriptor = FetchDescriptor<ProjectGroup>(
+                    predicate: #Predicate<ProjectGroup> { group in
+                        group.projectPath == projectPath
+                    }
+                )
+                if let groups = try? modelContext.fetch(groupDescriptor),
+                   let group = groups.first(where: { taskFolderService.slugify($0.name) == parentName }) {
                     session.taskGroup = group
+                    logger.info("Linked imported task to group: \(group.name)")
                 }
             }
 
