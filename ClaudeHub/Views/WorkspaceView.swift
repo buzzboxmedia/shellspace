@@ -1360,6 +1360,14 @@ struct TaskRow: View {
                 Label("Rename", systemImage: "pencil")
             }
 
+            if let folderPath = session.taskFolderPath {
+                Button {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: folderPath))
+                } label: {
+                    Label("Open in Finder", systemImage: "folder")
+                }
+            }
+
             // Only show "Promote to Project" for tasks not already in a group
             if session.taskGroup == nil && !isCompleted {
                 Button {

@@ -43,7 +43,7 @@ final class Session {
     var isWaitingForInput: Bool
 
     // Track if Claude has been launched in this session (for --continue logic)
-    var hasBeenLaunched: Bool
+    var hasBeenLaunched: Bool = false
 
     // Relationships
     var project: Project?
