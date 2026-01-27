@@ -580,19 +580,28 @@ class TerminalController: ObservableObject {
         // Use task folder as working directory if available (enables per-task session isolation)
         let workingDir = taskFolderPath ?? directory
 
+        // Check for existing Claude session
+        let hasExistingSession = checkForExistingSession(in: workingDir)
+
+        // Debug logging
+        logger.info("DEBUG startClaudeCommand: hasBeenLaunched=\(hasBeenLaunched), taskFolderPath=\(taskFolderPath ?? "nil"), hasExistingSession=\(hasExistingSession)")
+        print("DEBUG: hasBeenLaunched=\(hasBeenLaunched), taskFolderPath=\(taskFolderPath ?? "nil"), hasExistingSession=\(hasExistingSession)")
+
         // Only try to continue if:
         // 1. This session has been launched before in ClaudeHub (hasBeenLaunched), AND
         // 2. This is a task with its own folder (taskFolderPath is set), AND
         // 3. There's an existing session in that folder
-        let shouldContinue = hasBeenLaunched && taskFolderPath != nil && checkForExistingSession(in: workingDir)
+        let shouldContinue = hasBeenLaunched && taskFolderPath != nil && hasExistingSession
 
         let claudeCommand: String
         if shouldContinue {
             claudeCommand = "cd '\(workingDir)' && claude --continue --dangerously-skip-permissions\n"
             logger.info("Starting Claude in: \(workingDir) with --continue (task has been launched before)")
+            print("DEBUG: Using --continue")
         } else {
             claudeCommand = "cd '\(workingDir)' && claude --dangerously-skip-permissions\n"
             logger.info("Starting Claude in: \(workingDir) (new session or first launch)")
+            print("DEBUG: Starting fresh (no --continue)")
         }
         terminalView?.send(txt: claudeCommand)
 
