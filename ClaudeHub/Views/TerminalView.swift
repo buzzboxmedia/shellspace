@@ -286,7 +286,7 @@ struct TerminalView: View {
 
 // Controller to manage the terminal and process
 class TerminalController: ObservableObject {
-    @Published var terminalView: LocalProcessTerminalView?
+    @Published var terminalView: ClaudeHubTerminalView?
     private var currentSessionId: UUID?
     var hasSummarized = false
     var projectPath: String?  // Store project path for screenshot saving
@@ -532,8 +532,10 @@ class TerminalController: ObservableObject {
 
         // Create terminal view if needed
         if terminalView == nil {
-            logger.info("Creating new LocalProcessTerminalView")
-            terminalView = LocalProcessTerminalView(frame: .zero)
+            logger.info("Creating new ClaudeHubTerminalView")
+            let terminal = ClaudeHubTerminalView(frame: .zero)
+            terminal.projectPath = directory
+            terminalView = terminal
             configureTerminal()
         }
 
@@ -680,7 +682,7 @@ class TerminalController: ObservableObject {
     }
 
     /// Custom 16-color ANSI palette designed to match ClaudeHub's glass UI
-    private func installClaudeHubColorPalette(terminal: LocalProcessTerminalView) {
+    private func installClaudeHubColorPalette(terminal: ClaudeHubTerminalView) {
         let terminalCore = terminal.getTerminal()
 
         // ClaudeHub palette - blue-tinted with purple/cyan accents
@@ -763,62 +765,13 @@ class TerminalController: ObservableObject {
     }
 }
 
-// SwiftUI wrapper for LocalProcessTerminalView using TerminalContainerView for proper focus handling
-struct SwiftTermView: NSViewRepresentable {
-    @ObservedObject var controller: TerminalController
+// MARK: - ClaudeHubTerminalView (subclass eliminates container view, fixing text selection)
 
-    func makeNSView(context: Context) -> TerminalContainerView {
-        if controller.terminalView == nil {
-            controller.terminalView = LocalProcessTerminalView(frame: .zero)
-        }
-
-        let terminalView = controller.terminalView!
-
-        // Disable mouse reporting so text selection works
-        terminalView.allowMouseReporting = false
-
-        // Configure appearance
-        terminalView.configureNativeColors()
-
-        // Create container view to handle focus and keyboard input
-        let containerView = TerminalContainerView()
-        containerView.terminalView = terminalView
-        containerView.controller = controller
-
-        // Add terminal as subview, filling the container
-        terminalView.translatesAutoresizingMaskIntoConstraints = false
-        containerView.addSubview(terminalView)
-        NSLayoutConstraint.activate([
-            terminalView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
-            terminalView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
-            terminalView.topAnchor.constraint(equalTo: containerView.topAnchor),
-            terminalView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
-        ])
-
-        // Configure for selection and keyboard input
-        containerView.configureForSelection()
-
-        // Auto-focus after a delay (but don't steal from text fields)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            containerView.focusTerminal()
-        }
-
-        return containerView
-    }
-
-    func updateNSView(_ nsView: TerminalContainerView, context: Context) {
-        // Don't steal focus on every update
-    }
-}
-
-// Container view that handles click-to-focus and key forwarding
-class TerminalContainerView: NSView {
-    weak var terminalView: LocalProcessTerminalView?
-    weak var controller: TerminalController?  // Reference to get project path
-    private let logger = Logger(subsystem: "com.buzzbox.claudehub", category: "TerminalContainer")
-
-    // Use flipped coordinates to match SwiftUI's coordinate system
-    override var isFlipped: Bool { true }
+/// Subclass of LocalProcessTerminalView that adds ClaudeHub features directly,
+/// eliminating the container view that was intercepting mouse events and breaking selection.
+class ClaudeHubTerminalView: LocalProcessTerminalView {
+    var projectPath: String?
+    private let chLogger = Logger(subsystem: "com.buzzbox.claudehub", category: "ClaudeHubTerminal")
 
     // URL regex for detecting any links (full URLs, domains, subdomains, paths)
     private static let urlPattern = try! NSRegularExpression(
@@ -832,38 +785,28 @@ class TerminalContainerView: NSView {
         options: []
     )
 
-    // Let events pass through to the embedded terminal view
-    override var acceptsFirstResponder: Bool { true }
-    override var canBecomeKeyView: Bool { true }
-
-    override func becomeFirstResponder() -> Bool {
-        // Forward first responder to the terminal
-        terminalView?.window?.makeFirstResponder(terminalView)
-        return true
-    }
-
     private var isShowingHandCursor = false
-    private var trackingArea: NSTrackingArea?
+    private var keyMonitor: Any?
 
-    // Configure terminal for selection and drag-drop
-    func configureForSelection() {
-        // Disable mouse reporting so selection works
-        terminalView?.allowMouseReporting = false
+    // MARK: - Setup
+
+    func configureClaudeHub() {
+        allowMouseReporting = false
         setupDragDrop()
         setupKeyMonitor()
-        // Note: Removed click monitors that were breaking text selection
+        setupMouseMoveMonitor()
     }
 
     private func setupDragDrop() {
-        // Register for file drag and drop, including file promises (used by Mail, etc.)
         registerForDraggedTypes([.fileURL, .png, .tiff, .pdf] + NSFilePromiseReceiver.readableDraggedTypes.map { NSPasteboard.PasteboardType($0) })
     }
 
+    // MARK: - Drag and Drop
+
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        // Accept file drops or file promises (from Mail, etc.)
-        let dominated = sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+        let hasFiles = sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
         let hasPromises = sender.draggingPasteboard.canReadObject(forClasses: [NSFilePromiseReceiver.self], options: nil)
-        if dominated || hasPromises {
+        if hasFiles || hasPromises {
             return .copy
         }
         return []
@@ -881,11 +824,10 @@ class TerminalContainerView: NSView {
             return false
         }
 
-        // Insert each file path into terminal
         for url in urls {
             let path = url.path
-            logger.info("File dropped: \(path)")
-            terminalView?.send(txt: path + " ")
+            chLogger.info("File dropped: \(path)")
+            send(txt: path + " ")
         }
 
         focusTerminal()
@@ -893,7 +835,6 @@ class TerminalContainerView: NSView {
     }
 
     private func handleFilePromises(_ promises: [NSFilePromiseReceiver]) {
-        // Save promised files to a temp directory, then insert paths
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("ClaudeHub-drops-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
@@ -904,10 +845,10 @@ class TerminalContainerView: NSView {
             group.enter()
             promise.receivePromisedFiles(atDestination: tempDir, options: [:], operationQueue: .main) { [weak self] url, error in
                 if let error = error {
-                    self?.logger.error("Failed to receive promised file: \(error.localizedDescription)")
+                    self?.chLogger.error("Failed to receive promised file: \(error.localizedDescription)")
                 } else {
                     receivedURLs.append(url)
-                    self?.logger.info("Received promised file: \(url.path)")
+                    self?.chLogger.info("Received promised file: \(url.path)")
                 }
                 group.leave()
             }
@@ -915,324 +856,42 @@ class TerminalContainerView: NSView {
 
         group.notify(queue: .main) { [weak self] in
             for url in receivedURLs {
-                self?.terminalView?.send(txt: url.path + " ")
+                self?.send(txt: url.path + " ")
             }
             self?.focusTerminal()
         }
     }
 
-    deinit {
-        if let monitor = keyMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let existing = trackingArea {
-            removeTrackingArea(existing)
-        }
-        trackingArea = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(trackingArea!)
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        updateCursorForEvent(event)
-        super.mouseMoved(with: event)
-    }
-
-    override func flagsChanged(with event: NSEvent) {
-        super.flagsChanged(with: event)
-    }
-
-    private func updateCursorForEvent(_ event: NSEvent) {
-        guard let terminal = terminalView else { return }
-        let locationInTerminal = terminal.convert(event.locationInWindow, from: nil)
-
-        if terminal.bounds.contains(locationInTerminal) && detectURLAtPoint(locationInTerminal) != nil {
-            if !isShowingHandCursor {
-                NSCursor.pointingHand.push()
-                isShowingHandCursor = true
-            }
-        } else {
-            if isShowingHandCursor {
-                NSCursor.pop()
-                isShowingHandCursor = false
-            }
-        }
-    }
-
-    // Pass all mouse events directly to the terminal view for native selection
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        // Always return the terminal view for any click in our bounds
-        // This ensures SwiftTerm handles all mouse events for selection
-        if let terminal = terminalView, bounds.contains(point) {
-            return terminal
-        }
-        return super.hitTest(point)
-    }
-
-    // Detect URL at a point in terminal coordinates
-    private func detectURLAtPoint(_ point: CGPoint) -> URL? {
-        guard let terminal = terminalView else { return nil }
-
-        // Get terminal font metrics
-        let font = terminal.font
-        let charWidth = font.advancement(forGlyph: font.glyph(withName: "M")).width
-        let lineHeight = font.ascender - font.descender + font.leading
-
-        // Calculate approximate row/column (using flipped coordinates - origin at top-left)
-        let col = Int(point.x / charWidth)
-        let screenRow = Int(point.y / lineHeight)
-
-        // Get terminal content and scroll position
-        let terminalCore = terminal.getTerminal()
-        let data = terminalCore.getBufferAsData()
-        guard let content = String(data: data, encoding: .utf8) else { return nil }
-
-        let lines = content.components(separatedBy: "\n")
-
-        // Account for scroll position - yDisp is how far we've scrolled from top
-        let scrollOffset = terminalCore.buffer.yDisp
-        let row = scrollOffset + screenRow
-
-        logger.debug("Click at screenRow=\(screenRow), scrollOffset=\(scrollOffset), bufferRow=\(row), totalLines=\(lines.count)")
-
-        // Find the clicked line (approximate)
-        guard row >= 0 && row < lines.count else { return nil }
-        let clickedLine = lines[row]
-
-        // Check if this line is a continuation of a URL from previous line
-        // (starts with non-space characters that look like URL continuation)
-        if row > 0 && !clickedLine.isEmpty && !clickedLine.hasPrefix(" ") {
-            let prevLine = lines[row - 1].trimmingCharacters(in: .whitespaces)
-            // Check if previous line ends with a partial URL
-            if let lastUrlMatch = Self.urlPattern.matches(in: prevLine, options: [], range: NSRange(prevLine.startIndex..., in: prevLine)).last,
-               let swiftRange = Range(lastUrlMatch.range, in: prevLine) {
-                let urlEndCol = prevLine.distance(from: prevLine.startIndex, to: swiftRange.upperBound)
-                // If URL ends near the end of line, it might continue
-                if urlEndCol >= prevLine.count - 2 {
-                    let partialUrl = String(prevLine[swiftRange])
-                    // Get continuation from current line (until space or end)
-                    let continuation = clickedLine.prefix(while: { !$0.isWhitespace })
-                    var fullUrl = partialUrl + continuation
-
-                    if !fullUrl.lowercased().hasPrefix("http://") && !fullUrl.lowercased().hasPrefix("https://") {
-                        fullUrl = "https://" + fullUrl
-                    }
-
-                    // If clicked on this continuation line, return the full URL
-                    if col < continuation.count {
-                        logger.info("Found wrapped URL: \(fullUrl)")
-                        return URL(string: fullUrl)
-                    }
-                }
-            }
-        }
-
-        // Find URLs in this line
-        let range = NSRange(clickedLine.startIndex..., in: clickedLine)
-        let matches = Self.urlPattern.matches(in: clickedLine, options: [], range: range)
-
-        // Check if click position is within any URL
-        for match in matches {
-            if let swiftRange = Range(match.range, in: clickedLine) {
-                let startCol = clickedLine.distance(from: clickedLine.startIndex, to: swiftRange.lowerBound)
-                let endCol = clickedLine.distance(from: clickedLine.startIndex, to: swiftRange.upperBound)
-
-                if col >= startCol && col < endCol {
-                    var urlString = String(clickedLine[swiftRange])
-
-                    // Check if URL continues on next line
-                    if endCol >= clickedLine.count - 2 && row + 1 < lines.count {
-                        let nextLine = lines[row + 1]
-                        if !nextLine.isEmpty && !nextLine.hasPrefix(" ") {
-                            let continuation = nextLine.prefix(while: { !$0.isWhitespace })
-                            urlString += continuation
-                        }
-                    }
-
-                    // Add https:// if no protocol specified
-                    if !urlString.lowercased().hasPrefix("http://") && !urlString.lowercased().hasPrefix("https://") {
-                        urlString = "https://" + urlString
-                    }
-                    logger.info("Found URL at click: \(urlString)")
-                    return URL(string: urlString)
-                }
-            }
-        }
-
-        return nil
-    }
-
-    // Detect file path at a point in terminal coordinates (for double-click to open)
-    private func detectFilePathAtPoint(_ point: CGPoint) -> String? {
-        guard let terminal = terminalView else { return nil }
-
-        // Get terminal font metrics
-        let font = terminal.font
-        let charWidth = font.advancement(forGlyph: font.glyph(withName: "M")).width
-        let lineHeight = font.ascender - font.descender + font.leading
-
-        // Calculate approximate row/column (using flipped coordinates - origin at top-left)
-        let col = Int(point.x / charWidth)
-        let screenRow = Int(point.y / lineHeight)
-
-        // Get terminal content and scroll position
-        let terminalCore = terminal.getTerminal()
-        let data = terminalCore.getBufferAsData()
-        guard let content = String(data: data, encoding: .utf8) else { return nil }
-
-        let lines = content.components(separatedBy: "\n")
-
-        // Account for scroll position
-        let scrollOffset = terminalCore.buffer.yDisp
-        let row = scrollOffset + screenRow
-
-        guard row >= 0 && row < lines.count else { return nil }
-        let clickedLine = lines[row]
-
-        // Find file paths in this line
-        let range = NSRange(clickedLine.startIndex..., in: clickedLine)
-        let matches = Self.filePathPattern.matches(in: clickedLine, options: [], range: range)
-
-        // Check if click position is within any file path
-        for match in matches {
-            if let swiftRange = Range(match.range, in: clickedLine) {
-                let startCol = clickedLine.distance(from: clickedLine.startIndex, to: swiftRange.lowerBound)
-                let endCol = clickedLine.distance(from: clickedLine.startIndex, to: swiftRange.upperBound)
-
-                if col >= startCol && col < endCol {
-                    var pathString = String(clickedLine[swiftRange])
-
-                    // Expand ~ to home directory
-                    if pathString.hasPrefix("~") {
-                        pathString = NSHomeDirectory() + pathString.dropFirst()
-                    }
-
-                    // If it's just a filename (no /), try to find it
-                    if !pathString.contains("/") {
-                        if let resolvedPath = resolveFilename(pathString, fromLines: lines) {
-                            logger.info("Resolved filename '\(pathString)' to: \(resolvedPath)")
-                            return resolvedPath
-                        }
-                    }
-
-                    // Check if file exists
-                    if FileManager.default.fileExists(atPath: pathString) {
-                        logger.info("Found file path at click: \(pathString)")
-                        return pathString
-                    }
-                }
-            }
-        }
-
-        return nil
-    }
-
-    // Try to resolve a filename by looking for directory hints in terminal output
-    private func resolveFilename(_ filename: String, fromLines lines: [String]) -> String? {
-        let fileManager = FileManager.default
-
-        // Look for directory mentions in recent terminal output
-        // Common patterns: "in your X folder", "Created X in", "saved to"
-        var searchDirs: [String] = []
-
-        for line in lines.suffix(50) {
-            // Look for Dropbox folder mentions
-            if let dropboxRange = line.range(of: "Dropbox/[^\\s]+", options: .regularExpression) {
-                let folderPath = NSHomeDirectory() + "/" + String(line[dropboxRange])
-                searchDirs.append(folderPath)
-            }
-
-            // Look for "in your X folder" pattern
-            if let match = line.range(of: "in your ([^\\s]+) folder", options: .regularExpression) {
-                let folderName = line[match].replacingOccurrences(of: "in your ", with: "")
-                    .replacingOccurrences(of: " folder", with: "")
-                // Try common locations
-                searchDirs.append(NSHomeDirectory() + "/Dropbox/" + folderName)
-                searchDirs.append(NSHomeDirectory() + "/Documents/" + folderName)
-                searchDirs.append(NSHomeDirectory() + "/Downloads/" + folderName)
-            }
-
-            // Look for absolute paths mentioned in output
-            if let pathMatch = line.range(of: "(/[^\\s]+)", options: .regularExpression) {
-                let path = String(line[pathMatch])
-                if fileManager.fileExists(atPath: path) {
-                    // Check if it's a directory
-                    var isDir: ObjCBool = false
-                    if fileManager.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue {
-                        searchDirs.append(path)
-                    }
-                }
-            }
-        }
-
-        // Add common default locations
-        searchDirs.append(NSHomeDirectory() + "/Downloads")
-        searchDirs.append(NSHomeDirectory() + "/Documents")
-        searchDirs.append(NSHomeDirectory() + "/Desktop")
-
-        // Also try project path if available
-        if let projectPath = controller?.projectPath {
-            searchDirs.insert(projectPath, at: 0)
-        }
-
-        // Search for the file
-        for dir in searchDirs {
-            let fullPath = (dir as NSString).appendingPathComponent(filename)
-            if fileManager.fileExists(atPath: fullPath) {
-                return fullPath
-            }
-        }
-
-        return nil
-    }
-
-    // Intercept Cmd+C and Cmd+V at the app level to beat SwiftTerm's keyDown
-    private var keyMonitor: Any?
+    // MARK: - Key Monitor (Cmd+C copy, Cmd+V image paste, Cmd+A select all, Cmd+K clear)
 
     func setupKeyMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self,
                   event.modifierFlags.contains(.command),
-                  let terminal = self.terminalView,
                   event.window == self.window else {
                 return event
             }
 
             switch event.charactersIgnoringModifiers {
             case "c":
-                // Copy selected text to clipboard
-                // Use SwiftTerm's built-in copy which handles selection properly
                 if self.copySelectedText() {
-                    return nil  // Consume event only if we copied something
+                    return nil
                 }
-                // If no selection, let it pass through (for Ctrl+C to terminal)
                 return event
             case "a":
-                // Select all text in terminal
-                terminal.selectAll(self)
-                self.logger.info("Select all triggered")
+                self.selectAll(self)
+                self.chLogger.info("Select all triggered")
                 return nil
             case "k":
-                // Clear terminal (Cmd+K like iTerm)
-                let terminalObj = terminal.getTerminal()
+                let terminalObj = self.getTerminal()
                 terminalObj.resetToInitialState()
-                terminal.setNeedsDisplay(terminal.bounds)
-                self.logger.info("Terminal cleared")
+                self.setNeedsDisplay(self.bounds)
+                self.chLogger.info("Terminal cleared")
                 return nil
             case "v":
-                // Handle image paste
                 if self.handleImagePaste() {
                     return nil
                 }
-            // Note: Cmd+/- and Cmd+0 are handled at the app level for global UI zoom
             default:
                 break
             }
@@ -1240,37 +899,26 @@ class TerminalContainerView: NSView {
         }
     }
 
-    // Copy selected text to clipboard - returns true if text was copied
     private func copySelectedText() -> Bool {
-        guard let terminal = terminalView else { return false }
-
-        // Store current clipboard content to detect if copy actually happened
         let previousContent = NSPasteboard.general.string(forType: .string)
-
-        // Clear clipboard and attempt copy
         NSPasteboard.general.clearContents()
+        copy(self)
 
-        // SwiftTerm's TerminalView.copy() uses selection.getSelectedText() internally
-        terminal.copy(self)
-
-        // Check if clipboard now has new content (copy succeeded)
         if let newContent = NSPasteboard.general.string(forType: .string),
            !newContent.isEmpty {
-            logger.info("Copied \(newContent.count) characters to clipboard")
+            chLogger.info("Copied \(newContent.count) characters to clipboard")
             return true
         }
 
-        // Restore previous clipboard content if copy failed
         if let previous = previousContent {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(previous, forType: .string)
         }
 
-        logger.info("No text selected to copy")
+        chLogger.info("No text selected to copy")
         return false
     }
 
-    // Intercept Cmd+V for image paste (backup)
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.modifierFlags.contains(.command) else {
             return super.performKeyEquivalent(with: event)
@@ -1284,44 +932,38 @@ class TerminalContainerView: NSView {
         return super.performKeyEquivalent(with: event)
     }
 
-    // Check clipboard for image and save to project screenshots folder
     private func handleImagePaste() -> Bool {
         let pasteboard = NSPasteboard.general
 
-        // Check if clipboard contains an image
         guard let image = NSImage(pasteboard: pasteboard) else {
-            return false  // No image, let normal paste happen
-        }
-
-        logger.info("Detected image in clipboard, saving to project")
-
-        // Convert to PNG data
-        guard let tiffData = image.tiffRepresentation,
-              let bitmapRep = NSBitmapImageRep(data: tiffData),
-              let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
-            logger.error("Failed to convert clipboard image to PNG")
             return false
         }
 
-        // Determine save location - project folder or fallback to temp
+        chLogger.info("Detected image in clipboard, saving to project")
+
+        guard let tiffData = image.tiffRepresentation,
+              let bitmapRep = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
+            chLogger.error("Failed to convert clipboard image to PNG")
+            return false
+        }
+
         let fileManager = FileManager.default
         let timestamp = ISO8601DateFormatter().string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
         let fileName = "screenshot-\(timestamp).png"
 
         var saveDir: URL = fileManager.temporaryDirectory
-        if let projectPath = controller?.projectPath {
+        if let projectPath = projectPath {
             let screenshotsDir = URL(fileURLWithPath: projectPath)
                 .appendingPathComponent(".claudehub-screenshots")
 
-            // Create screenshots folder if needed
             do {
                 try fileManager.createDirectory(at: screenshotsDir, withIntermediateDirectories: true)
                 saveDir = screenshotsDir
-                logger.info("Using screenshots folder: \(screenshotsDir.path)")
+                chLogger.info("Using screenshots folder: \(screenshotsDir.path)")
             } catch {
-                logger.error("Failed to create screenshots folder: \(error.localizedDescription)")
-                // saveDir remains as temp directory
+                chLogger.error("Failed to create screenshots folder: \(error.localizedDescription)")
             }
         }
 
@@ -1329,34 +971,52 @@ class TerminalContainerView: NSView {
 
         do {
             try pngData.write(to: filePath)
-            logger.info("Saved clipboard image to: \(filePath.path)")
-
-            // Insert file path into terminal
-            terminalView?.send(txt: filePath.path)
+            chLogger.info("Saved clipboard image to: \(filePath.path)")
+            send(txt: filePath.path)
             focusTerminal()
             return true
         } catch {
-            logger.error("Failed to save clipboard image: \(error.localizedDescription)")
+            chLogger.error("Failed to save clipboard image: \(error.localizedDescription)")
             return false
         }
     }
 
-    // NOTE: Do NOT override keyDown/keyUp here!
-    // The terminal view handles all key events directly as first responder.
+    // MARK: - Mouse Cursor for URLs
+    // Note: Can't override mouseMoved (not open in SwiftTerm), so we use a local event monitor
+
+    private var mouseMoveMonitor: Any?
+
+    func setupMouseMoveMonitor() {
+        mouseMoveMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+            guard let self = self, event.window == self.window else { return event }
+            let locationInSelf = self.convert(event.locationInWindow, from: nil)
+            if self.bounds.contains(locationInSelf) && self.detectURLAtPoint(locationInSelf) != nil {
+                if !self.isShowingHandCursor {
+                    NSCursor.pointingHand.push()
+                    self.isShowingHandCursor = true
+                }
+            } else {
+                if self.isShowingHandCursor {
+                    NSCursor.pop()
+                    self.isShowingHandCursor = false
+                }
+            }
+            return event
+        }
+    }
+
+    // MARK: - Focus Management
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
 
-        // Configure window to accept key events
         if let window = window {
             window.acceptsMouseMovedEvents = true
             window.makeKeyAndOrderFront(nil)
         }
 
-        // Focus terminal when added to window (only if no text field is active)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             guard let self = self, let window = self.window else { return }
-            // Don't steal focus if user is typing in a text field
             if let responder = window.firstResponder,
                responder is NSTextView || responder is NSTextField {
                 return
@@ -1366,24 +1026,142 @@ class TerminalContainerView: NSView {
     }
 
     func focusTerminal() {
-        guard let terminal = terminalView, let window = window else { return }
+        guard let window = window else { return }
 
-        // Check if another view (like a TextField) currently has focus - don't steal it
         if let currentResponder = window.firstResponder,
-           currentResponder !== terminal,
+           currentResponder !== self,
            currentResponder is NSTextView || currentResponder is NSTextField {
-            logger.debug("Not stealing focus from text input")
+            chLogger.debug("Not stealing focus from text input")
             return
         }
 
-        // Make this app active and frontmost
         NSApplication.shared.activate(ignoringOtherApps: true)
-
-        // Make window key
         window.makeKeyAndOrderFront(nil)
+        _ = window.makeFirstResponder(self)
+    }
 
-        // Make terminal first responder (single attempt, no aggressive retries)
-        _ = window.makeFirstResponder(terminal)
+    // MARK: - URL Detection
+
+    private func detectURLAtPoint(_ point: CGPoint) -> URL? {
+        let font = self.font
+        let charWidth = font.advancement(forGlyph: font.glyph(withName: "M")).width
+        let lineHeight = font.ascender - font.descender + font.leading
+
+        let col = Int(point.x / charWidth)
+        // SwiftTerm uses non-flipped coordinates (origin bottom-left)
+        let screenRow = Int((frame.height - point.y) / lineHeight)
+
+        let terminalCore = getTerminal()
+        let data = terminalCore.getBufferAsData()
+        guard let content = String(data: data, encoding: .utf8) else { return nil }
+
+        let lines = content.components(separatedBy: "\n")
+
+        let scrollOffset = terminalCore.buffer.yDisp
+        let row = scrollOffset + screenRow
+
+        guard row >= 0 && row < lines.count else { return nil }
+        let clickedLine = lines[row]
+
+        // Check if this line is a continuation of a URL from previous line
+        if row > 0 && !clickedLine.isEmpty && !clickedLine.hasPrefix(" ") {
+            let prevLine = lines[row - 1].trimmingCharacters(in: .whitespaces)
+            if let lastUrlMatch = Self.urlPattern.matches(in: prevLine, options: [], range: NSRange(prevLine.startIndex..., in: prevLine)).last,
+               let swiftRange = Range(lastUrlMatch.range, in: prevLine) {
+                let urlEndCol = prevLine.distance(from: prevLine.startIndex, to: swiftRange.upperBound)
+                if urlEndCol >= prevLine.count - 2 {
+                    let partialUrl = String(prevLine[swiftRange])
+                    let continuation = clickedLine.prefix(while: { !$0.isWhitespace })
+                    var fullUrl = partialUrl + continuation
+
+                    if !fullUrl.lowercased().hasPrefix("http://") && !fullUrl.lowercased().hasPrefix("https://") {
+                        fullUrl = "https://" + fullUrl
+                    }
+
+                    if col < continuation.count {
+                        chLogger.info("Found wrapped URL: \(fullUrl)")
+                        return URL(string: fullUrl)
+                    }
+                }
+            }
+        }
+
+        // Find URLs in this line
+        let range = NSRange(clickedLine.startIndex..., in: clickedLine)
+        let matches = Self.urlPattern.matches(in: clickedLine, options: [], range: range)
+
+        for match in matches {
+            if let swiftRange = Range(match.range, in: clickedLine) {
+                let startCol = clickedLine.distance(from: clickedLine.startIndex, to: swiftRange.lowerBound)
+                let endCol = clickedLine.distance(from: clickedLine.startIndex, to: swiftRange.upperBound)
+
+                if col >= startCol && col < endCol {
+                    var urlString = String(clickedLine[swiftRange])
+
+                    if endCol >= clickedLine.count - 2 && row + 1 < lines.count {
+                        let nextLine = lines[row + 1]
+                        if !nextLine.isEmpty && !nextLine.hasPrefix(" ") {
+                            let continuation = nextLine.prefix(while: { !$0.isWhitespace })
+                            urlString += continuation
+                        }
+                    }
+
+                    if !urlString.lowercased().hasPrefix("http://") && !urlString.lowercased().hasPrefix("https://") {
+                        urlString = "https://" + urlString
+                    }
+                    chLogger.info("Found URL at click: \(urlString)")
+                    return URL(string: urlString)
+                }
+            }
+        }
+
+        return nil
+    }
+
+    // MARK: - Cleanup
+
+    deinit {
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        if let monitor = mouseMoveMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+    }
+}
+
+// MARK: - SwiftUI Wrapper (no container view — terminal is embedded directly)
+
+struct SwiftTermView: NSViewRepresentable {
+    @ObservedObject var controller: TerminalController
+
+    func makeNSView(context: Context) -> ClaudeHubTerminalView {
+        if controller.terminalView == nil {
+            let terminal = ClaudeHubTerminalView(frame: .zero)
+            controller.terminalView = terminal
+        }
+
+        let terminalView = controller.terminalView!
+
+        // Disable mouse reporting so text selection works
+        terminalView.allowMouseReporting = false
+
+        // Configure appearance
+        terminalView.configureNativeColors()
+
+        // Configure ClaudeHub features (drag-drop, key monitor)
+        terminalView.configureClaudeHub()
+
+        // Auto-focus after a delay (but don't steal from text fields)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            terminalView.focusTerminal()
+        }
+
+        return terminalView
+    }
+
+    func updateNSView(_ nsView: ClaudeHubTerminalView, context: Context) {
+        // Don't steal focus on every update
     }
 }
 
