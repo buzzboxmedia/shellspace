@@ -1263,6 +1263,21 @@ struct TaskRow: View {
 
             // Action buttons - simplified: just primary action + delete
             HStack(spacing: 4) {
+                // Open in Terminal.app
+                Button {
+                    let controller = appState.getOrCreateController(for: session)
+                    let workingDir = session.taskFolderPath ?? session.projectPath
+                    controller.popOutToTerminal(workingDir: workingDir)
+                } label: {
+                    Image(systemName: "arrow.up.forward")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Open in Terminal.app")
+
                 if !isCompleted {
                     // Complete button for active tasks
                     Button {

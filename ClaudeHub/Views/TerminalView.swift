@@ -303,6 +303,27 @@ class TerminalController: ObservableObject {
     /// Callback when waiting state changes
     var onWaitingStateChanged: ((Bool) -> Void)?
 
+    // MARK: - Pop-Out to Terminal.app
+
+    /// Opens the session in Terminal.app using `claude --continue`
+    func popOutToTerminal(workingDir: String) {
+        let script = """
+        tell application "Terminal"
+            activate
+            do script "cd '\(workingDir)' && claude --continue"
+        end tell
+        """
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
+            if let error = error {
+                logger.error("AppleScript error: \(error)")
+            } else {
+                logger.info("Opened Terminal.app for: \(workingDir)")
+            }
+        }
+    }
+
     // Font size management
     private static let defaultFontSize: CGFloat = 13
     private static let minFontSize: CGFloat = 8
