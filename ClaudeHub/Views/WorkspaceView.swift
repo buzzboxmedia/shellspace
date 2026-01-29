@@ -78,7 +78,7 @@ struct WorkspaceView: View {
             // Sidebar (collapsible)
             if !isSidebarCollapsed {
                 SessionSidebar(project: project)
-                    .frame(minWidth: 240, idealWidth: 280, maxWidth: 320)
+                    .frame(minWidth: 240, idealWidth: 300, maxWidth: 450)
             }
 
             // Terminal area with toggle button
@@ -458,6 +458,8 @@ struct SessionSidebar: View {
 
                     Text(project.name)
                         .font(.system(size: 22, weight: .semibold))
+                        .lineLimit(2)
+                        .truncationMode(.tail)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
@@ -778,11 +780,15 @@ struct ProjectGroupSection: View {
                         Image(systemName: "folder.fill")
                             .font(.system(size: 16))
                             .foregroundStyle(isProjectActive ? .blue : .purple)
+                            .fixedSize()
 
                         Text(group.name)
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(isProjectActive ? .blue : .primary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
+                    .layoutPriority(1)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         if let session = projectSession {
@@ -791,7 +797,7 @@ struct ProjectGroupSection: View {
                     }
                 }
 
-                Spacer()
+                Spacer(minLength: 4)
 
                 // Task count badge
                 Text("\(tasks.count)")
@@ -801,9 +807,11 @@ struct ProjectGroupSection: View {
                     .padding(.vertical, 2)
                     .background(Color.white.opacity(0.1))
                     .clipShape(Capsule())
+                    .fixedSize()
 
-                // Actions - always in layout, opacity controlled by hover
-                HStack(spacing: 4) {
+                // Actions - only show when hovered to save space
+                if isHovered {
+                    HStack(spacing: 4) {
                     // Open project session in Terminal.app
                     if let projSession = projectSession {
                         Button {
@@ -857,8 +865,8 @@ struct ProjectGroupSection: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    }
                 }
-                .opacity(isHovered ? 1 : 0)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -1241,6 +1249,7 @@ struct TaskRow: View {
                                 .padding(.vertical, 2)
                                 .background(Color.blue.opacity(0.15))
                                 .clipShape(Capsule())
+                                .fixedSize()
                         }
 
                         // Show "waiting" badge when Claude needs input
@@ -1252,6 +1261,7 @@ struct TaskRow: View {
                                 .padding(.vertical, 2)
                                 .background(Color.orange.opacity(0.15))
                                 .clipShape(Capsule())
+                                .fixedSize()
                         }
 
                         // Show "Logged" badge for tasks with summaries
@@ -1263,6 +1273,7 @@ struct TaskRow: View {
                                 .padding(.vertical, 2)
                                 .background(Color.green.opacity(0.15))
                                 .clipShape(Capsule())
+                                .fixedSize()
                         }
                     }
 
@@ -1284,6 +1295,7 @@ struct TaskRow: View {
                             .padding(.vertical, 2)
                             .background(Color.blue.opacity(0.15))
                             .clipShape(Capsule())
+                            .fixedSize()
                     }
                 }
             }

@@ -8,6 +8,7 @@ struct NavigationRailView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var windowState: WindowState
     @Query private var allSessions: [Session]
+    @Query(sort: \Project.name) private var allProjects: [Project]
 
     @State private var showAddProject = false
     @State private var draggedPath: String?
@@ -54,6 +55,21 @@ struct NavigationRailView: View {
         return []
     }
 
+    // Database projects not already in defaults
+    private var additionalMainProjects: [(name: String, path: String, icon: String)] {
+        let defaultPaths = Set(defaultMainProjects.map { $0.path } + developmentProjects.map { $0.path })
+        return allProjects
+            .filter { $0.category == .main && !defaultPaths.contains($0.path) }
+            .map { ($0.name, $0.path, $0.icon) }
+    }
+
+    private var additionalClientProjects: [(name: String, path: String, icon: String)] {
+        let defaultPaths = Set(defaultClientProjects.map { $0.path })
+        return allProjects
+            .filter { $0.category == .client && !defaultPaths.contains($0.path) }
+            .map { ($0.name, $0.path, $0.icon) }
+    }
+
     // Decode persisted order
     private var projectsOrder: [String] {
         (try? JSONDecoder().decode([String].self, from: projectsOrderData)) ?? []
@@ -78,10 +94,10 @@ struct NavigationRailView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 0) {
-                    // Projects section
-                    if !defaultMainProjects.isEmpty {
+                    // Projects section (defaults + database)
+                    if !defaultMainProjects.isEmpty || !additionalMainProjects.isEmpty {
                         ReorderableRailSection(
-                            items: defaultMainProjects,
+                            items: defaultMainProjects + additionalMainProjects,
                             sessions: allSessions,
                             draggedPath: $draggedPath,
                             onReorder: { newOrder in
@@ -93,10 +109,10 @@ struct NavigationRailView: View {
                         RailDivider()
                     }
 
-                    // Clients section
-                    if !defaultClientProjects.isEmpty {
+                    // Clients section (defaults + database)
+                    if !defaultClientProjects.isEmpty || !additionalClientProjects.isEmpty {
                         ReorderableRailSection(
-                            items: defaultClientProjects,
+                            items: defaultClientProjects + additionalClientProjects,
                             sessions: allSessions,
                             draggedPath: $draggedPath,
                             onReorder: { newOrder in
@@ -363,15 +379,79 @@ struct RailDivider: View {
 // MARK: - Add Project Sheet
 
 struct AddProjectSheet: View {
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @State private var projectName = ""
     @State private var projectPath = ""
     @State private var projectIcon = "folder.fill"
+    @State private var selectedCategory: ProjectCategory = .main
+
+    // Common SF Symbols for projects
+    private let availableIcons = [
+        "folder.fill",
+        "doc.fill",
+        "building.2.fill",
+        "person.fill",
+        "person.2.fill",
+        "briefcase.fill",
+        "cart.fill",
+        "cup.and.saucer.fill",
+        "shippingbox.fill",
+        "hammer.fill",
+        "wrench.and.screwdriver.fill",
+        "gearshape.fill",
+        "star.fill",
+        "heart.fill",
+        "bolt.fill",
+        "leaf.fill",
+        "globe",
+        "cloud.fill",
+        "server.rack",
+        "desktopcomputer",
+        "laptopcomputer",
+        "iphone",
+        "gamecontroller.fill",
+        "paintbrush.fill",
+        "camera.fill",
+        "music.note",
+        "film.fill",
+        "book.fill",
+        "graduationcap.fill",
+        "cross.case.fill",
+        "building.columns.fill",
+        "shield.fill",
+        "eye.fill"
+    ]
 
     var body: some View {
         VStack(spacing: 20) {
             Text("Add Project")
                 .font(.headline)
+
+            // Icon picker
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Icon")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(36), spacing: 8), count: 8), spacing: 8) {
+                    ForEach(availableIcons, id: \.self) { icon in
+                        Button {
+                            projectIcon = icon
+                        } label: {
+                            Image(systemName: icon)
+                                .font(.system(size: 16))
+                                .foregroundStyle(projectIcon == icon ? .white : .primary)
+                                .frame(width: 32, height: 32)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(projectIcon == icon ? Color.accentColor : Color.primary.opacity(0.1))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
 
             TextField("Project Name", text: $projectName)
                 .textFieldStyle(.roundedBorder)
@@ -394,6 +474,13 @@ struct AddProjectSheet: View {
                 }
             }
 
+            // Category picker
+            Picker("Category", selection: $selectedCategory) {
+                Text("Project").tag(ProjectCategory.main)
+                Text("Client").tag(ProjectCategory.client)
+            }
+            .pickerStyle(.segmented)
+
             HStack {
                 Spacer()
                 Button("Cancel") {
@@ -402,8 +489,7 @@ struct AddProjectSheet: View {
                 .keyboardShortcut(.cancelAction)
 
                 Button("Add") {
-                    // TODO: Add project to the appropriate section
-                    dismiss()
+                    addProject()
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(projectName.isEmpty || projectPath.isEmpty)
@@ -411,5 +497,16 @@ struct AddProjectSheet: View {
         }
         .padding()
         .frame(width: 400)
+    }
+
+    private func addProject() {
+        let project = Project(
+            name: projectName,
+            path: projectPath,
+            icon: projectIcon,
+            category: selectedCategory
+        )
+        modelContext.insert(project)
+        dismiss()
     }
 }

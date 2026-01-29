@@ -39,13 +39,22 @@ struct LauncherView: View {
         ].filter { FileManager.default.fileExists(atPath: $0.path) }
     }
 
-    // Combine database projects with defaults (excluding Claude Hub from main)
-    var mainProjects: [Project] {
-        allProjects.filter { $0.category == .main && $0.name != "Claude Hub" }
+    // Database projects excluding those already shown as defaults
+    var additionalMainProjects: [Project] {
+        let defaultPaths = Set(defaultMainProjects.map { $0.path })
+        return allProjects.filter {
+            $0.category == .main &&
+            $0.name != "Claude Hub" &&
+            !defaultPaths.contains($0.path)
+        }
     }
 
-    var clientProjects: [Project] {
-        allProjects.filter { $0.category == .client }
+    var additionalClientProjects: [Project] {
+        let defaultPaths = Set(defaultClientProjects.map { $0.path })
+        return allProjects.filter {
+            $0.category == .client &&
+            !defaultPaths.contains($0.path)
+        }
     }
 
     // Adaptive grid that responds to window width
@@ -117,21 +126,47 @@ struct LauncherView: View {
 
                     VStack(spacing: 36) {
                         // Main Projects Section - show defaults if folders exist
-                        if !defaultMainProjects.isEmpty {
-                            DefaultProjectSection(
-                                title: "PROJECTS",
-                                defaults: defaultMainProjects,
-                                columns: gridColumns
-                            )
+                        if !defaultMainProjects.isEmpty || !additionalMainProjects.isEmpty {
+                            VStack(alignment: .leading, spacing: 20) {
+                                Text("PROJECTS")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .tracking(1.5)
+
+                                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 16) {
+                                    // Default projects (hardcoded)
+                                    ForEach(defaultMainProjects, id: \.name) { item in
+                                        DefaultProjectCard(name: item.name, path: item.path, icon: item.icon)
+                                    }
+                                    // Additional projects from database
+                                    ForEach(additionalMainProjects) { project in
+                                        ProjectCard(project: project)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
                         // Clients Section - show defaults if folders exist
-                        if !defaultClientProjects.isEmpty {
-                            DefaultProjectSection(
-                                title: "CLIENTS",
-                                defaults: defaultClientProjects,
-                                columns: gridColumns
-                            )
+                        if !defaultClientProjects.isEmpty || !additionalClientProjects.isEmpty {
+                            VStack(alignment: .leading, spacing: 20) {
+                                Text("CLIENTS")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .tracking(1.5)
+
+                                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 16) {
+                                    // Default projects (hardcoded)
+                                    ForEach(defaultClientProjects, id: \.name) { item in
+                                        DefaultProjectCard(name: item.name, path: item.path, icon: item.icon)
+                                    }
+                                    // Additional projects from database
+                                    ForEach(additionalClientProjects) { project in
+                                        ProjectCard(project: project)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
                         // Development Section - Claude Hub itself (at the bottom)
