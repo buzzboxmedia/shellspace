@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 /// A Slack-style navigation rail with project/client icons
 struct NavigationRailView: View {
@@ -9,6 +10,11 @@ struct NavigationRailView: View {
     @Query private var allSessions: [Session]
 
     @State private var showAddProject = false
+    @State private var draggedPath: String?
+
+    // Persisted order for each section
+    @AppStorage("railOrderProjects") private var projectsOrderData: Data = Data()
+    @AppStorage("railOrderClients") private var clientsOrderData: Data = Data()
 
     // Dropbox path (check both locations)
     private var dropboxPath: String {
@@ -19,21 +25,25 @@ struct NavigationRailView: View {
 
     // Default projects - always show if folder exists
     private var defaultMainProjects: [(name: String, path: String, icon: String)] {
-        [
+        let items = [
             ("Miller", "\(dropboxPath)/Miller", "person.fill"),
             ("Talkspresso", "\(dropboxPath)/Talkspresso", "cup.and.saucer.fill"),
             ("Buzzbox", "\(dropboxPath)/Buzzbox", "shippingbox.fill")
-        ].filter { FileManager.default.fileExists(atPath: $0.path) }
+        ].filter { FileManager.default.fileExists(atPath: $0.1) }
+
+        return sortItems(items, using: projectsOrder)
     }
 
     private var defaultClientProjects: [(name: String, path: String, icon: String)] {
         let clientsPath = "\(dropboxPath)/Buzzbox/Clients"
-        return [
+        let items = [
             ("AAGL", "\(clientsPath)/AAGL", "cross.case.fill"),
             ("AFL", "\(clientsPath)/AFL", "building.columns.fill"),
             ("INFAB", "\(clientsPath)/INFAB", "shield.fill"),
             ("TDS", "\(clientsPath)/TDS", "eye.fill")
-        ].filter { FileManager.default.fileExists(atPath: $0.path) }
+        ].filter { FileManager.default.fileExists(atPath: $0.1) }
+
+        return sortItems(items, using: clientsOrder)
     }
 
     private var developmentProjects: [(name: String, path: String, icon: String)] {
@@ -42,6 +52,26 @@ struct NavigationRailView: View {
             return [("Claude Hub", claudeHubPath, "terminal.fill")]
         }
         return []
+    }
+
+    // Decode persisted order
+    private var projectsOrder: [String] {
+        (try? JSONDecoder().decode([String].self, from: projectsOrderData)) ?? []
+    }
+
+    private var clientsOrder: [String] {
+        (try? JSONDecoder().decode([String].self, from: clientsOrderData)) ?? []
+    }
+
+    // Sort items by persisted order
+    private func sortItems(_ items: [(name: String, path: String, icon: String)], using order: [String]) -> [(name: String, path: String, icon: String)] {
+        guard !order.isEmpty else { return items }
+
+        return items.sorted { a, b in
+            let indexA = order.firstIndex(of: a.path) ?? Int.max
+            let indexB = order.firstIndex(of: b.path) ?? Int.max
+            return indexA < indexB
+        }
     }
 
     // Items that need attention (waiting or working)
@@ -76,23 +106,35 @@ struct NavigationRailView: View {
                 VStack(spacing: 0) {
                     // Projects section
                     if !defaultMainProjects.isEmpty {
-                        RailSection(
+                        ReorderableRailSection(
                             items: defaultMainProjects,
-                            sessions: allSessions
+                            sessions: allSessions,
+                            draggedPath: $draggedPath,
+                            onReorder: { newOrder in
+                                if let data = try? JSONEncoder().encode(newOrder) {
+                                    projectsOrderData = data
+                                }
+                            }
                         )
                         RailDivider()
                     }
 
                     // Clients section
                     if !defaultClientProjects.isEmpty {
-                        RailSection(
+                        ReorderableRailSection(
                             items: defaultClientProjects,
-                            sessions: allSessions
+                            sessions: allSessions,
+                            draggedPath: $draggedPath,
+                            onReorder: { newOrder in
+                                if let data = try? JSONEncoder().encode(newOrder) {
+                                    clientsOrderData = data
+                                }
+                            }
                         )
                         RailDivider()
                     }
 
-                    // Development section
+                    // Development section (not reorderable)
                     if !developmentProjects.isEmpty {
                         RailSection(
                             items: developmentProjects,
@@ -131,7 +173,76 @@ struct NavigationRailView: View {
     }
 }
 
-// MARK: - Rail Section
+// MARK: - Reorderable Rail Section
+
+struct ReorderableRailSection: View {
+    @EnvironmentObject var appState: AppState
+    let items: [(name: String, path: String, icon: String)]
+    let sessions: [Session]
+    @Binding var draggedPath: String?
+    let onReorder: ([String]) -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ForEach(items, id: \.path) { item in
+                RailItem(
+                    name: item.name,
+                    path: item.path,
+                    icon: item.icon,
+                    sessions: sessions.filter { $0.projectPath == item.path }
+                )
+                .onDrag {
+                    draggedPath = item.path
+                    return NSItemProvider(object: item.path as NSString)
+                }
+                .onDrop(of: [.text], delegate: RailDropDelegate(
+                    item: item,
+                    items: items,
+                    draggedPath: $draggedPath,
+                    onReorder: onReorder
+                ))
+            }
+        }
+        .padding(.vertical, 12)
+    }
+}
+
+// MARK: - Rail Drop Delegate
+
+struct RailDropDelegate: DropDelegate {
+    let item: (name: String, path: String, icon: String)
+    let items: [(name: String, path: String, icon: String)]
+    @Binding var draggedPath: String?
+    let onReorder: ([String]) -> Void
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedPath = nil
+        return true
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedPath = draggedPath,
+              draggedPath != item.path,
+              let fromIndex = items.firstIndex(where: { $0.path == draggedPath }),
+              let toIndex = items.firstIndex(where: { $0.path == item.path }) else {
+            return
+        }
+
+        var newItems = items
+        let movedItem = newItems.remove(at: fromIndex)
+        newItems.insert(movedItem, at: toIndex)
+
+        withAnimation(.easeInOut(duration: 0.2)) {
+            onReorder(newItems.map { $0.path })
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+}
+
+// MARK: - Rail Section (non-reorderable)
 
 struct RailSection: View {
     @EnvironmentObject var appState: AppState

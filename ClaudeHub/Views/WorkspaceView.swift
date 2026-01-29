@@ -224,6 +224,8 @@ struct SessionSidebar: View {
     @EnvironmentObject var windowState: WindowState
     let project: Project
     @Query private var allSessions: [Session]
+    @Query private var allProjects: [Project]
+    @Query private var allProjectGroups: [ProjectGroup]
     @State private var isCreatingTask = false
     @State private var isCreatingGroup = false
     @State private var newTaskName = ""
@@ -234,6 +236,21 @@ struct SessionSidebar: View {
     @State private var showingAddTaskSheet = false
     @FocusState private var isTaskFieldFocused: Bool
     @FocusState private var isGroupFieldFocused: Bool
+
+    /// Find the persisted project with matching path (for relationships)
+    var persistedProject: Project? {
+        allProjects.first { $0.path == project.path }
+    }
+
+    /// The project to use for creating new items (persisted if exists, otherwise passed-in)
+    var effectiveProject: Project {
+        if let persisted = persistedProject {
+            return persisted
+        }
+        // Insert the passed-in project so it gets persisted
+        modelContext.insert(project)
+        return project
+    }
 
     var sessions: [Session] {
         allSessions.filter { $0.projectPath == project.path }
@@ -249,7 +266,14 @@ struct SessionSidebar: View {
     }
 
     var taskGroups: [ProjectGroup] {
-        project.taskGroups.sorted { $0.sortOrder < $1.sortOrder }
+        // Use persisted project's groups, or filter all groups by project path
+        if let persisted = persistedProject {
+            return persisted.taskGroups.sorted { $0.sortOrder < $1.sortOrder }
+        }
+        // Fallback: filter all groups by matching project path
+        return allProjectGroups
+            .filter { $0.project?.path == project.path }
+            .sorted { $0.sortOrder < $1.sortOrder }
     }
 
     var standaloneTasks: [Session] {
@@ -273,12 +297,15 @@ struct SessionSidebar: View {
             taskName: name
         )
 
+        // Use the persisted project for relationships
+        let targetProject = effectiveProject
+
         let session = Session(
             name: name,
             projectPath: project.path,
             userNamed: true
         )
-        session.project = project
+        session.project = targetProject
         session.taskGroup = selectedGroupForNewTask
         session.taskFolderPath = expectedPath.path  // Set BEFORE insert to prevent duplicate imports
         modelContext.insert(session)
@@ -325,9 +352,12 @@ struct SessionSidebar: View {
             return
         }
 
+        // Use the persisted project for relationships
+        let targetProject = effectiveProject
+
         let maxOrder = taskGroups.map { $0.sortOrder }.max() ?? -1
         let group = ProjectGroup(name: name, projectPath: project.path, sortOrder: maxOrder + 1)
-        group.project = project
+        group.project = targetProject
         modelContext.insert(group)
 
         // Create a session for the project itself (so it can be opened like a task)
@@ -336,7 +366,7 @@ struct SessionSidebar: View {
             projectPath: project.path,
             userNamed: true
         )
-        session.project = project
+        session.project = targetProject
         session.taskGroup = group
         session.sessionDescription = "Project folder for organizing related tasks."
         modelContext.insert(session)
