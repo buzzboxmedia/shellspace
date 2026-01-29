@@ -74,34 +74,8 @@ struct NavigationRailView: View {
         }
     }
 
-    // Items that need attention (waiting or working)
-    private var needsAttentionItems: [(name: String, path: String, icon: String)] {
-        let allItems = defaultMainProjects + defaultClientProjects + developmentProjects
-        return allItems.filter { item in
-            let sessions = allSessions.filter { $0.projectPath == item.path }
-            return sessions.contains { appState.waitingSessions.contains($0.id) || appState.workingSessions.contains($0.id) }
-        }
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            // Needs Attention section (dynamic)
-            if !needsAttentionItems.isEmpty {
-                VStack(spacing: 8) {
-                    ForEach(needsAttentionItems, id: \.path) { item in
-                        RailItem(
-                            name: item.name,
-                            path: item.path,
-                            icon: item.icon,
-                            sessions: allSessions.filter { $0.projectPath == item.path }
-                        )
-                    }
-                }
-                .padding(.vertical, 12)
-
-                RailDivider()
-            }
-
             ScrollView {
                 VStack(spacing: 0) {
                     // Projects section

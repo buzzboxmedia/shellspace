@@ -78,7 +78,7 @@ struct WorkspaceView: View {
             // Sidebar (collapsible)
             if !isSidebarCollapsed {
                 SessionSidebar(project: project)
-                    .frame(minWidth: 280, idealWidth: 320, maxWidth: 500)
+                    .frame(minWidth: 240, idealWidth: 280, maxWidth: 320)
             }
 
             // Terminal area with toggle button
@@ -1169,6 +1169,13 @@ struct TaskRow: View {
         return Color.gray.opacity(0.4)
     }
 
+    /// Relative time string for hover display
+    var relativeTime: String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: session.createdAt, relativeTo: Date())
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             // Status indicator
@@ -1282,6 +1289,14 @@ struct TaskRow: View {
             }
 
             Spacer()
+
+            // Timestamp on hover
+            if isHovered && !isEditing {
+                Text(relativeTime)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .padding(.trailing, 4)
+            }
 
             // Action buttons - simplified: just primary action + delete
             HStack(spacing: 4) {
