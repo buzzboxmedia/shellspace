@@ -299,11 +299,76 @@ struct WindowContent: View {
     @EnvironmentObject var windowState: WindowState
 
     var body: some View {
-        Group {
+        HStack(spacing: 0) {
+            NavigationRailView()
+
             if let project = windowState.selectedProject {
                 WorkspaceView(project: project)
             } else {
-                LauncherView()
+                EmptyProjectView()
+            }
+        }
+        .onAppear {
+            // Restore last-used project on launch
+            if windowState.selectedProject == nil,
+               let lastPath = UserDefaults.standard.string(forKey: "lastSelectedProjectPath") {
+                restoreProject(from: lastPath)
+            }
+        }
+    }
+
+    private func restoreProject(from path: String) {
+        // Determine project details from path
+        let url = URL(fileURLWithPath: path)
+        let name = url.lastPathComponent
+        let category: ProjectCategory = path.contains("/Clients/") ? .client : .main
+
+        // Determine icon based on known projects
+        let icon: String
+        switch name {
+        case "Miller": icon = "person.fill"
+        case "Talkspresso": icon = "cup.and.saucer.fill"
+        case "Buzzbox": icon = "shippingbox.fill"
+        case "AAGL": icon = "cross.case.fill"
+        case "AFL": icon = "building.columns.fill"
+        case "INFAB": icon = "shield.fill"
+        case "TDS": icon = "eye.fill"
+        case "ClaudeHub", "Claude Hub": icon = "terminal.fill"
+        default: icon = "folder.fill"
+        }
+
+        // Only restore if folder exists
+        guard FileManager.default.fileExists(atPath: path) else { return }
+
+        let project = Project(name: name, path: path, icon: icon, category: category)
+        if name == "Claude Hub" || name == "ClaudeHub" {
+            project.usesExternalTerminal = true
+        }
+
+        windowState.selectedProject = project
+    }
+}
+
+// MARK: - Empty Project View
+
+struct EmptyProjectView: View {
+    var body: some View {
+        ZStack {
+            VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
+                .ignoresSafeArea()
+
+            VStack(spacing: 16) {
+                Image(systemName: "arrow.left.circle")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.tertiary)
+
+                Text("Select a project")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+
+                Text("Choose a project from the sidebar to get started")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
             }
         }
     }

@@ -77,7 +77,7 @@ struct WorkspaceView: View {
         HSplitView {
             // Sidebar (collapsible)
             if !isSidebarCollapsed {
-                SessionSidebar(project: project, goBack: goBack)
+                SessionSidebar(project: project)
                     .frame(minWidth: 280, idealWidth: 320, maxWidth: 500)
             }
 
@@ -223,9 +223,7 @@ struct SessionSidebar: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var windowState: WindowState
     let project: Project
-    let goBack: () -> Void
     @Query private var allSessions: [Session]
-    @State private var isBackHovered = false
     @State private var isCreatingTask = false
     @State private var isCreatingGroup = false
     @State private var newTaskName = ""
@@ -423,36 +421,13 @@ struct SessionSidebar: View {
         GeometryReader { geometry in
             VStack(alignment: .leading, spacing: 0) {
                 // Header row - fixed height
-                VStack(alignment: .leading, spacing: 12) {
-                    // Back button
-                    Button(action: goBack) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 14, weight: .medium))
-                            Text("Back")
-                                .font(.system(size: 14))
-                        }
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(isBackHovered ? Color.white.opacity(0.12) : Color.clear)
-                        )
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .onHover { isBackHovered = $0 }
+                HStack(spacing: 12) {
+                    Image(systemName: project.icon)
+                        .font(.system(size: 24))
+                        .foregroundStyle(.primary)
 
-                    // Project name with icon - prominent
-                    HStack(spacing: 12) {
-                        Image(systemName: project.icon)
-                            .font(.system(size: 24))
-                            .foregroundStyle(.primary)
-
-                        Text(project.name)
-                            .font(.system(size: 22, weight: .semibold))
-                    }
+                    Text(project.name)
+                        .font(.system(size: 22, weight: .semibold))
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)

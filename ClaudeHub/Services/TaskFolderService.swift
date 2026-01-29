@@ -545,6 +545,70 @@ class TaskFolderService {
         logger.info("Moved task to \(newFolder.path)")
     }
 
+    /// Move a task to a different project entirely
+    /// Returns the new folder path if successful
+    func moveTaskToProject(from sourcePath: URL, toProjectPath: String, toProjectName: String) throws -> URL? {
+        guard readTask(at: sourcePath) != nil else {
+            logger.warning("No task found at: \(sourcePath.path)")
+            return nil
+        }
+
+        // Strip any existing number prefix from folder name (for legacy folders)
+        let taskSlug = sourcePath.lastPathComponent.replacingOccurrences(of: "^\\d{3}-", with: "", options: .regularExpression)
+
+        // Destination is the new project's tasks directory (standalone, no sub-project)
+        let destTasksDir = tasksDirectory(for: toProjectPath)
+
+        // Create tasks directory if needed
+        if !fileManager.fileExists(atPath: destTasksDir.path) {
+            try fileManager.createDirectory(at: destTasksDir, withIntermediateDirectories: true)
+        }
+
+        let newFolder = destTasksDir.appendingPathComponent(taskSlug)
+
+        // Handle case where folder already exists
+        var finalDest = newFolder
+        var suffix = 1
+        while fileManager.fileExists(atPath: finalDest.path) {
+            finalDest = destTasksDir.appendingPathComponent("\(taskSlug)-\(suffix)")
+            suffix += 1
+        }
+
+        try fileManager.moveItem(at: sourcePath, to: finalDest)
+
+        // Update TASK.md with new project info
+        let taskFile = finalDest.appendingPathComponent("TASK.md")
+        if fileManager.fileExists(atPath: taskFile.path) {
+            var content = try String(contentsOf: taskFile, encoding: .utf8)
+
+            // Update project name
+            content = content.replacingOccurrences(
+                of: "\\*\\*Project:\\*\\* [^\\n]+",
+                with: "**Project:** \(toProjectName)",
+                options: .regularExpression
+            )
+
+            // Remove sub-project line since we're moving to project root
+            content = content.replacingOccurrences(
+                of: "\\*\\*Sub-project:\\*\\* [^\\n]+\\n?",
+                with: "",
+                options: .regularExpression
+            )
+
+            try content.write(to: taskFile, atomically: true, encoding: .utf8)
+        }
+
+        // Update CLAUDE.md with new context paths (for standalone task)
+        let claudeFile = finalDest.appendingPathComponent("CLAUDE.md")
+        if fileManager.fileExists(atPath: claudeFile.path) {
+            let claudeMdContent = generateClaudeMdContent(taskName: taskSlug, subProjectName: nil)
+            try claudeMdContent.write(to: claudeFile, atomically: true, encoding: .utf8)
+        }
+
+        logger.info("Moved task to project: \(finalDest.path)")
+        return finalDest
+    }
+
     // MARK: - Completed Tasks
 
     /// Get the completed tasks directory for a project

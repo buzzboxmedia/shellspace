@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct LauncherView: View {
     @Environment(\.modelContext) private var modelContext
@@ -274,6 +275,57 @@ struct DefaultProjectCard: View {
                 isHovered = hovering
             }
         }
+        .onDrop(of: [.text], isTargeted: nil) { providers in
+            handleTaskDrop(providers: providers)
+            return true
+        }
+    }
+
+    /// Handle a task being dropped onto this project card
+    private func handleTaskDrop(providers: [NSItemProvider]) {
+        for provider in providers {
+            provider.loadItem(forTypeIdentifier: UTType.text.identifier, options: nil) { item, _ in
+                guard let data = item as? Data,
+                      let dropped = String(data: data, encoding: .utf8) else { return }
+
+                // Skip if it's a group drop (prefixed with "group:")
+                if dropped.hasPrefix("group:") { return }
+
+                // Parse the session UUID
+                guard let sessionId = UUID(uuidString: dropped) else { return }
+
+                // Find the session in our data
+                guard let session = allSessions.first(where: { $0.id == sessionId }) else { return }
+
+                // Don't move if already in this project
+                if session.projectPath == path { return }
+
+                Task { @MainActor in
+                    // Move the task folder on disk
+                    if let sourcePath = session.taskFolderPath {
+                        let sourceURL = URL(fileURLWithPath: sourcePath)
+                        do {
+                            if let newPath = try TaskFolderService.shared.moveTaskToProject(
+                                from: sourceURL,
+                                toProjectPath: path,
+                                toProjectName: name
+                            ) {
+                                // Update the session
+                                session.projectPath = path
+                                session.taskFolderPath = newPath.path
+                                session.taskGroup = nil  // Remove from any group
+                            }
+                        } catch {
+                            print("Failed to move task: \(error)")
+                        }
+                    } else {
+                        // No task folder - just update the session
+                        session.projectPath = path
+                        session.taskGroup = nil
+                    }
+                }
+            }
+        }
     }
 
     private func openProject() {
@@ -316,6 +368,7 @@ struct ClaudeHubCard: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var windowState: WindowState
     @Query(filter: #Predicate<Project> { $0.name == "Claude Hub" }) private var claudeHubProjects: [Project]
+    @Query private var allSessions: [Session]
     @State private var isHovered = false
 
     private let claudeHubPath = "\(NSHomeDirectory())/Library/CloudStorage/Dropbox/ClaudeHub"
@@ -351,6 +404,46 @@ struct ClaudeHubCard: View {
                 isHovered = hovering
             }
         }
+        .onDrop(of: [.text], isTargeted: nil) { providers in
+            handleTaskDrop(providers: providers)
+            return true
+        }
+    }
+
+    private func handleTaskDrop(providers: [NSItemProvider]) {
+        for provider in providers {
+            provider.loadItem(forTypeIdentifier: UTType.text.identifier, options: nil) { item, _ in
+                guard let data = item as? Data,
+                      let dropped = String(data: data, encoding: .utf8) else { return }
+
+                if dropped.hasPrefix("group:") { return }
+                guard let sessionId = UUID(uuidString: dropped) else { return }
+                guard let session = allSessions.first(where: { $0.id == sessionId }) else { return }
+                if session.projectPath == claudeHubPath { return }
+
+                Task { @MainActor in
+                    if let sourcePath = session.taskFolderPath {
+                        let sourceURL = URL(fileURLWithPath: sourcePath)
+                        do {
+                            if let newPath = try TaskFolderService.shared.moveTaskToProject(
+                                from: sourceURL,
+                                toProjectPath: claudeHubPath,
+                                toProjectName: "Claude Hub"
+                            ) {
+                                session.projectPath = claudeHubPath
+                                session.taskFolderPath = newPath.path
+                                session.taskGroup = nil
+                            }
+                        } catch {
+                            print("Failed to move task: \(error)")
+                        }
+                    } else {
+                        session.projectPath = claudeHubPath
+                        session.taskGroup = nil
+                    }
+                }
+            }
+        }
     }
 
     private func openClaudeHubProject() {
@@ -381,6 +474,7 @@ struct ClaudeHubCard: View {
 struct ProjectCard: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var windowState: WindowState
+    @Query private var allSessions: [Session]
     let project: Project
     @State private var isHovered = false
 
@@ -457,6 +551,46 @@ struct ProjectCard: View {
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.2)) {
                 isHovered = hovering
+            }
+        }
+        .onDrop(of: [.text], isTargeted: nil) { providers in
+            handleTaskDrop(providers: providers)
+            return true
+        }
+    }
+
+    private func handleTaskDrop(providers: [NSItemProvider]) {
+        for provider in providers {
+            provider.loadItem(forTypeIdentifier: UTType.text.identifier, options: nil) { item, _ in
+                guard let data = item as? Data,
+                      let dropped = String(data: data, encoding: .utf8) else { return }
+
+                if dropped.hasPrefix("group:") { return }
+                guard let sessionId = UUID(uuidString: dropped) else { return }
+                guard let session = allSessions.first(where: { $0.id == sessionId }) else { return }
+                if session.projectPath == project.path { return }
+
+                Task { @MainActor in
+                    if let sourcePath = session.taskFolderPath {
+                        let sourceURL = URL(fileURLWithPath: sourcePath)
+                        do {
+                            if let newPath = try TaskFolderService.shared.moveTaskToProject(
+                                from: sourceURL,
+                                toProjectPath: project.path,
+                                toProjectName: project.name
+                            ) {
+                                session.projectPath = project.path
+                                session.taskFolderPath = newPath.path
+                                session.taskGroup = nil
+                            }
+                        } catch {
+                            print("Failed to move task: \(error)")
+                        }
+                    } else {
+                        session.projectPath = project.path
+                        session.taskGroup = nil
+                    }
+                }
             }
         }
     }
