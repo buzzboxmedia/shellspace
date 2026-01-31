@@ -66,12 +66,6 @@ struct ClaudeHubApp: App {
             // (Don't override pasteboard commands - they break terminal copy/paste)
 
         }
-
-        MenuBarExtra("Claude Hub", systemImage: "terminal.fill") {
-            MenuBarView()
-                .environmentObject(appState)
-        }
-        .menuBarExtraStyle(.window)
     }
 }
 
@@ -105,12 +99,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 @Observable
 class AppState: ObservableObject {
     // MARK: - Local-only state (not synced to CloudKit)
-
-    /// Track which sessions are waiting for user input
-    var waitingSessions: Set<UUID> = []
-
-    /// Track which sessions have Claude actively working (outputting text)
-    var workingSessions: Set<UUID> = []
 
     /// Session IDs that have been launched in Terminal.app (not synced)
     var launchedSessions: Set<UUID> = []
@@ -164,49 +152,6 @@ class AppState: ObservableObject {
 
     func isSessionLaunched(_ session: Session) -> Bool {
         launchedSessions.contains(session.id)
-    }
-
-    // MARK: - Waiting State Management
-
-    func markSessionWaiting(_ session: Session, projectName: String) {
-        guard !waitingSessions.contains(session.id) else { return }
-        waitingSessions.insert(session.id)
-        appLogger.info("Session marked as waiting: \(session.name)")
-
-        // Update session's waiting state (syncs to CloudKit for mobile notifications)
-        session.isWaitingForInput = true
-
-        NotificationManager.shared.notifyClaudeWaiting(
-            sessionId: session.id,
-            sessionName: session.name,
-            projectName: projectName
-        )
-        NotificationManager.shared.updateDockBadge(count: waitingSessions.count)
-    }
-
-    func clearSessionWaiting(_ session: Session) {
-        guard waitingSessions.contains(session.id) else { return }
-        waitingSessions.remove(session.id)
-        appLogger.info("Session no longer waiting: \(session.name)")
-
-        // Update session's waiting state
-        session.isWaitingForInput = false
-
-        NotificationManager.shared.clearNotification(for: session.id)
-        NotificationManager.shared.updateDockBadge(count: waitingSessions.count)
-    }
-
-    // MARK: - Working State Management
-
-    func markSessionWorking(_ session: Session) {
-        guard !workingSessions.contains(session.id) else { return }
-        workingSessions.insert(session.id)
-        // Clear waiting state when Claude starts working
-        clearSessionWaiting(session)
-    }
-
-    func clearSessionWorking(_ session: Session) {
-        workingSessions.remove(session.id)
     }
 
     // MARK: - Log Management

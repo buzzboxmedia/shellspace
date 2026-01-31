@@ -9,8 +9,6 @@ struct TerminalView: View {
     let session: Session
     @EnvironmentObject var appState: AppState
     @State private var forceRefresh = false
-    @State private var summarizationTimer: Timer?
-    @State private var autoSaveTimer: Timer?
 
     // Get controller from AppState so it persists when switching sessions
     var terminalController: TerminalController {
@@ -27,12 +25,7 @@ struct TerminalView: View {
             if isStarted {
                 SwiftTermView(controller: terminalController)
                     .id(session.id)  // Ensure view updates when session changes
-                    .onAppear {
-                        startAutoSave()
-                    }
                     .onDisappear {
-                        summarizationTimer?.invalidate()
-                        autoSaveTimer?.invalidate()
                         // Save log when leaving the view
                         terminalController.saveLog(for: session)
                     }
@@ -78,8 +71,6 @@ struct TerminalView: View {
                         )
                         // Mark session as launched (for --continue logic on reopening)
                         session.hasBeenLaunched = true
-                        // Start waiting state monitor
-                        terminalController.startWaitingStateMonitor(session: session, appState: appState)
                         // Trigger view refresh and capture session ID
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                             forceRefresh.toggle()
@@ -93,22 +84,6 @@ struct TerminalView: View {
                     }
                 }
             }
-        }
-    }
-
-    private func startSummarizationCheck() {
-        viewLogger.info("Starting summarization check timer for session: \(session.name)")
-        // Check every 5 seconds if we should summarize
-        summarizationTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
-            checkAndSummarize()
-        }
-    }
-
-    private func startAutoSave() {
-        viewLogger.info("Starting auto-save timer for session: \(session.name)")
-        // Auto-save log every 30 seconds
-        autoSaveTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { _ in
-            terminalController.saveLog(for: session)
         }
     }
 
@@ -150,157 +125,14 @@ struct TerminalView: View {
             viewLogger.warning("No session files found in Claude projects directory")
         }
     }
-
-    private func checkAndSummarize() {
-        // Don't auto-rename user-named tasks
-        guard !session.userNamed else {
-            viewLogger.debug("User-named task, skipping auto-rename")
-            terminalController.hasSummarized = true
-            return
-        }
-
-        // Only summarize once per session
-        guard !terminalController.hasSummarized else {
-            viewLogger.debug("Already summarized this session, skipping")
-            return
-        }
-
-        let content = terminalController.getTerminalContent()
-        viewLogger.info("Checking terminal content: \(content.count) characters")
-
-        let lineCount = content.components(separatedBy: "\n").count
-        viewLogger.info("Terminal has \(lineCount) lines")
-
-        // Wait for some content to appear
-        guard lineCount > 10 else { return }
-
-        // Try to extract user's first input and send to Claude for a title
-        if let userInput = extractUserInput(from: content) {
-            viewLogger.info("Extracted user input: '\(userInput)'")
-            terminalController.hasSummarized = true
-            summarizationTimer?.invalidate()
-
-            // Send user's input to Claude to generate a smart title
-            ClaudeAPI.shared.generateTitle(from: userInput) { title in
-                if let title = title {
-                    viewLogger.info("Claude generated title: '\(title)'")
-                    session.name = title  // SwiftData auto-saves
-                } else {
-                    // Fallback: use cleaned up input directly
-                    let fallbackTitle = self.cleanupTitle(userInput)
-                    viewLogger.info("Using fallback title: '\(fallbackTitle)'")
-                    session.name = fallbackTitle  // SwiftData auto-saves
-                }
-            }
-            return
-        }
-
-        // Fallback: if we have Claude response but couldn't extract input, use full content
-        if lineCount > 30 && content.contains("Claude") {
-            viewLogger.info("Falling back to full content summarization")
-            terminalController.hasSummarized = true
-            summarizationTimer?.invalidate()
-
-            ClaudeAPI.shared.summarizeChat(content: content) { title in
-                if let title = title {
-                    viewLogger.info("Received summary title: '\(title)'")
-                    session.name = title  // SwiftData auto-saves
-                } else {
-                    viewLogger.warning("Summarization returned nil")
-                }
-            }
-        }
-    }
-
-    /// Extract the user's first input from terminal content
-    private func extractUserInput(from content: String) -> String? {
-        let lines = content.components(separatedBy: "\n")
-
-        // Look for the user's input after Claude's prompt
-        // Claude Code shows ">" or "❯" when waiting for input
-        var foundPrompt = false
-
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-            // Skip empty lines
-            if trimmed.isEmpty { continue }
-
-            // Look for Claude's input prompt
-            if trimmed.hasPrefix(">") || trimmed.hasPrefix("❯") {
-                // The text after the prompt is user input
-                let afterPrompt = trimmed.dropFirst().trimmingCharacters(in: .whitespaces)
-                if !afterPrompt.isEmpty && afterPrompt.count > 3 {
-                    return String(afterPrompt)
-                }
-                foundPrompt = true
-                continue
-            }
-
-            // If we found a prompt, the next non-empty line is likely user input
-            if foundPrompt && !trimmed.isEmpty {
-                // Skip lines that look like Claude output
-                if trimmed.hasPrefix("Claude") || trimmed.hasPrefix("●") || trimmed.hasPrefix("⏺") {
-                    continue
-                }
-                if trimmed.count > 5 {
-                    return trimmed
-                }
-            }
-        }
-
-        return nil
-    }
-
-    /// Clean up user input to make a good title
-    private func cleanupTitle(_ input: String) -> String {
-        var title = input
-
-        // Remove common prefixes
-        let prefixes = ["help me ", "please ", "can you ", "i need to ", "i want to "]
-        for prefix in prefixes {
-            if title.lowercased().hasPrefix(prefix) {
-                title = String(title.dropFirst(prefix.count))
-                break
-            }
-        }
-
-        // Capitalize first letter
-        if let first = title.first {
-            title = first.uppercased() + title.dropFirst()
-        }
-
-        // Truncate if too long (max ~50 chars)
-        if title.count > 50 {
-            // Try to break at a word boundary
-            if let spaceIndex = title.prefix(50).lastIndex(of: " ") {
-                title = String(title[..<spaceIndex]) + "..."
-            } else {
-                title = String(title.prefix(47)) + "..."
-            }
-        }
-
-        return title
-    }
 }
 
 // Controller to manage the terminal and process
 class TerminalController: ObservableObject {
     @Published var terminalView: ClaudeHubTerminalView?
     private var currentSessionId: UUID?
-    var hasSummarized = false
     var projectPath: String?  // Store project path for screenshot saving
     private let logger = Logger(subsystem: "com.buzzbox.claudehub", category: "TerminalController")
-
-    // Waiting state detection
-    private var waitingStateTimer: Timer?
-    private var lastTerminalContent: String = ""
-    private var contentUnchangedCount: Int = 0
-    private weak var appState: AppState?
-    var currentSession: Session?  // Made internal for AppState access
-
-    /// Callback when waiting state changes
-    var onWaitingStateChanged: ((Bool) -> Void)?
 
     // MARK: - Pop-Out to Terminal.app
 
@@ -352,100 +184,6 @@ class TerminalController: ObservableObject {
             terminal.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         }
         logger.info("Font size changed to: \(self.fontSize)")
-    }
-
-    // MARK: - Waiting State Detection
-
-    /// Start monitoring for Claude waiting state
-    func startWaitingStateMonitor(session: Session, appState: AppState) {
-        self.currentSession = session
-        self.appState = appState
-        self.lastTerminalContent = ""
-        self.contentUnchangedCount = 0
-
-        // Poll every 2 seconds
-        waitingStateTimer?.invalidate()
-        waitingStateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            self?.checkWaitingState()
-        }
-        logger.info("Started waiting state monitor for session: \(session.name)")
-    }
-
-    /// Stop monitoring waiting state
-    func stopWaitingStateMonitor() {
-        waitingStateTimer?.invalidate()
-        waitingStateTimer = nil
-        logger.info("Stopped waiting state monitor")
-    }
-
-    /// Check if Claude is waiting for input or actively working
-    private func checkWaitingState() {
-        let content = getTerminalContent()
-
-        // Check if content has changed
-        if content == lastTerminalContent {
-            contentUnchangedCount += 1
-
-            // Content stable - Claude stopped outputting
-            if let session = currentSession {
-                appState?.clearSessionWorking(session)
-            }
-        } else {
-            contentUnchangedCount = 0
-            lastTerminalContent = content
-
-            // Content changed - Claude is actively working
-            if let session = currentSession {
-                appState?.markSessionWorking(session)
-            }
-        }
-
-        // If content unchanged for 2+ checks (~4 seconds) and shows prompt, mark as waiting
-        if contentUnchangedCount >= 2 && isClaudePromptVisible(in: content) {
-            if let session = currentSession {
-                // Get project name from path for notification
-                let projectName = URL(fileURLWithPath: session.projectPath).lastPathComponent
-                appState?.markSessionWaiting(session, projectName: projectName)
-                onWaitingStateChanged?(true)
-            }
-        }
-    }
-
-    /// Check if Claude's input prompt is visible at the end of terminal output
-    private func isClaudePromptVisible(in content: String) -> Bool {
-        let lines = content.components(separatedBy: "\n")
-
-        // Check last few non-empty lines for prompt
-        let recentLines = lines.suffix(10).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-
-        for line in recentLines.reversed() {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-            // Claude Code prompt patterns
-            if trimmed.hasPrefix(">") || trimmed.hasPrefix("❯") {
-                // Make sure it's not just showing a prompt with text (user typing)
-                let afterPrompt = trimmed.dropFirst().trimmingCharacters(in: .whitespaces)
-                if afterPrompt.isEmpty {
-                    logger.debug("Found empty Claude prompt - waiting for input")
-                    return true
-                }
-            }
-
-            // Also check for the full prompt line pattern (e.g., "> " at start)
-            if trimmed == ">" || trimmed == "❯" {
-                return true
-            }
-        }
-
-        return false
-    }
-
-    /// Notify that user is interacting (typing, etc.)
-    func userInteracted() {
-        contentUnchangedCount = 0
-        if let session = currentSession {
-            appState?.clearSessionWaiting(session)
-        }
     }
 
     // MARK: - Log Management

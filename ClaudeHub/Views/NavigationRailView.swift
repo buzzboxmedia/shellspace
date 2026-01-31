@@ -271,14 +271,6 @@ struct RailItem: View {
         windowState.selectedProject?.path == path
     }
 
-    private var waitingCount: Int {
-        sessions.filter { appState.waitingSessions.contains($0.id) }.count
-    }
-
-    private var workingCount: Int {
-        sessions.filter { appState.workingSessions.contains($0.id) }.count
-    }
-
     private var runningCount: Int {
         sessions.filter { appState.terminalControllers[$0.id] != nil }.count
     }
@@ -309,28 +301,8 @@ struct RailItem: View {
                         }
                     )
 
-                // Badge overlay
-                if waitingCount > 0 {
-                    // Orange badge with count for waiting
-                    Text("\(waitingCount)")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.white)
-                        .frame(width: 16, height: 16)
-                        .background(Color.orange)
-                        .clipShape(Circle())
-                        .offset(x: 4, y: -4)
-                } else if workingCount > 0 {
-                    // Green dot for working
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 10, height: 10)
-                        .overlay(
-                            Circle()
-                                .stroke(Color.white.opacity(0.5), lineWidth: 1)
-                        )
-                        .offset(x: 2, y: -2)
-                } else if runningCount > 0 {
-                    // Blue dot for running
+                // Badge overlay - show blue dot for running sessions
+                if runningCount > 0 {
                     Circle()
                         .fill(Color.blue.opacity(0.7))
                         .frame(width: 8, height: 8)

@@ -18,9 +18,6 @@ struct SettingsView: View {
         allProjects.filter { $0.category == .client }
     }
 
-    // Notification settings (bound to NotificationManager)
-    @ObservedObject private var notificationManager = NotificationManager.shared
-
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -86,62 +83,6 @@ struct SettingsView: View {
 
                 ForEach(clientProjects) { project in
                     ProjectRow(project: project)
-                }
-            }
-
-            Divider()
-                .padding(.vertical, 8)
-
-            // Notifications Section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("NOTIFICATIONS")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 16)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    // Main toggle
-                    Toggle("Notify when Claude is waiting", isOn: $notificationManager.notificationsEnabled)
-                        .font(.system(size: 12))
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                        .padding(.horizontal, 16)
-
-                    // Sub-options (indented, dimmed when disabled)
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Style")
-                                .font(.system(size: 12))
-                                .foregroundStyle(notificationManager.notificationsEnabled ? .primary : .tertiary)
-
-                            Spacer()
-
-                            Picker("", selection: $notificationManager.notificationStyle) {
-                                ForEach(NotificationStyle.allCases, id: \.self) { style in
-                                    Text(style.rawValue).tag(style)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .frame(width: 100)
-                            .disabled(!notificationManager.notificationsEnabled)
-                        }
-
-                        Toggle("Play sound", isOn: $notificationManager.playSound)
-                            .font(.system(size: 12))
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                            .foregroundStyle(notificationManager.notificationsEnabled ? .primary : .tertiary)
-                            .disabled(!notificationManager.notificationsEnabled)
-
-                        Toggle("Only when in background", isOn: $notificationManager.onlyWhenInBackground)
-                            .font(.system(size: 12))
-                            .toggleStyle(.switch)
-                            .controlSize(.small)
-                            .foregroundStyle(notificationManager.notificationsEnabled ? .primary : .tertiary)
-                            .disabled(!notificationManager.notificationsEnabled)
-                    }
-                    .padding(.leading, 24)
-                    .padding(.horizontal, 16)
                 }
             }
 
@@ -223,6 +164,9 @@ struct SettingsView: View {
 
                 let project = Project(name: name, path: path, icon: icon, category: category)
                 modelContext.insert(project)
+
+                // Export to Dropbox for sync
+                SessionSyncService.shared.exportProject(project)
             }
         }
     }

@@ -100,17 +100,6 @@ struct WorkspaceView: View {
 
             // Try to restore last active session (may need to wait for @Query to populate)
             restoreLastSession()
-
-            // Start real-time file watching for the tasks directory (with delay to avoid race with initial import)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                FileWatcherService.shared.onChangesDetected = { [self] in
-                    let imported = TaskImportService.shared.importTasks(for: project, modelContext: modelContext)
-                    if imported > 0 {
-                        print("File watcher: imported \(imported) tasks")
-                    }
-                }
-                FileWatcherService.shared.startWatching(projectPath: project.path)
-            }
         }
         .onChange(of: sessions.count) { oldCount, newCount in
             // When sessions become available (query populated), restore last session if we don't have one
@@ -119,8 +108,6 @@ struct WorkspaceView: View {
             }
         }
         .onDisappear {
-            FileWatcherService.shared.stopWatching()
-
             // Remember last active session for next time (both on Project and in UserDefaults)
             project.lastActiveSessionId = windowState.activeSession?.id
             if let sessionId = windowState.activeSession?.id {
@@ -1152,14 +1139,6 @@ struct TaskRow: View {
         windowState.activeSession?.id == session.id
     }
 
-    var isWaiting: Bool {
-        appState.waitingSessions.contains(session.id)
-    }
-
-    var isWorking: Bool {
-        appState.workingSessions.contains(session.id)
-    }
-
     var isLogged: Bool {
         session.lastSessionSummary != nil && !session.lastSessionSummary!.isEmpty
     }
@@ -1168,12 +1147,10 @@ struct TaskRow: View {
         session.isCompleted
     }
 
-    /// Status color: green (completed), blue (working/active), orange (waiting), gray (inactive)
+    /// Status color: green (completed), blue (active), gray (inactive)
     var statusColor: Color {
         if isCompleted { return .green }
-        if isWorking { return .blue }
         if isActive { return .blue }
-        if isWaiting { return .orange }
         return Color.gray.opacity(0.4)
     }
 
@@ -1193,28 +1170,12 @@ struct TaskRow: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 14))
                         .foregroundStyle(.green)
-                } else if isWorking {
-                    // Pulsing blue circle when Claude is working
-                    Circle()
-                        .fill(Color.blue.opacity(0.3))
-                        .frame(width: 16, height: 16)
-                    Circle()
-                        .fill(Color.blue)
-                        .frame(width: 8, height: 8)
-                        .modifier(PulseAnimation())
                 } else if isActive {
                     Circle()
                         .fill(Color.blue.opacity(0.3))
                         .frame(width: 16, height: 16)
                     Circle()
                         .fill(Color.blue)
-                        .frame(width: 8, height: 8)
-                } else if isWaiting {
-                    Circle()
-                        .fill(Color.orange.opacity(0.3))
-                        .frame(width: 16, height: 16)
-                    Circle()
-                        .fill(statusColor)
                         .frame(width: 8, height: 8)
                 } else {
                     Circle()
@@ -1240,32 +1201,8 @@ struct TaskRow: View {
                             .lineLimit(1)
                             .truncationMode(.tail)
 
-                        // Show "working" badge when Claude is actively outputting
-                        if isWorking {
-                            Text("working")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(.blue)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
-                                .background(Color.blue.opacity(0.15))
-                                .clipShape(Capsule())
-                                .fixedSize()
-                        }
-
-                        // Show "waiting" badge when Claude needs input
-                        if isWaiting && !isWorking {
-                            Text("waiting")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(.orange)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
-                                .background(Color.orange.opacity(0.15))
-                                .clipShape(Capsule())
-                                .fixedSize()
-                        }
-
                         // Show "Logged" badge for tasks with summaries
-                        if isLogged && !isWaiting && !isWorking {
+                        if isLogged {
                             Text("Logged")
                                 .font(.system(size: 9, weight: .medium))
                                 .foregroundStyle(.green)
@@ -1407,8 +1344,6 @@ struct TaskRow: View {
                 session.completedAt = nil
             }
             windowState.activeSession = session
-            // Clear waiting state when user views this session
-            appState.clearSessionWaiting(session)
         }
         .onHover { hovering in
             isHovered = hovering
@@ -1586,33 +1521,6 @@ struct TaskRow: View {
                 }
             } catch {
                 print("Failed to save to task file: \(error)")
-            }
-        } else {
-            // Fallback: try old TaskFileService for legacy tasks
-            let components = project.path.components(separatedBy: "/")
-            guard let clientsIndex = components.firstIndex(where: { $0.lowercased() == "clients" }),
-                  clientsIndex + 1 < components.count else {
-                return
-            }
-            let clientName = components[clientsIndex + 1]
-
-            do {
-                try TaskFileService.shared.appendSessionSummary(
-                    clientName: clientName,
-                    taskName: session.name,
-                    summary: summary
-                )
-
-                if isCompleted {
-                    try TaskFileService.shared.updateTaskStatus(
-                        clientName: clientName,
-                        taskName: session.name,
-                        status: "done",
-                        completedDate: Date()
-                    )
-                }
-            } catch {
-                print("Failed to save to legacy task file: \(error)")
             }
         }
     }
