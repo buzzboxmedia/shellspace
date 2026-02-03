@@ -39,6 +39,9 @@ final class Session {
     var isCompleted: Bool
     var completedAt: Date?
 
+    // Hidden from active list (but not deleted - can be reopened)
+    var isHidden: Bool = false
+
     // Waiting for input (local state, synced for mobile notifications)
     var isWaitingForInput: Bool
 
@@ -137,6 +140,7 @@ struct SessionMetadata: Codable {
     var taskFolderPath: String?
     var isCompleted: Bool
     var completedAt: Date?
+    var isHidden: Bool
     var isWaitingForInput: Bool
     var hasBeenLaunched: Bool
 
@@ -166,6 +170,7 @@ extension Session {
             taskFolderPath: taskFolderPath,
             isCompleted: isCompleted,
             completedAt: completedAt,
+            isHidden: isHidden,
             isWaitingForInput: isWaitingForInput,
             hasBeenLaunched: hasBeenLaunched,
             projectId: project?.id,
@@ -191,6 +196,7 @@ extension Session {
         self.taskFolderPath = metadata.taskFolderPath
         self.isCompleted = metadata.isCompleted
         self.completedAt = metadata.completedAt
+        self.isHidden = metadata.isHidden
         self.isWaitingForInput = metadata.isWaitingForInput
         self.hasBeenLaunched = metadata.hasBeenLaunched
 

@@ -244,12 +244,16 @@ struct SessionSidebar: View {
     }
 
     var activeSessions: [Session] {
-        sessions.filter { !$0.isCompleted }
+        sessions.filter { !$0.isCompleted && !$0.isHidden }
     }
 
     var completedSessions: [Session] {
-        sessions.filter { $0.isCompleted }
+        sessions.filter { $0.isCompleted && !$0.isHidden }
             .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+    }
+
+    var hiddenSessions: [Session] {
+        sessions.filter { $0.isHidden }
     }
 
     var taskGroups: [ProjectGroup] {
@@ -270,6 +274,21 @@ struct SessionSidebar: View {
     func createTask() {
         let name = newTaskName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
+            isCreatingTask = false
+            newTaskName = ""
+            selectedGroupForNewTask = nil
+            return
+        }
+
+        // Check if a hidden session with this name already exists - if so, unhide it
+        if let existingSession = sessions.first(where: {
+            $0.name.lowercased() == name.lowercased() && $0.isHidden
+        }) {
+            existingSession.isHidden = false
+            existingSession.lastAccessedAt = Date()
+            windowState.activeSession = existingSession
+            SessionSyncService.shared.exportSession(existingSession)
+
             isCreatingTask = false
             newTaskName = ""
             selectedGroupForNewTask = nil
@@ -458,107 +477,76 @@ struct SessionSidebar: View {
                 // Task list - fills remaining space
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        // Action buttons row
-                        HStack(spacing: 8) {
-                            // New Task button
-                            if isCreatingTask {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(.blue)
-
-                                    TextField("Task name...", text: $newTaskName)
-                                        .textFieldStyle(.plain)
-                                        .font(.system(size: 13))
-                                        .focused($isTaskFieldFocused)
-                                        .onSubmit { createTask() }
-                                        .onExitCommand {
-                                            isCreatingTask = false
-                                            newTaskName = ""
-                                            selectedGroupForNewTask = nil
-                                        }
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                                .background(Color.blue.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                                )
-                                .onAppear { isTaskFieldFocused = true }
-                            } else {
-                                Button {
-                                    isCreatingTask = true
-                                } label: {
-                                    HStack(spacing: 5) {
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 11, weight: .medium))
-                                        Text("Task")
-                                            .font(.system(size: 12, weight: .medium))
+                        // Task input with autocomplete
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 8) {
+                                TextField("What are you working on?", text: $newTaskName)
+                                    .textFieldStyle(.plain)
+                                    .font(.system(size: 14))
+                                    .focused($isTaskFieldFocused)
+                                    .onSubmit { createTask() }
+                                    .onChange(of: newTaskName) { _, _ in
+                                        // Trigger autocomplete update
                                     }
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.white.opacity(0.06))
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                                    )
+
+                                Button {
+                                    createTask()
+                                } label: {
+                                    Text("GO")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(newTaskName.isEmpty ? Color.gray : Color.blue)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
                                 }
                                 .buttonStyle(.plain)
+                                .disabled(newTaskName.isEmpty)
                             }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                            )
 
-                            // New Project button
-                            if isCreatingGroup {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "folder.badge.plus")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(.purple)
+                            // Autocomplete suggestions
+                            if !newTaskName.isEmpty {
+                                let suggestions = sessions.filter {
+                                    $0.name.lowercased().contains(newTaskName.lowercased())
+                                }.prefix(5)
 
-                                    TextField("Project name...", text: $newGroupName)
-                                        .textFieldStyle(.plain)
-                                        .font(.system(size: 13))
-                                        .focused($isGroupFieldFocused)
-                                        .onSubmit { createGroup() }
-                                        .onExitCommand {
-                                            isCreatingGroup = false
-                                            newGroupName = ""
+                                if !suggestions.isEmpty {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        ForEach(Array(suggestions)) { session in
+                                            Button {
+                                                newTaskName = session.name
+                                                createTask()
+                                            } label: {
+                                                HStack {
+                                                    Text(session.name)
+                                                        .font(.system(size: 12))
+                                                        .foregroundStyle(.primary)
+                                                    Spacer()
+                                                    if session.isHidden {
+                                                        Text("hidden")
+                                                            .font(.system(size: 10))
+                                                            .foregroundStyle(.tertiary)
+                                                    }
+                                                }
+                                                .padding(.horizontal, 10)
+                                                .padding(.vertical, 6)
+                                                .background(Color.white.opacity(0.04))
+                                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                                            }
+                                            .buttonStyle(.plain)
                                         }
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                                .background(Color.purple.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.purple.opacity(0.3), lineWidth: 1)
-                                )
-                                .onAppear { isGroupFieldFocused = true }
-                            } else {
-                                Button {
-                                    isCreatingGroup = true
-                                } label: {
-                                    HStack(spacing: 5) {
-                                        Image(systemName: "folder.badge.plus")
-                                            .font(.system(size: 11, weight: .medium))
-                                        Text("Project")
-                                            .font(.system(size: 12, weight: .medium))
                                     }
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.white.opacity(0.06))
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                                    )
+                                    .padding(.top, 4)
                                 }
-                                .buttonStyle(.plain)
                             }
-
                         }
                         .padding(.horizontal, 16)
 
@@ -1223,17 +1211,6 @@ struct TaskRow: View {
                             .truncationMode(.tail)
                     }
 
-                    // Show "Project" badge for linked sessions
-                    if session.isProjectLinked {
-                        Text("Project")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(.blue)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(Color.blue.opacity(0.15))
-                            .clipShape(Capsule())
-                            .fixedSize()
-                    }
                 }
             }
 
@@ -1285,27 +1262,9 @@ struct TaskRow: View {
                     .help("Complete this task")
                 }
 
-                // Delete button - permanently deletes task and folder
+                // Archive button - hides task without deleting
                 Button {
-                    if windowState.activeSession?.id == session.id {
-                        windowState.activeSession = nil
-                    }
-                    appState.removeController(for: session)
-
-                    // Delete the task folder permanently
-                    if let taskFolderPath = session.taskFolderPath {
-                        do {
-                            try FileManager.default.removeItem(atPath: taskFolderPath)
-                        } catch {
-                            print("Failed to delete task folder: \(error)")
-                        }
-                    }
-
-                    // Delete the sync file from Dropbox
-                    let syncFile = SessionSyncService.centralSessionsDir.appendingPathComponent("\(session.id.uuidString).json")
-                    try? FileManager.default.removeItem(at: syncFile)
-
-                    modelContext.delete(session)
+                    archiveTask()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14))
@@ -1314,7 +1273,7 @@ struct TaskRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Delete this task")
+                .help("Archive this task")
             }
             .opacity(isHovered && !isEditing ? 1 : 0)
         }
@@ -1423,6 +1382,63 @@ struct TaskRow: View {
 
         // Show billing confirmation sheet
         showBillingSheet = true
+    }
+
+    /// Hide task from list without deleting - can be reopened later by typing same name
+    private func archiveTask() {
+        // Clear active session if this was it
+        if windowState.activeSession?.id == session.id {
+            windowState.activeSession = nil
+        }
+        appState.removeController(for: session)
+
+        // Log to invoice file
+        logToInvoice()
+
+        // Just hide it - folder stays in place so it can be reopened
+        session.isHidden = true
+
+        // Export updated state to Dropbox
+        SessionSyncService.shared.exportSession(session)
+    }
+
+    /// Append task info to invoice log file
+    private func logToInvoice() {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let today = dateFormatter.string(from: Date())
+
+        // Extract project name from path
+        let projectName = URL(fileURLWithPath: project.path).lastPathComponent
+
+        // Create log entry
+        let entry = "\(today) | \(projectName) | \(session.name) | archived\n"
+
+        // Invoice log location
+        let invoiceLogPath = NSString("~/Library/CloudStorage/Dropbox/ClaudeHub/invoice-log.txt").expandingTildeInPath
+        let invoiceLogURL = URL(fileURLWithPath: invoiceLogPath)
+
+        do {
+            // Create directory if needed
+            let dir = invoiceLogURL.deletingLastPathComponent()
+            if !FileManager.default.fileExists(atPath: dir.path) {
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            }
+
+            // Append to file (or create if doesn't exist)
+            if FileManager.default.fileExists(atPath: invoiceLogPath) {
+                let handle = try FileHandle(forWritingTo: invoiceLogURL)
+                handle.seekToEndOfFile()
+                if let data = entry.data(using: .utf8) {
+                    handle.write(data)
+                }
+                handle.closeFile()
+            } else {
+                try entry.write(to: invoiceLogURL, atomically: true, encoding: .utf8)
+            }
+        } catch {
+            print("Failed to log to invoice: \(error)")
+        }
     }
 
     /// Actually complete the task after billing confirmation
