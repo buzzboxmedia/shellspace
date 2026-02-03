@@ -550,45 +550,19 @@ struct SessionSidebar: View {
                         }
                         .padding(.horizontal, 16)
 
-                        // Project Groups with their tasks
-                        ForEach(Array(taskGroups.enumerated()), id: \.element.id) { index, group in
-                            ProjectGroupSection(
-                                group: group,
-                                project: project,
-                                index: index,
-                                totalGroups: taskGroups.count,
-                                draggedGroupId: $draggedGroupId
-                            )
-                        }
-
-                        // Standalone Tasks Section (drop here to remove from group)
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("TASKS")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .tracking(1.2)
+                        // Tasks list (flat, no groups)
+                        if activeSessions.isEmpty {
+                            Text("No tasks yet")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.tertiary)
+                                .frame(maxWidth: .infinity, minHeight: 40)
                                 .padding(.horizontal, 16)
-                                .padding(.top, 8)
-
-                            if standaloneTasks.isEmpty {
-                                // Drop zone when empty
-                                Text("Drop tasks here")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.tertiary)
-                                    .frame(maxWidth: .infinity, minHeight: 40)
-                                    .background(Color.white.opacity(0.03))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                                    .padding(.horizontal, 8)
-                            } else {
-                                LazyVStack(spacing: 4) {
-                                    ForEach(standaloneTasks) { session in
-                                        TaskRow(session: session, project: project)
-                                    }
+                        } else {
+                            LazyVStack(spacing: 4) {
+                                ForEach(activeSessions) { session in
+                                    TaskRow(session: session, project: project)
                                 }
                             }
-                        }
-                        .onDrop(of: [.text], isTargeted: nil) { providers in
-                            handleTasksDrop(providers: providers)
                         }
 
                     }
