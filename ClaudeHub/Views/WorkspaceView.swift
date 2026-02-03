@@ -225,32 +225,15 @@ struct SessionSidebar: View {
     @FocusState private var isGroupFieldFocused: Bool
 
     /// Find the persisted project with matching path (for relationships)
-    /// Also deduplicates if multiple projects exist with the same path
     var persistedProject: Project? {
-        let matching = allProjects.filter { $0.path == project.path }
-        if matching.count > 1 {
-            // Deduplicate: keep the first, delete the rest
-            for duplicate in matching.dropFirst() {
-                modelContext.delete(duplicate)
-            }
-        }
-        return matching.first
+        allProjects.first { $0.path == project.path }
     }
 
-    /// The project to use for creating new items (persisted if exists, otherwise passed-in)
+    /// The project to use - don't auto-persist, just use the passed-in one
     var effectiveProject: Project {
-        if let persisted = persistedProject {
-            return persisted
-        }
-        // Double-check before inserting to avoid race conditions
-        let path = project.path
-        let existingCheck = allProjects.first { $0.path == path }
-        if let existing = existingCheck {
-            return existing
-        }
-        // Insert the passed-in project so it gets persisted
-        modelContext.insert(project)
-        return project
+        // Return persisted if exists, otherwise just use the passed-in project
+        // Don't auto-insert to avoid creating duplicates
+        persistedProject ?? project
     }
 
     var sessions: [Session] {
