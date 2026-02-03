@@ -1619,6 +1619,12 @@ struct TerminalArea: View {
     @Binding var isSidebarCollapsed: Bool
     @State private var launchedExternalSessions: Set<UUID> = []
 
+    private func handleDictation() {
+        guard let session = windowState.activeSession else { return }
+        let controller = appState.getOrCreateController(for: session)
+        controller.toggleDictation()
+    }
+
     var body: some View {
         Group {
             if let session = windowState.activeSession {
@@ -1713,6 +1719,9 @@ struct TerminalArea: View {
                     }
                 )
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleDictation)) { _ in
+            handleDictation()
         }
     }
 }

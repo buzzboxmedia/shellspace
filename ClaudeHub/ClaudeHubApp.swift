@@ -4,6 +4,11 @@ import os.log
 
 private let appLogger = Logger(subsystem: "com.buzzbox.claudehub", category: "AppState")
 
+// MARK: - Notification Names
+extension Notification.Name {
+    static let toggleDictation = Notification.Name("toggleDictation")
+}
+
 /// Per-window state - each window gets its own instance
 class WindowState: ObservableObject {
     @Published var selectedProject: Project?
@@ -65,6 +70,13 @@ struct ClaudeHubApp: App {
             // Let SwiftTerm handle copy/paste natively via standard responder chain
             // (Don't override pasteboard commands - they break terminal copy/paste)
 
+            // Voice dictation command
+            CommandGroup(after: .textEditing) {
+                Button("Start Dictation") {
+                    NotificationCenter.default.post(name: .toggleDictation, object: nil)
+                }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+            }
         }
     }
 }
