@@ -40,7 +40,13 @@ struct NavigationRailView: View {
         "AAGL": "cross.case.fill",
         "AFL": "building.columns.fill",
         "INFAB": "shield.fill",
-        "TDS": "eye.fill"
+        "TDS": "eye.fill",
+        "Bassi": "b.circle.fill",
+        "CDW": "c.circle.fill",
+        "Citadel": "building.2.fill",
+        "MAGicALL": "wand.and.stars",
+        "RICO": "r.circle.fill",
+        "Talkspresso": "cup.and.saucer.fill"
     ]
 
     // All clients from folder scan (no database)
