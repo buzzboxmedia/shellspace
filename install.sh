@@ -80,6 +80,10 @@ cat > "$APP_PATH/Contents/Info.plist" << PLIST
     <false/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>ClaudeHub uses the microphone for voice dictation to send commands to Claude.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>ClaudeHub uses speech recognition to convert your voice into text commands for Claude.</string>
 </dict>
 </plist>
 PLIST
