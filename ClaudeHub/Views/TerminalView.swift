@@ -156,18 +156,21 @@ class SpeechService: ObservableObject {
         recognitionRequest = nil
         recognitionTask = nil
 
-        let finalTranscript = transcript
-
+        // Must capture transcript and call callback on main thread
         DispatchQueue.main.async {
+            let finalTranscript = self.transcript
+            let callback = self.onComplete
+
             self.isListening = false
-
-            if send && !finalTranscript.isEmpty {
-                self.onComplete?(finalTranscript)
-                self.logger.info("Sent transcript: \(finalTranscript)")
-            }
-
             self.transcript = ""
             self.onComplete = nil
+
+            if send && !finalTranscript.isEmpty {
+                self.logger.info("Sending transcript to terminal: \(finalTranscript)")
+                callback?(finalTranscript)
+            } else {
+                self.logger.info("Not sending - send:\(send), transcript empty:\(finalTranscript.isEmpty)")
+            }
         }
     }
 
