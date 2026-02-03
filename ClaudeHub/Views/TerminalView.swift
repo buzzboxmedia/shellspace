@@ -375,8 +375,8 @@ class TerminalController: ObservableObject {
     // MARK: - Voice Dictation
 
     func toggleDictation() {
-        logger.info("toggleDictation called, terminalView exists: \(terminalView != nil)")
-        print("DEBUG: toggleDictation called, terminalView exists: \(terminalView != nil)")
+        logger.info("toggleDictation called, terminalView exists: \(self.terminalView != nil)")
+        print("DEBUG: toggleDictation called, terminalView exists: \(self.terminalView != nil)")
 
         SpeechService.shared.toggleListening { [weak self] transcript in
             guard let self = self else {
