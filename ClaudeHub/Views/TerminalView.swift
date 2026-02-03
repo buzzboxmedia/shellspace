@@ -375,8 +375,17 @@ class TerminalController: ObservableObject {
     // MARK: - Voice Dictation
 
     func toggleDictation() {
+        logger.info("toggleDictation called, terminalView exists: \(terminalView != nil)")
+        print("DEBUG: toggleDictation called, terminalView exists: \(terminalView != nil)")
+
         SpeechService.shared.toggleListening { [weak self] transcript in
-            guard let self = self else { return }
+            guard let self = self else {
+                print("DEBUG: self is nil in callback!")
+                return
+            }
+            print("DEBUG: Callback received transcript: \(transcript)")
+            print("DEBUG: terminalView exists: \(self.terminalView != nil)")
+
             // Append transcript and send (with newline to submit)
             self.sendToTerminal(transcript + "\n")
             self.logger.info("Dictation sent: \(transcript)")
@@ -451,6 +460,8 @@ class TerminalController: ObservableObject {
 
     /// Send text to the terminal (for the Update button)
     func sendToTerminal(_ text: String) {
+        print("DEBUG: sendToTerminal called with: \(text)")
+        print("DEBUG: terminalView is \(terminalView != nil ? "not nil" : "nil")")
         terminalView?.send(txt: text)
     }
 
