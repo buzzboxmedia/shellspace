@@ -35,14 +35,32 @@ struct NavigationRailView: View {
         return sortItems(items, using: projectsOrder)
     }
 
-    private var defaultClientProjects: [(name: String, path: String, icon: String)] {
+    // Icons for known clients
+    private let clientIcons: [String: String] = [
+        "AAGL": "cross.case.fill",
+        "AFL": "building.columns.fill",
+        "INFAB": "shield.fill",
+        "TDS": "eye.fill"
+    ]
+
+    // All clients from folder scan (no database)
+    private var allClientProjects: [(name: String, path: String, icon: String)] {
         let clientsPath = "\(dropboxPath)/Buzzbox/Clients"
-        let items = [
-            ("AAGL", "\(clientsPath)/AAGL", "cross.case.fill"),
-            ("AFL", "\(clientsPath)/AFL", "building.columns.fill"),
-            ("INFAB", "\(clientsPath)/INFAB", "shield.fill"),
-            ("TDS", "\(clientsPath)/TDS", "eye.fill")
-        ].filter { FileManager.default.fileExists(atPath: $0.1) }
+        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: clientsPath) else {
+            return []
+        }
+
+        let items = contents.compactMap { name -> (String, String, String)? in
+            let path = "\(clientsPath)/\(name)"
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else {
+                return nil
+            }
+            // Skip hidden folders
+            guard !name.hasPrefix(".") else { return nil }
+            let icon = clientIcons[name] ?? "hammer.fill"
+            return (name, path, icon)
+        }.sorted { $0.0 < $1.0 }
 
         return sortItems(items, using: clientsOrder)
     }
@@ -55,18 +73,11 @@ struct NavigationRailView: View {
         return []
     }
 
-    // Database projects not already in defaults
+    // Database projects not already shown (main projects only - clients come from folder scan)
     private var additionalMainProjects: [(name: String, path: String, icon: String)] {
         let defaultPaths = Set(defaultMainProjects.map { $0.path } + developmentProjects.map { $0.path })
         return allProjects
             .filter { $0.category == .main && !defaultPaths.contains($0.path) }
-            .map { ($0.name, $0.path, $0.icon) }
-    }
-
-    private var additionalClientProjects: [(name: String, path: String, icon: String)] {
-        let defaultPaths = Set(defaultClientProjects.map { $0.path })
-        return allProjects
-            .filter { $0.category == .client && !defaultPaths.contains($0.path) }
             .map { ($0.name, $0.path, $0.icon) }
     }
 
@@ -109,10 +120,10 @@ struct NavigationRailView: View {
                         RailDivider()
                     }
 
-                    // Clients section (defaults + database)
-                    if !defaultClientProjects.isEmpty || !additionalClientProjects.isEmpty {
+                    // Clients section (from folder scan - no database)
+                    if !allClientProjects.isEmpty {
                         ReorderableRailSection(
-                            items: defaultClientProjects + additionalClientProjects,
+                            items: allClientProjects,
                             sessions: allSessions,
                             draggedPath: $draggedPath,
                             onReorder: { newOrder in
