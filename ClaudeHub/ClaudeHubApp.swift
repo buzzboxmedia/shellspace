@@ -70,23 +70,27 @@ struct ClaudeHubApp: App {
             // Let SwiftTerm handle copy/paste natively via standard responder chain
             // (Don't override pasteboard commands - they break terminal copy/paste)
 
-            // Voice dictation command
-            CommandGroup(after: .textEditing) {
-                Button("Voice Input") {
-                    NotificationCenter.default.post(name: .toggleDictation, object: nil)
-                }
-                .keyboardShortcut("m", modifiers: [.command, .shift])
-            }
         }
     }
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     weak var appState: AppState?
+    private var hotkeyMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Ensure app can become active
         NSApplication.shared.activate(ignoringOtherApps: true)
+
+        // Global hotkey for voice dictation: Ctrl+Shift+Space
+        hotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // Ctrl+Shift+Space
+            if event.modifierFlags.contains([.control, .shift]) && event.keyCode == 49 {
+                NotificationCenter.default.post(name: .toggleDictation, object: nil)
+                return nil
+            }
+            return event
+        }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
