@@ -82,10 +82,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Ensure app can become active
         NSApplication.shared.activate(ignoringOtherApps: true)
 
-        // Global hotkey for voice dictation: Ctrl+Shift+Space
+        // Global hotkey for voice dictation: Option+D
         hotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            // Ctrl+Shift+Space
-            if event.modifierFlags.contains([.control, .shift]) && event.keyCode == 49 {
+            // Option+D (keyCode 2 is 'd')
+            if event.modifierFlags.contains(.option) && event.keyCode == 2 {
+                appLogger.info("Voice dictation hotkey triggered")
                 NotificationCenter.default.post(name: .toggleDictation, object: nil)
                 return nil
             }
