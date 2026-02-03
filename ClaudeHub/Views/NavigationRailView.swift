@@ -283,13 +283,25 @@ struct RailItem: View {
     let sessions: [Session]
 
     @State private var isHovered = false
+    @State private var isPulsing = false
 
     private var isSelected: Bool {
         windowState.selectedProject?.path == path
     }
 
+    /// Count of sessions with active terminal controllers (running)
     private var runningCount: Int {
         sessions.filter { appState.terminalControllers[$0.id] != nil }.count
+    }
+
+    /// Check if any session in this project needs attention
+    private var needsAttention: Bool {
+        sessions.contains { appState.sessionsNeedingAttention.contains($0.id) }
+    }
+
+    /// Has any active sessions (tasks open)
+    private var hasActiveSessions: Bool {
+        !sessions.filter { !$0.isCompleted && !$0.isHidden }.isEmpty
     }
 
     var body: some View {
@@ -299,11 +311,16 @@ struct RailItem: View {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: icon)
                     .font(.system(size: 20))
-                    .foregroundStyle(isSelected ? .primary : .secondary)
+                    .foregroundStyle(hasActiveSessions ? .primary : .secondary)
                     .frame(width: 36, height: 36)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .fill(isSelected ? Color.accentColor.opacity(0.2) : (isHovered ? Color.primary.opacity(0.1) : .clear))
+                    )
+                    // Glow effect when there are active sessions
+                    .shadow(
+                        color: hasActiveSessions ? Color.blue.opacity(0.5) : .clear,
+                        radius: hasActiveSessions ? 6 : 0
                     )
                     .overlay(
                         // Selection indicator bar on left
@@ -318,8 +335,20 @@ struct RailItem: View {
                         }
                     )
 
-                // Badge overlay - show blue dot for running sessions
-                if runningCount > 0 {
+                // Badge overlay - pulsing blue dot for attention, static dot for running
+                if needsAttention {
+                    Circle()
+                        .fill(Color.blue)
+                        .frame(width: 10, height: 10)
+                        .shadow(color: Color.blue.opacity(0.8), radius: isPulsing ? 6 : 2)
+                        .scaleEffect(isPulsing ? 1.2 : 1.0)
+                        .offset(x: 2, y: -2)
+                        .onAppear {
+                            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                                isPulsing = true
+                            }
+                        }
+                } else if runningCount > 0 {
                     Circle()
                         .fill(Color.blue.opacity(0.7))
                         .frame(width: 8, height: 8)
@@ -337,6 +366,11 @@ struct RailItem: View {
     }
 
     private func selectProject() {
+        // If switching to a different project, clear the active session so it can be restored for new project
+        if windowState.selectedProject?.path != path {
+            windowState.activeSession = nil
+        }
+
         let category: ProjectCategory = path.contains("/Clients/") ? .client : .main
         let project = Project(name: name, path: path, icon: icon, category: category)
 
@@ -351,6 +385,11 @@ struct RailItem: View {
 
         // Persist last-used project
         UserDefaults.standard.set(path, forKey: "lastSelectedProjectPath")
+
+        // Clear attention for all sessions in this project when viewing it
+        for session in sessions {
+            appState.clearSessionAttention(session.id)
+        }
     }
 }
 

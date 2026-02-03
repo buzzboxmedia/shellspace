@@ -107,6 +107,12 @@ struct WorkspaceView: View {
                 restoreLastSession()
             }
         }
+        .onChange(of: windowState.activeSession) { oldSession, newSession in
+            // If activeSession is nil (project just changed), try to restore
+            if newSession == nil && !sessions.isEmpty {
+                restoreLastSession()
+            }
+        }
         .onDisappear {
             // Remember last active session for next time (both on Project and in UserDefaults)
             project.lastActiveSessionId = windowState.activeSession?.id
@@ -324,6 +330,7 @@ struct SessionSidebar: View {
         windowState.activeSession = session
         isCreatingTask = false
         newTaskName = ""
+        isTaskFieldFocused = false  // Unfocus text field so terminal can take focus
 
         Task {
             do {
@@ -1008,6 +1015,7 @@ struct ProjectGroupSection: View {
         windowState.activeSession = session
         isCreatingTask = false
         newTaskName = ""
+        isTaskFieldFocused = false  // Unfocus text field so terminal can take focus
 
         Task {
             do {
@@ -1493,9 +1501,11 @@ struct TaskRow: View {
 
 struct TerminalHeader: View {
     @EnvironmentObject var appState: AppState
+    @ObservedObject var speechService = SpeechService.shared
     let session: Session
     let project: Project
     @Binding var isSidebarCollapsed: Bool
+    @State private var micPulse = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -1537,6 +1547,38 @@ struct TerminalHeader: View {
 
             Spacer()
 
+            // Dictation indicator (shows when listening)
+            if speechService.isListening {
+                HStack(spacing: 6) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .scaleEffect(micPulse ? 1.2 : 1.0)
+                        .shadow(color: Color.red.opacity(micPulse ? 0.8 : 0.3), radius: micPulse ? 6 : 2)
+
+                    if !speechService.transcript.isEmpty {
+                        Text(speechService.transcript.prefix(30) + (speechService.transcript.count > 30 ? "..." : ""))
+                            .font(.system(size: 11))
+                            .lineLimit(1)
+                    } else {
+                        Text("Listening...")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                }
+                .foregroundStyle(.red)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.red.opacity(0.15))
+                .clipShape(Capsule())
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true)) {
+                        micPulse = true
+                    }
+                }
+                .onDisappear {
+                    micPulse = false
+                }
+            }
+
             // Running badge
             HStack(spacing: 5) {
                 Circle()
@@ -1568,8 +1610,6 @@ struct TerminalHeader: View {
             }
         )
     }
-
-
 }
 
 struct TerminalArea: View {

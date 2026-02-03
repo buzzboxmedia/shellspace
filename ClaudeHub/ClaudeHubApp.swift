@@ -106,6 +106,9 @@ class AppState: ObservableObject {
     /// Terminal controllers by session ID (for embedded SwiftTerm)
     var terminalControllers: [UUID: TerminalController] = [:]
 
+    /// Sessions that need attention (Claude finished outputting while not viewing)
+    var sessionsNeedingAttention: Set<UUID> = []
+
     /// Per-window states keyed by window ID
     private var windowStates: [UUID: WindowState] = [:]
 
@@ -152,6 +155,24 @@ class AppState: ObservableObject {
 
     func isSessionLaunched(_ session: Session) -> Bool {
         launchedSessions.contains(session.id)
+    }
+
+    // MARK: - Attention Tracking
+
+    func markSessionNeedsAttention(_ sessionId: UUID) {
+        DispatchQueue.main.async {
+            self.sessionsNeedingAttention.insert(sessionId)
+        }
+    }
+
+    func clearSessionAttention(_ sessionId: UUID) {
+        DispatchQueue.main.async {
+            self.sessionsNeedingAttention.remove(sessionId)
+        }
+    }
+
+    func sessionNeedsAttention(_ sessionId: UUID) -> Bool {
+        sessionsNeedingAttention.contains(sessionId)
     }
 
     // MARK: - Log Management

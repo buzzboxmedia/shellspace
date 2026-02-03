@@ -1,9 +1,171 @@
 import SwiftUI
 import SwiftTerm
 import AppKit
+import Speech
 import os.log
 
 private let viewLogger = Logger(subsystem: "com.buzzbox.claudehub", category: "TerminalView")
+
+// MARK: - Speech Recognition Service
+
+class SpeechService: ObservableObject {
+    static let shared = SpeechService()
+
+    @Published var isListening = false
+    @Published var transcript = ""
+
+    private var speechRecognizer: SFSpeechRecognizer?
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionTask: SFSpeechRecognitionTask?
+    private var audioEngine = AVAudioEngine()
+    private let logger = Logger(subsystem: "com.buzzbox.claudehub", category: "SpeechService")
+
+    private var onComplete: ((String) -> Void)?
+    private var silenceTimer: Timer?
+    private var lastTranscriptTime: Date?
+
+    init() {
+        speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    }
+
+    func requestAuthorization(completion: @escaping (Bool) -> Void) {
+        SFSpeechRecognizer.requestAuthorization { status in
+            DispatchQueue.main.async {
+                switch status {
+                case .authorized:
+                    self.logger.info("Speech recognition authorized")
+                    completion(true)
+                case .denied, .restricted, .notDetermined:
+                    self.logger.warning("Speech recognition not authorized: \(String(describing: status))")
+                    completion(false)
+                @unknown default:
+                    completion(false)
+                }
+            }
+        }
+    }
+
+    func startListening(onComplete: @escaping (String) -> Void) {
+        guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else {
+            logger.error("Speech recognizer not available")
+            return
+        }
+
+        // Stop any existing session
+        stopListening(send: false)
+
+        self.onComplete = onComplete
+
+        do {
+            // macOS doesn't need AVAudioSession configuration like iOS
+            recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
+            guard let recognitionRequest = recognitionRequest else {
+                logger.error("Unable to create recognition request")
+                return
+            }
+
+            recognitionRequest.shouldReportPartialResults = true
+            if #available(macOS 13.0, *) {
+                recognitionRequest.requiresOnDeviceRecognition = true  // Privacy: on-device only
+            }
+
+            let inputNode = audioEngine.inputNode
+            let recordingFormat = inputNode.outputFormat(forBus: 0)
+
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
+                self.recognitionRequest?.append(buffer)
+            }
+
+            audioEngine.prepare()
+            try audioEngine.start()
+
+            isListening = true
+            transcript = ""
+            lastTranscriptTime = Date()
+
+            // Start silence detection timer
+            startSilenceTimer()
+
+            recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+                guard let self = self else { return }
+
+                if let result = result {
+                    DispatchQueue.main.async {
+                        self.transcript = result.bestTranscription.formattedString
+                        self.lastTranscriptTime = Date()
+                    }
+                }
+
+                if error != nil || (result?.isFinal ?? false) {
+                    self.stopListening(send: true)
+                }
+            }
+
+            logger.info("Started listening")
+
+        } catch {
+            logger.error("Failed to start audio engine: \(error.localizedDescription)")
+            stopListening(send: false)
+        }
+    }
+
+    private func startSilenceTimer() {
+        silenceTimer?.invalidate()
+        silenceTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            guard let self = self, self.isListening else { return }
+
+            // If no new transcript for 1.5 seconds and we have some text, auto-send
+            if let lastTime = self.lastTranscriptTime,
+               Date().timeIntervalSince(lastTime) > 1.5,
+               !self.transcript.isEmpty {
+                self.stopListening(send: true)
+            }
+        }
+    }
+
+    func stopListening(send: Bool) {
+        silenceTimer?.invalidate()
+        silenceTimer = nil
+
+        audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+
+        recognitionRequest = nil
+        recognitionTask = nil
+
+        let finalTranscript = transcript
+
+        DispatchQueue.main.async {
+            self.isListening = false
+
+            if send && !finalTranscript.isEmpty {
+                self.onComplete?(finalTranscript)
+                self.logger.info("Sent transcript: \(finalTranscript)")
+            }
+
+            self.transcript = ""
+            self.onComplete = nil
+        }
+    }
+
+    func toggleListening(onComplete: @escaping (String) -> Void) {
+        if isListening {
+            stopListening(send: true)
+        } else {
+            requestAuthorization { authorized in
+                if authorized {
+                    self.startListening(onComplete: onComplete)
+                } else {
+                    self.logger.warning("Speech recognition not authorized")
+                    // Open System Preferences
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")!)
+                }
+            }
+        }
+    }
+}
 
 struct TerminalView: View {
     let session: Session
@@ -184,6 +346,17 @@ class TerminalController: ObservableObject {
             terminal.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         }
         logger.info("Font size changed to: \(self.fontSize)")
+    }
+
+    // MARK: - Voice Dictation
+
+    func toggleDictation() {
+        SpeechService.shared.toggleListening { [weak self] transcript in
+            guard let self = self else { return }
+            // Append transcript and send (with newline to submit)
+            self.sendToTerminal(transcript + "\n")
+            self.logger.info("Dictation sent: \(transcript)")
+        }
     }
 
     // MARK: - Log Management
@@ -621,7 +794,7 @@ class ClaudeHubTerminalView: LocalProcessTerminalView {
         }
     }
 
-    // MARK: - Key Monitor (Cmd+C copy, Cmd+V image paste, Cmd+A select all, Cmd+K clear)
+    // MARK: - Key Monitor (Cmd+C copy, Cmd+V image paste, Cmd+A select all, Cmd+K clear, Cmd+Shift+D dictate)
 
     func setupKeyMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -629,6 +802,15 @@ class ClaudeHubTerminalView: LocalProcessTerminalView {
                   event.modifierFlags.contains(.command),
                   event.window == self.window else {
                 return event
+            }
+
+            // Check for Cmd+Shift+D (dictation)
+            if event.modifierFlags.contains(.shift) && event.charactersIgnoringModifiers == "d" {
+                SpeechService.shared.toggleListening { transcript in
+                    self.send(txt: transcript + "\n")
+                    self.chLogger.info("Dictation sent: \(transcript)")
+                }
+                return nil
             }
 
             switch event.charactersIgnoringModifiers {
