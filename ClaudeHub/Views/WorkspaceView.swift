@@ -591,53 +591,6 @@ struct SessionSidebar: View {
                             handleTasksDrop(providers: providers)
                         }
 
-                        // Completed Tasks Section (collapsible)
-                        if !completedSessions.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Button {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        isCompletedExpanded.toggle()
-                                    }
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: isCompletedExpanded ? "chevron.down" : "chevron.right")
-                                            .font(.system(size: 10, weight: .semibold))
-                                            .foregroundStyle(.tertiary)
-                                            .frame(width: 12)
-
-                                        Text("COMPLETED")
-                                            .font(.system(size: 13, weight: .semibold))
-                                            .foregroundStyle(.tertiary)
-                                            .tracking(1.2)
-
-                                        Text("\(completedSessions.count)")
-                                            .font(.system(size: 11, weight: .medium))
-                                            .foregroundStyle(.tertiary)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(Color.white.opacity(0.1))
-                                            .clipShape(Capsule())
-
-                                        Spacer()
-                                    }
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 6)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-
-                                if isCompletedExpanded {
-                                    LazyVStack(spacing: 4) {
-                                        ForEach(completedSessions) { session in
-                                            TaskRow(session: session, project: project, isCompletedSection: true)
-                                                .opacity(0.7)
-                                        }
-                                    }
-                                    .transition(.opacity.combined(with: .move(edge: .top)))
-                                }
-                            }
-                            .padding(.top, 8)
-                        }
                     }
                     .padding(.vertical, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1241,39 +1194,18 @@ struct TaskRow: View {
                 .buttonStyle(.plain)
                 .help("Open in Terminal.app")
 
-                if !isCompleted {
-                    // Complete button for active tasks
-                    Button {
-                        completeTask()
-                    } label: {
-                        if isCompleting {
-                            ProgressView()
-                                .scaleEffect(0.6)
-                                .frame(width: 24, height: 24)
-                        } else {
-                            Image(systemName: "checkmark.circle")
-                                .font(.system(size: 14))
-                                .foregroundStyle(.green)
-                                .frame(width: 24, height: 24)
-                                .contentShape(Rectangle())
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .help("Complete this task")
-                }
-
-                // Archive button - hides task without deleting
+                // Hide button - hides task from list (can reopen by typing name)
                 Button {
                     archiveTask()
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
+                    Image(systemName: "eye.slash")
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .frame(width: 24, height: 24)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Archive this task")
+                .help("Hide this task")
             }
             .opacity(isHovered && !isEditing ? 1 : 0)
         }
