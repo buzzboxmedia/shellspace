@@ -277,11 +277,14 @@ struct SessionSidebar: View {
             return
         }
 
-        // Check if a hidden session with this name already exists - if so, unhide it
+        // Check if a session with this name already exists (case-insensitive)
         if let existingSession = sessions.first(where: {
-            $0.name.lowercased() == name.lowercased() && $0.isHidden
+            $0.name.lowercased() == name.lowercased()
         }) {
-            existingSession.isHidden = false
+            // Unhide if hidden
+            if existingSession.isHidden {
+                existingSession.isHidden = false
+            }
             existingSession.lastAccessedAt = Date()
             windowState.activeSession = existingSession
             SessionSyncService.shared.exportSession(existingSession)
