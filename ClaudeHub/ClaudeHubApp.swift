@@ -72,10 +72,10 @@ struct ClaudeHubApp: App {
 
             // Voice dictation command
             CommandGroup(after: .textEditing) {
-                Button("Start Dictation") {
+                Button("Voice Input") {
                     NotificationCenter.default.post(name: .toggleDictation, object: nil)
                 }
-                .keyboardShortcut("d", modifiers: [.command, .shift])
+                .keyboardShortcut("m", modifiers: [.command, .shift])
             }
         }
     }
