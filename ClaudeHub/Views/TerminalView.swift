@@ -65,9 +65,10 @@ class SpeechService: ObservableObject {
             }
 
             recognitionRequest.shouldReportPartialResults = true
-            if #available(macOS 13.0, *) {
-                recognitionRequest.requiresOnDeviceRecognition = true  // Privacy: on-device only
-            }
+            // Don't require on-device - let it use server if needed
+            // if #available(macOS 13.0, *) {
+            //     recognitionRequest.requiresOnDeviceRecognition = true
+            // }
 
             let inputNode = audioEngine.inputNode
             let recordingFormat = inputNode.outputFormat(forBus: 0)
@@ -79,29 +80,41 @@ class SpeechService: ObservableObject {
             audioEngine.prepare()
             try audioEngine.start()
 
-            isListening = true
-            transcript = ""
-            lastTranscriptTime = Date()
+            DispatchQueue.main.async {
+                self.isListening = true
+                self.transcript = ""
+                self.lastTranscriptTime = Date()
+            }
 
-            // Start silence detection timer
+            // Start silence detection timer (longer delay)
             startSilenceTimer()
 
             recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
                 guard let self = self else { return }
 
+                if let error = error {
+                    self.logger.error("Recognition error: \(error.localizedDescription)")
+                    // Don't stop on transient errors, only on final
+                    if (error as NSError).code == 1110 {
+                        // "No speech detected" - this is normal, keep listening
+                        return
+                    }
+                }
+
                 if let result = result {
                     DispatchQueue.main.async {
                         self.transcript = result.bestTranscription.formattedString
                         self.lastTranscriptTime = Date()
+                        self.logger.info("Transcript: \(result.bestTranscription.formattedString)")
                     }
-                }
 
-                if error != nil || (result?.isFinal ?? false) {
-                    self.stopListening(send: true)
+                    if result.isFinal {
+                        self.stopListening(send: true)
+                    }
                 }
             }
 
-            logger.info("Started listening")
+            logger.info("Started listening - speak now")
 
         } catch {
             logger.error("Failed to start audio engine: \(error.localizedDescription)")
@@ -114,11 +127,19 @@ class SpeechService: ObservableObject {
         silenceTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let self = self, self.isListening else { return }
 
-            // If no new transcript for 1.5 seconds and we have some text, auto-send
+            // If no new transcript for 2.5 seconds and we have some text, auto-send
             if let lastTime = self.lastTranscriptTime,
-               Date().timeIntervalSince(lastTime) > 1.5,
+               Date().timeIntervalSince(lastTime) > 2.5,
                !self.transcript.isEmpty {
+                self.logger.info("Silence detected, sending transcript")
                 self.stopListening(send: true)
+            }
+
+            // Timeout after 30 seconds even with no transcript
+            if let lastTime = self.lastTranscriptTime,
+               Date().timeIntervalSince(lastTime) > 30 {
+                self.logger.info("Timeout, stopping")
+                self.stopListening(send: false)
             }
         }
     }
