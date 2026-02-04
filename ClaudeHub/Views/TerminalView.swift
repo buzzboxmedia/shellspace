@@ -739,20 +739,6 @@ class TerminalController: ObservableObject {
 class ClaudeHubTerminalView: LocalProcessTerminalView {
     var projectPath: String?
     private let chLogger = Logger(subsystem: "com.buzzbox.claudehub", category: "ClaudeHubTerminal")
-
-    // URL regex for detecting any links (full URLs, domains, subdomains, paths)
-    private static let urlPattern = try! NSRegularExpression(
-        pattern: #"(https?://[^\s<>\"\'\]\)]+)|([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(/[^\s<>\"\'\]\)]*)?"#,
-        options: [.caseInsensitive]
-    )
-
-    // File path patterns - absolute paths, home paths, and filenames with extensions
-    private static let filePathPattern = try! NSRegularExpression(
-        pattern: #"(~?/[^\s<>\"\'\]\)]+)|([a-zA-Z0-9_-]+\.[a-zA-Z0-9]{1,10})"#,
-        options: []
-    )
-
-    private var isShowingHandCursor = false
     private var keyMonitor: Any?
 
     // MARK: - Setup
@@ -957,28 +943,10 @@ class ClaudeHubTerminalView: LocalProcessTerminalView {
         }
     }
 
-    // MARK: - Mouse Cursor for URLs
-    // Note: Can't override mouseMoved (not open in SwiftTerm), so we use a local event monitor
-
-    private var mouseMoveMonitor: Any?
-
+    // URL hover detection removed - was causing performance issues
+    // URLs can still be clicked, just no hover cursor change
     func setupMouseMoveMonitor() {
-        mouseMoveMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
-            guard let self = self, event.window == self.window else { return event }
-            let locationInSelf = self.convert(event.locationInWindow, from: nil)
-            if self.bounds.contains(locationInSelf) && self.detectURLAtPoint(locationInSelf) != nil {
-                if !self.isShowingHandCursor {
-                    NSCursor.pointingHand.push()
-                    self.isShowingHandCursor = true
-                }
-            } else {
-                if self.isShowingHandCursor {
-                    NSCursor.pop()
-                    self.isShowingHandCursor = false
-                }
-            }
-            return event
-        }
+        // Intentionally empty - hover detection disabled for performance
     }
 
     // MARK: - Focus Management
@@ -1018,91 +986,10 @@ class ClaudeHubTerminalView: LocalProcessTerminalView {
         _ = window.makeFirstResponder(self)
     }
 
-    // MARK: - URL Detection
-
-    private func detectURLAtPoint(_ point: CGPoint) -> URL? {
-        let font = self.font
-        let charWidth = font.advancement(forGlyph: font.glyph(withName: "M")).width
-        let lineHeight = font.ascender - font.descender + font.leading
-
-        let col = Int(point.x / charWidth)
-        // SwiftTerm uses non-flipped coordinates (origin bottom-left)
-        let screenRow = Int((frame.height - point.y) / lineHeight)
-
-        let terminalCore = getTerminal()
-        let data = terminalCore.getBufferAsData()
-        guard let content = String(data: data, encoding: .utf8) else { return nil }
-
-        let lines = content.components(separatedBy: "\n")
-
-        let scrollOffset = terminalCore.buffer.yDisp
-        let row = scrollOffset + screenRow
-
-        guard row >= 0 && row < lines.count else { return nil }
-        let clickedLine = lines[row]
-
-        // Check if this line is a continuation of a URL from previous line
-        if row > 0 && !clickedLine.isEmpty && !clickedLine.hasPrefix(" ") {
-            let prevLine = lines[row - 1].trimmingCharacters(in: .whitespaces)
-            if let lastUrlMatch = Self.urlPattern.matches(in: prevLine, options: [], range: NSRange(prevLine.startIndex..., in: prevLine)).last,
-               let swiftRange = Range(lastUrlMatch.range, in: prevLine) {
-                let urlEndCol = prevLine.distance(from: prevLine.startIndex, to: swiftRange.upperBound)
-                if urlEndCol >= prevLine.count - 2 {
-                    let partialUrl = String(prevLine[swiftRange])
-                    let continuation = clickedLine.prefix(while: { !$0.isWhitespace })
-                    var fullUrl = partialUrl + continuation
-
-                    if !fullUrl.lowercased().hasPrefix("http://") && !fullUrl.lowercased().hasPrefix("https://") {
-                        fullUrl = "https://" + fullUrl
-                    }
-
-                    if col < continuation.count {
-                        chLogger.info("Found wrapped URL: \(fullUrl)")
-                        return URL(string: fullUrl)
-                    }
-                }
-            }
-        }
-
-        // Find URLs in this line
-        let range = NSRange(clickedLine.startIndex..., in: clickedLine)
-        let matches = Self.urlPattern.matches(in: clickedLine, options: [], range: range)
-
-        for match in matches {
-            if let swiftRange = Range(match.range, in: clickedLine) {
-                let startCol = clickedLine.distance(from: clickedLine.startIndex, to: swiftRange.lowerBound)
-                let endCol = clickedLine.distance(from: clickedLine.startIndex, to: swiftRange.upperBound)
-
-                if col >= startCol && col < endCol {
-                    var urlString = String(clickedLine[swiftRange])
-
-                    if endCol >= clickedLine.count - 2 && row + 1 < lines.count {
-                        let nextLine = lines[row + 1]
-                        if !nextLine.isEmpty && !nextLine.hasPrefix(" ") {
-                            let continuation = nextLine.prefix(while: { !$0.isWhitespace })
-                            urlString += continuation
-                        }
-                    }
-
-                    if !urlString.lowercased().hasPrefix("http://") && !urlString.lowercased().hasPrefix("https://") {
-                        urlString = "https://" + urlString
-                    }
-                    chLogger.info("Found URL at click: \(urlString)")
-                    return URL(string: urlString)
-                }
-            }
-        }
-
-        return nil
-    }
-
     // MARK: - Cleanup
 
     deinit {
         if let monitor = keyMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
-        if let monitor = mouseMoveMonitor {
             NSEvent.removeMonitor(monitor)
         }
     }

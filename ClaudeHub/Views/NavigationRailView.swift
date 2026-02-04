@@ -13,26 +13,19 @@ struct NavigationRailView: View {
     @State private var showAddProject = false
     @State private var draggedPath: String?
 
+    // Cached client list (refreshed on appear, not every render)
+    @State private var cachedClients: [(name: String, path: String, icon: String)] = []
+    @State private var cachedMainProjects: [(name: String, path: String, icon: String)] = []
+
     // Persisted order for each section
     @AppStorage("railOrderProjects") private var projectsOrderData: Data = Data()
     @AppStorage("railOrderClients") private var clientsOrderData: Data = Data()
 
-    // Dropbox path (check both locations)
+    // Dropbox path (check both locations) - computed once
     private var dropboxPath: String {
         let newPath = NSString("~/Library/CloudStorage/Dropbox").expandingTildeInPath
         let legacyPath = NSString("~/Dropbox").expandingTildeInPath
         return FileManager.default.fileExists(atPath: newPath) ? newPath : legacyPath
-    }
-
-    // Default projects - always show if folder exists
-    private var defaultMainProjects: [(name: String, path: String, icon: String)] {
-        let items = [
-            ("Miller", "\(dropboxPath)/Miller", "person.fill"),
-            ("Talkspresso", "\(dropboxPath)/Talkspresso", "cup.and.saucer.fill"),
-            ("Buzzbox", "\(dropboxPath)/Buzzbox", "shippingbox.fill")
-        ].filter { FileManager.default.fileExists(atPath: $0.1) }
-
-        return sortItems(items, using: projectsOrder)
     }
 
     // Icons for known clients
@@ -49,11 +42,21 @@ struct NavigationRailView: View {
         "Talkspresso": "cup.and.saucer.fill"
     ]
 
-    // All clients from folder scan (no database)
-    private var allClientProjects: [(name: String, path: String, icon: String)] {
+    // Scan filesystem for projects (called once on appear)
+    private func refreshProjectLists() {
+        // Main projects
+        let mainItems = [
+            ("Miller", "\(dropboxPath)/Miller", "person.fill"),
+            ("Talkspresso", "\(dropboxPath)/Talkspresso", "cup.and.saucer.fill"),
+            ("Buzzbox", "\(dropboxPath)/Buzzbox", "shippingbox.fill")
+        ].filter { FileManager.default.fileExists(atPath: $0.1) }
+        cachedMainProjects = sortItems(mainItems, using: projectsOrder)
+
+        // Clients
         let clientsPath = "\(dropboxPath)/Buzzbox/Clients"
         guard let contents = try? FileManager.default.contentsOfDirectory(atPath: clientsPath) else {
-            return []
+            cachedClients = []
+            return
         }
 
         let items = contents.compactMap { name -> (String, String, String)? in
@@ -62,13 +65,12 @@ struct NavigationRailView: View {
             guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else {
                 return nil
             }
-            // Skip hidden folders
             guard !name.hasPrefix(".") else { return nil }
             let icon = clientIcons[name] ?? "hammer.fill"
             return (name, path, icon)
         }.sorted { $0.0 < $1.0 }
 
-        return sortItems(items, using: clientsOrder)
+        cachedClients = sortItems(items, using: clientsOrder)
     }
 
     private var developmentProjects: [(name: String, path: String, icon: String)] {
@@ -81,7 +83,7 @@ struct NavigationRailView: View {
 
     // Database projects not already shown (main projects only - clients come from folder scan)
     private var additionalMainProjects: [(name: String, path: String, icon: String)] {
-        let defaultPaths = Set(defaultMainProjects.map { $0.path } + developmentProjects.map { $0.path })
+        let defaultPaths = Set(cachedMainProjects.map { $0.path } + developmentProjects.map { $0.path })
         return allProjects
             .filter { $0.category == .main && !defaultPaths.contains($0.path) }
             .map { ($0.name, $0.path, $0.icon) }
@@ -112,30 +114,32 @@ struct NavigationRailView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     // Projects section (defaults + database)
-                    if !defaultMainProjects.isEmpty || !additionalMainProjects.isEmpty {
+                    if !cachedMainProjects.isEmpty || !additionalMainProjects.isEmpty {
                         ReorderableRailSection(
-                            items: defaultMainProjects + additionalMainProjects,
+                            items: cachedMainProjects + additionalMainProjects,
                             sessions: allSessions,
                             draggedPath: $draggedPath,
                             onReorder: { newOrder in
                                 if let data = try? JSONEncoder().encode(newOrder) {
                                     projectsOrderData = data
                                 }
+                                refreshProjectLists()
                             }
                         )
                         RailDivider()
                     }
 
-                    // Clients section (from folder scan - no database)
-                    if !allClientProjects.isEmpty {
+                    // Clients section (cached)
+                    if !cachedClients.isEmpty {
                         ReorderableRailSection(
-                            items: allClientProjects,
+                            items: cachedClients,
                             sessions: allSessions,
                             draggedPath: $draggedPath,
                             onReorder: { newOrder in
                                 if let data = try? JSONEncoder().encode(newOrder) {
                                     clientsOrderData = data
                                 }
+                                refreshProjectLists()
                             }
                         )
                         RailDivider()
@@ -177,6 +181,9 @@ struct NavigationRailView: View {
         }
         .frame(width: 52)
         .background(.ultraThinMaterial)
+        .onAppear {
+            refreshProjectLists()
+        }
     }
 }
 

@@ -92,14 +92,18 @@ struct WorkspaceView: View {
         .onAppear {
             workspaceOpenedAt = Date()
 
-            // Auto-import any existing task folders
-            let imported = TaskImportService.shared.importTasks(for: project, modelContext: modelContext)
-            if imported > 0 {
-                print("Auto-imported \(imported) tasks")
-            }
-
-            // Try to restore last active session (may need to wait for @Query to populate)
+            // Try to restore last active session first (fast)
             restoreLastSession()
+
+            // Import task folders in background (slow - don't block UI)
+            Task.detached(priority: .background) {
+                let imported = await MainActor.run {
+                    TaskImportService.shared.importTasks(for: project, modelContext: modelContext)
+                }
+                if imported > 0 {
+                    print("Background imported \(imported) tasks")
+                }
+            }
         }
         .onChange(of: sessions.count) { oldCount, newCount in
             // When sessions become available (query populated), restore last session if we don't have one
