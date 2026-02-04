@@ -993,6 +993,13 @@ class ClaudeHubTerminalView: LocalProcessTerminalView {
         _ = window.makeFirstResponder(self)
     }
 
+    // MARK: - Scroll to Bottom
+
+    /// Scrolls the terminal to show the most recent output
+    func scrollToEnd() {
+        // scroll(toPosition: 1.0) scrolls to the bottom (most recent output)
+        scroll(toPosition: 1.0)
+    }
     // MARK: - Cleanup
 
     deinit {
@@ -1027,7 +1034,10 @@ struct SwiftTermView: NSViewRepresentable {
         // Configure ClaudeHub features (drag-drop, key monitor)
         terminalView.configureClaudeHub()
 
-        // Auto-focus after a delay (but don't steal from text fields)
+        // Scroll to bottom and focus after a short delay (ensures content is rendered)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            terminalView.scrollToEnd()
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             terminalView.focusTerminal()
         }
@@ -1036,7 +1046,12 @@ struct SwiftTermView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        // Don't steal focus on every update
+        // Scroll to bottom when view is updated (e.g., switching back to this session)
+        if let terminalView = nsView as? ClaudeHubTerminalView {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                terminalView.scrollToEnd()
+            }
+        }
     }
 }
 
