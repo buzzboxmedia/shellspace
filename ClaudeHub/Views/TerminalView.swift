@@ -943,10 +943,17 @@ class ClaudeHubTerminalView: LocalProcessTerminalView {
         }
     }
 
-    // URL hover detection removed - was causing performance issues
-    // URLs can still be clicked, just no hover cursor change
+    // Minimal mouse monitor - just triggers redraws, no URL detection
+    private var mouseMoveMonitor: Any?
+
     func setupMouseMoveMonitor() {
-        // Intentionally empty - hover detection disabled for performance
+        mouseMoveMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .mouseEntered, .mouseExited]) { [weak self] event in
+            // Just trigger a redraw when mouse moves over terminal
+            if let self = self, event.window == self.window {
+                self.needsDisplay = true
+            }
+            return event
+        }
     }
 
     // MARK: - Focus Management
@@ -990,6 +997,9 @@ class ClaudeHubTerminalView: LocalProcessTerminalView {
 
     deinit {
         if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        if let monitor = mouseMoveMonitor {
             NSEvent.removeMonitor(monitor)
         }
     }
