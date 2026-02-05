@@ -373,11 +373,13 @@ struct RailItem: View {
     }
 
     private func selectProject() {
-        // If switching to a different project, clear the active session so it can be restored for new project
-        if windowState.selectedProject?.path != path {
-            windowState.activeSession = nil
+        // Save current session for current project before switching
+        if let currentProject = windowState.selectedProject,
+           let currentSession = windowState.activeSession {
+            UserDefaults.standard.set(currentSession.id.uuidString, forKey: "lastSession:\(currentProject.path)")
         }
 
+        let isNewProject = windowState.selectedProject?.path != path
         let category: ProjectCategory = path.contains("/Clients/") ? .client : .main
         let project = Project(name: name, path: path, icon: icon, category: category)
 
@@ -386,8 +388,13 @@ struct RailItem: View {
             project.usesExternalTerminal = true
         }
 
+        // Set project and clear session in the same transaction
+        // so restoreLastSession sees the new project (not the old one)
         withAnimation(.spring(response: 0.3)) {
             windowState.selectedProject = project
+            if isNewProject {
+                windowState.activeSession = nil
+            }
         }
 
         // Persist last-used project

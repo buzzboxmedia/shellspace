@@ -52,7 +52,6 @@ class SpeechService: ObservableObject {
         stopListening(send: false)
 
         do {
-            // macOS doesn't need AVAudioSession configuration like iOS
             recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
             guard let recognitionRequest = recognitionRequest else {
                 logger.error("Unable to create recognition request")
@@ -722,7 +721,8 @@ class ClaudeHubTerminalView: LocalProcessTerminalView {
             queue: .main
         ) { [weak self] notification in
             guard let self = self,
-                  let transcript = notification.object as? String else { return }
+                  let transcript = notification.object as? String,
+                  self.window?.isKeyWindow == true else { return }
             self.chLogger.info("Dictation received via notification: \(transcript)")
             self.send(txt: transcript)
         }

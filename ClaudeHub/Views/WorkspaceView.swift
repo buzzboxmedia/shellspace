@@ -112,8 +112,17 @@ struct WorkspaceView: View {
             }
         }
         .onChange(of: windowState.activeSession) { oldSession, newSession in
-            // If activeSession is nil (project just changed), try to restore
-            if newSession == nil && !sessions.isEmpty {
+            if let newSession = newSession {
+                // Save whenever session changes
+                UserDefaults.standard.set(newSession.id.uuidString, forKey: "lastSession:\(project.path)")
+            } else if !sessions.isEmpty {
+                // If activeSession is nil (project just changed), try to restore
+                restoreLastSession()
+            }
+        }
+        .onChange(of: project.path) { oldPath, newPath in
+            // When project switches, restore the correct session for the new project
+            if oldPath != newPath {
                 restoreLastSession()
             }
         }
