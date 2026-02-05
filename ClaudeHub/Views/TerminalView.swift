@@ -250,7 +250,8 @@ struct TerminalView: View {
 
     private func captureClaudeSessionId() {
         // Use task folder path if available (matches where Claude was started)
-        let workingPath = session.taskFolderPath ?? session.projectPath
+        // Resolve symlinks to match Claude CLI's internal path resolution
+        let workingPath = (session.taskFolderPath ?? session.projectPath).canonicalPath
         // Convert path to Claude's folder format (slashes become hyphens)
         let claudeProjectPath = workingPath.replacingOccurrences(of: "/", with: "-")
         let claudeProjectsDir = "\(NSHomeDirectory())/.claude/projects/\(claudeProjectPath)"

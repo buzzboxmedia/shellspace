@@ -635,8 +635,8 @@ class TaskImportService {
 
     /// Check if there's an existing Claude session (conversation) for a task folder path
     private func hasExistingClaudeSession(for taskFolderPath: String) -> Bool {
-        // Convert path to Claude's folder format (slashes become hyphens)
-        let claudeProjectPath = taskFolderPath.replacingOccurrences(of: "/", with: "-")
+        // Resolve symlinks to match Claude CLI's internal path resolution
+        let claudeProjectPath = taskFolderPath.canonicalPath.replacingOccurrences(of: "/", with: "-")
         let claudeProjectsDir = "\(NSHomeDirectory())/.claude/projects/\(claudeProjectPath)"
 
         // Check if the directory exists and has any .jsonl files

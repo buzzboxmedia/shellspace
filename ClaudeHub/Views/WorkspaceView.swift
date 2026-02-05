@@ -18,9 +18,10 @@ struct WorkspaceView: View {
     @State private var previousSessionId: UUID?
     @State private var isSidebarCollapsed = false
 
-    // Filter sessions by project path (works for both persisted and non-persisted projects)
+    // Filter sessions by project path (canonical comparison handles symlink differences)
     var sessions: [Session] {
-        allSessions.filter { $0.projectPath == project.path }
+        let canonicalProjectPath = project.path.canonicalPath
+        return allSessions.filter { $0.projectPath == canonicalProjectPath || $0.projectPath == project.path }
     }
 
     /// Check if the active session has unsaved progress (no note saved since opening)
@@ -256,7 +257,8 @@ struct SessionSidebar: View {
     }
 
     var sessions: [Session] {
-        allSessions.filter { $0.projectPath == project.path }
+        let canonicalProjectPath = project.path.canonicalPath
+        return allSessions.filter { $0.projectPath == canonicalProjectPath || $0.projectPath == project.path }
     }
 
     var activeSessions: [Session] {

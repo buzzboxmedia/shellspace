@@ -32,17 +32,10 @@ class ClaudeSessionDiscovery {
     }
 
     /// Convert a project path to Claude's folder name format
-    /// e.g., /Users/baron/Dropbox/Talkspresso -> -Users-baron-Dropbox-Talkspresso
+    /// Always resolves symlinks first since Claude CLI does the same internally.
+    /// e.g., /Users/baron/Dropbox/Talkspresso -> -Users-baron-Library-CloudStorage-Dropbox-Talkspresso
     func claudeFolderName(for projectPath: String) -> String {
-        return projectPath.replacingOccurrences(of: "/", with: "-")
-    }
-
-    /// Resolve symlinks in a path to get the canonical path
-    /// e.g., ~/Dropbox -> ~/Library/CloudStorage/Dropbox
-    func resolveSymlinks(in path: String) -> String {
-        let url = URL(fileURLWithPath: path)
-        let resolved = url.resolvingSymlinksInPath()
-        return resolved.path
+        return projectPath.canonicalPath.replacingOccurrences(of: "/", with: "-")
     }
 
     /// Get the full path to Claude's session folder for a project
@@ -52,18 +45,16 @@ class ClaudeSessionDiscovery {
     }
 
     /// Discover all sessions for a given project path
-    /// Tries both the original path and symlink-resolved path
     func discoverSessions(for projectPath: String) -> [DiscoveredSession] {
-        // Try original path first
-        if let sessions = discoverSessionsAtPath(projectPath), !sessions.isEmpty {
+        // Use canonical path (symlinks resolved) since Claude CLI does the same
+        if let sessions = discoverSessionsAtPath(projectPath.canonicalPath), !sessions.isEmpty {
             return sessions
         }
 
-        // Try with resolved symlinks
-        let resolvedPath = resolveSymlinks(in: projectPath)
-        if resolvedPath != projectPath {
-            logger.info("Trying resolved path: \(resolvedPath)")
-            if let sessions = discoverSessionsAtPath(resolvedPath), !sessions.isEmpty {
+        // Fall back to original path in case older sessions used un-resolved paths
+        let originalPath = projectPath
+        if originalPath != projectPath.canonicalPath {
+            if let sessions = discoverSessionsAtPath(originalPath), !sessions.isEmpty {
                 return sessions
             }
         }

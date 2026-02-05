@@ -3,6 +3,17 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
+// MARK: - Path Normalization
+
+extension String {
+    /// Resolve symlinks to get the canonical path.
+    /// Claude CLI resolves symlinks internally, so ClaudeHub must do the same
+    /// to correctly match session files across machines and symlink configurations.
+    var canonicalPath: String {
+        URL(fileURLWithPath: self).resolvingSymlinksInPath().path
+    }
+}
+
 @Model
 final class Session {
     @Attribute(.unique) var id: UUID
@@ -97,7 +108,7 @@ final class Session {
     ) {
         self.id = UUID()
         self.name = name
-        self.projectPath = projectPath
+        self.projectPath = projectPath.canonicalPath
         self.createdAt = createdAt
         self.lastAccessedAt = Date()
         self.userNamed = userNamed
@@ -182,7 +193,7 @@ extension Session {
     func updateFromMetadata(_ metadata: SessionMetadata) {
         self.name = metadata.name
         self.sessionDescription = metadata.sessionDescription
-        self.projectPath = metadata.projectPath
+        self.projectPath = metadata.projectPath.canonicalPath
         self.createdAt = metadata.createdAt
         self.lastAccessedAt = metadata.lastAccessedAt
         self.claudeSessionId = metadata.claudeSessionId
@@ -193,7 +204,7 @@ extension Session {
         self.logFilePath = metadata.logFilePath
         self.lastLogSavedAt = metadata.lastLogSavedAt
         self.lastProgressSavedAt = metadata.lastProgressSavedAt
-        self.taskFolderPath = metadata.taskFolderPath
+        self.taskFolderPath = metadata.taskFolderPath?.canonicalPath
         self.isCompleted = metadata.isCompleted
         self.completedAt = metadata.completedAt
         self.isHidden = metadata.isHidden

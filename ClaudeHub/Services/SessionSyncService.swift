@@ -317,6 +317,7 @@ class SessionSyncService {
 
     /// Create a new Session from metadata
     private func createSessionFromMetadata(_ metadata: SessionMetadata, modelContext: ModelContext) -> Session {
+        // Session.init normalizes projectPath via .canonicalPath
         let session = Session(
             name: metadata.name,
             projectPath: metadata.projectPath,
@@ -334,7 +335,7 @@ class SessionSyncService {
         session.logFilePath = metadata.logFilePath
         session.lastLogSavedAt = metadata.lastLogSavedAt
         session.lastProgressSavedAt = metadata.lastProgressSavedAt
-        session.taskFolderPath = metadata.taskFolderPath
+        session.taskFolderPath = metadata.taskFolderPath?.canonicalPath
         session.isCompleted = metadata.isCompleted
         session.completedAt = metadata.completedAt
         session.isHidden = metadata.isHidden
