@@ -21,9 +21,8 @@ else
     echo "No changes to commit"
 fi
 
-# Get version from git commit count (after commit so it's current)
-COMMIT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo "0")
-VERSION="1.0.$COMMIT_COUNT"
+# Get version from git tag (after commit so it's current)
+VERSION=$(git describe --tags --always 2>/dev/null | sed 's/^v//' || echo "1.3.0")
 echo "Version: $VERSION"
 
 echo "Building $APP_NAME..."
