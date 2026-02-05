@@ -1229,7 +1229,12 @@ struct TaskRow: View {
                 session.isCompleted = false
                 session.completedAt = nil
             }
-            windowState.activeSession = session
+            // Toggle: click active task again to deselect
+            if windowState.activeSession?.id == session.id {
+                windowState.activeSession = nil
+            } else {
+                windowState.activeSession = session
+            }
         }
         .onHover { hovering in
             isHovered = hovering
