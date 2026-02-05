@@ -23,13 +23,13 @@ struct SettingsView: View {
             // Header
             HStack {
                 Text("Manage Projects")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                 Spacer()
                 Button {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18))
+                        .font(.system(size: 20))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -42,14 +42,14 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("MAIN PROJECTS")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button {
                         addProject(category: .main)
                     } label: {
                         Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                     }
                     .buttonStyle(.plain)
                 }
@@ -68,14 +68,14 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("CLIENTS")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button {
                         addProject(category: .client)
                     } label: {
                         Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                     }
                     .buttonStyle(.plain)
                 }
@@ -94,7 +94,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("ABOUT")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.secondary)
                     Spacer()
                 }
@@ -103,23 +103,23 @@ struct SettingsView: View {
 
                 HStack {
                     Text("ClaudeHub")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 15, weight: .medium))
                     Spacer()
                     Text("v\(AppVersion.version)")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 16)
 
                 HStack {
                     Text("Build: \(AppVersion.buildHash)")
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(.tertiary)
                     Spacer()
                     Button("Check for Updates") {
                         checkForUpdates()
                     }
-                    .font(.system(size: 10))
+                    .font(.system(size: 12))
                     .buttonStyle(.plain)
                     .foregroundStyle(.blue)
                 }
@@ -132,7 +132,7 @@ struct SettingsView: View {
             // Footer
             HStack {
                 Text("Click + to add a folder from your Mac")
-                    .font(.system(size: 11))
+                    .font(.system(size: 13))
                     .foregroundStyle(.tertiary)
                 Spacer()
             }
@@ -180,16 +180,16 @@ struct ProjectRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             Image(systemName: project.icon)
-                .font(.system(size: 14))
+                .font(.system(size: 16))
                 .frame(width: 24, height: 24)
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(project.name)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 15, weight: .medium))
 
                 Text(displayPath(project.path))
-                    .font(.system(size: 10))
+                    .font(.system(size: 12))
                     .foregroundStyle(.quaternary)
                     .lineLimit(1)
             }
@@ -201,7 +201,7 @@ struct ProjectRow: View {
                     editProjectPath()
                 } label: {
                     Image(systemName: "folder.badge.gearshape")
-                        .font(.system(size: 14))
+                        .font(.system(size: 16))
                         .foregroundStyle(.blue.opacity(0.8))
                 }
                 .buttonStyle(.plain)
@@ -211,7 +211,7 @@ struct ProjectRow: View {
                     modelContext.delete(project)
                 } label: {
                     Image(systemName: "minus.circle.fill")
-                        .font(.system(size: 14))
+                        .font(.system(size: 16))
                         .foregroundStyle(.red.opacity(0.8))
                 }
                 .buttonStyle(.plain)

@@ -148,7 +148,7 @@ struct WorkspaceView: View {
                         ProgressView()
                             .scaleEffect(1.2)
                         Text("Summarizing...")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.system(size: 16, weight: .medium))
                     }
                     .padding(24)
                     .background(.ultraThinMaterial)
@@ -470,11 +470,11 @@ struct SessionSidebar: View {
                 // Header row - fixed height
                 HStack(spacing: 12) {
                     Image(systemName: project.icon)
-                        .font(.system(size: 24))
+                        .font(.system(size: 26))
                         .foregroundStyle(.primary)
 
                     Text(project.name)
-                        .font(.system(size: 22, weight: .semibold))
+                        .font(.system(size: 24, weight: .semibold))
                         .lineLimit(2)
                         .truncationMode(.tail)
                 }
@@ -493,7 +493,7 @@ struct SessionSidebar: View {
                             HStack(spacing: 8) {
                                 TextField("What are you working on?", text: $newTaskName)
                                     .textFieldStyle(.plain)
-                                    .font(.system(size: 14))
+                                    .font(.system(size: 16))
                                     .focused($isTaskFieldFocused)
                                     .onSubmit { createTask() }
                                     .onChange(of: newTaskName) { _, _ in
@@ -504,7 +504,7 @@ struct SessionSidebar: View {
                                     createTask()
                                 } label: {
                                     Text("GO")
-                                        .font(.system(size: 12, weight: .semibold))
+                                        .font(.system(size: 14, weight: .semibold))
                                         .foregroundStyle(.white)
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 6)
@@ -538,12 +538,12 @@ struct SessionSidebar: View {
                                             } label: {
                                                 HStack {
                                                     Text(session.name)
-                                                        .font(.system(size: 12))
+                                                        .font(.system(size: 14))
                                                         .foregroundStyle(.primary)
                                                     Spacer()
                                                     if session.isHidden {
                                                         Text("hidden")
-                                                            .font(.system(size: 10))
+                                                            .font(.system(size: 12))
                                                             .foregroundStyle(.tertiary)
                                                     }
                                                 }
@@ -564,7 +564,7 @@ struct SessionSidebar: View {
                         // Tasks list (flat, no groups)
                         if activeSessions.isEmpty {
                             Text("No tasks yet")
-                                .font(.system(size: 12))
+                                .font(.system(size: 14))
                                 .foregroundStyle(.tertiary)
                                 .frame(maxWidth: .infinity, minHeight: 40)
                                 .padding(.horizontal, 16)
@@ -622,7 +622,7 @@ struct ProjectGroupSection: View {
         ).path
 
         return projectSessions.filter { session in
-            guard !session.isCompleted,
+            guard !session.isCompleted, !session.isHidden,
                   let path = session.taskFolderPath else { return false }
             // Task is in this group if its parent folder matches the group folder
             // AND it's not the project session itself
@@ -668,7 +668,7 @@ struct ProjectGroupSection: View {
                     group.isExpanded.toggle()
                 } label: {
                     Image(systemName: group.isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .frame(width: 16)
                 }
@@ -678,7 +678,7 @@ struct ProjectGroupSection: View {
                 if isEditing {
                     HStack(spacing: 8) {
                         Image(systemName: "folder.fill")
-                            .font(.system(size: 16))
+                            .font(.system(size: 18))
                             .foregroundStyle(.purple)
 
                         TextField("Project name", text: $editedName, onCommit: {
@@ -686,17 +686,17 @@ struct ProjectGroupSection: View {
                             isEditing = false
                         })
                         .textFieldStyle(.plain)
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.system(size: 17, weight: .medium))
                     }
                 } else {
                     HStack(spacing: 8) {
                         Image(systemName: "folder.fill")
-                            .font(.system(size: 16))
+                            .font(.system(size: 18))
                             .foregroundStyle(isProjectActive ? .blue : .purple)
                             .fixedSize()
 
                         Text(group.name)
-                            .font(.system(size: 15, weight: .medium))
+                            .font(.system(size: 17, weight: .medium))
                             .foregroundStyle(isProjectActive ? .blue : .primary)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -714,7 +714,7 @@ struct ProjectGroupSection: View {
 
                 // Task count badge
                 Text("\(tasks.count)")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -733,7 +733,7 @@ struct ProjectGroupSection: View {
                             controller.popOutToTerminal(workingDir: workingDir)
                         } label: {
                             Image(systemName: "arrow.up.forward")
-                                .font(.system(size: 10))
+                                .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                                 .frame(width: 24, height: 24)
                                 .contentShape(Rectangle())
@@ -747,7 +747,7 @@ struct ProjectGroupSection: View {
                         isCreatingTask = true
                     } label: {
                         Image(systemName: "plus")
-                            .font(.system(size: 12))
+                            .font(.system(size: 14))
                             .foregroundStyle(.blue)
                             .frame(width: 24, height: 24)
                             .contentShape(Rectangle())
@@ -760,7 +760,7 @@ struct ProjectGroupSection: View {
                         isEditing = true
                     } label: {
                         Image(systemName: "pencil")
-                            .font(.system(size: 12))
+                            .font(.system(size: 14))
                             .foregroundStyle(.secondary)
                             .frame(width: 24, height: 24)
                             .contentShape(Rectangle())
@@ -772,7 +772,7 @@ struct ProjectGroupSection: View {
                         deleteGroup()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 14))
+                            .font(.system(size: 16))
                             .foregroundStyle(.secondary)
                             .frame(width: 24, height: 24)
                             .contentShape(Rectangle())
@@ -815,12 +815,12 @@ struct ProjectGroupSection: View {
             if isCreatingTask {
                 HStack(spacing: 8) {
                     Image(systemName: "plus")
-                        .font(.system(size: 11))
+                        .font(.system(size: 13))
                         .foregroundStyle(.blue)
 
                     TextField("Task name...", text: $newTaskName)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 12))
+                        .font(.system(size: 14))
                         .focused($isTaskFieldFocused)
                         .onSubmit {
                             createTask()
@@ -1095,7 +1095,7 @@ struct TaskRow: View {
                 if isCompleted {
                     // Green checkmark for completed tasks
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14))
+                        .font(.system(size: 16))
                         .foregroundStyle(.green)
                 } else if isActive {
                     Circle()
@@ -1118,12 +1118,12 @@ struct TaskRow: View {
                     isEditing = false
                 })
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(.system(size: 15))
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
                         Text(session.name)
-                            .font(.system(size: 15))
+                            .font(.system(size: 17))
                             .foregroundStyle(isActive ? .primary : .secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -1131,7 +1131,7 @@ struct TaskRow: View {
                         // Show "Logged" badge for tasks with summaries
                         if isLogged {
                             Text("Logged")
-                                .font(.system(size: 9, weight: .medium))
+                                .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.green)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 2)
@@ -1144,7 +1144,7 @@ struct TaskRow: View {
                     // Show summary preview if logged
                     if let summary = session.lastSessionSummary, !summary.isEmpty {
                         Text(summary)
-                            .font(.system(size: 11))
+                            .font(.system(size: 13))
                             .foregroundStyle(.tertiary)
                             .lineLimit(2)
                             .truncationMode(.tail)
@@ -1158,7 +1158,7 @@ struct TaskRow: View {
             // Timestamp on hover
             if isHovered && !isEditing {
                 Text(relativeTime)
-                    .font(.system(size: 10))
+                    .font(.system(size: 12))
                     .foregroundStyle(.tertiary)
                     .padding(.trailing, 4)
             }
@@ -1172,7 +1172,7 @@ struct TaskRow: View {
                     controller.popOutToTerminal(workingDir: workingDir)
                 } label: {
                     Image(systemName: "arrow.up.forward")
-                        .font(.system(size: 10))
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         .frame(width: 24, height: 24)
                         .contentShape(Rectangle())
@@ -1185,7 +1185,7 @@ struct TaskRow: View {
                     archiveTask()
                 } label: {
                     Image(systemName: "eye.slash")
-                        .font(.system(size: 12))
+                        .font(.system(size: 14))
                         .foregroundStyle(.secondary)
                         .frame(width: 24, height: 24)
                         .contentShape(Rectangle())
@@ -1310,14 +1310,24 @@ struct TaskRow: View {
         }
         appState.removeController(for: session)
 
-        // Log to invoice file
-        logToInvoice()
-
-        // Just hide it - folder stays in place so it can be reopened
+        // Hide immediately for instant UI response
         session.isHidden = true
 
-        // Export updated state to Dropbox
-        SessionSyncService.shared.exportSession(session)
+        // Persist and sync in background
+        let sessionRef = session
+        Task.detached(priority: .utility) {
+            await MainActor.run {
+                try? self.modelContext.save()
+                SessionSyncService.shared.exportSession(sessionRef)
+            }
+        }
+
+        // Invoice logging is fire-and-forget
+        Task.detached(priority: .background) {
+            await MainActor.run {
+                self.logToInvoice()
+            }
+        }
     }
 
     /// Append task info to invoice log file
@@ -1520,7 +1530,7 @@ struct TerminalHeader: View {
                 }
             } label: {
                 Image(systemName: isSidebarCollapsed ? "sidebar.leading" : "sidebar.left")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 28, height: 28)
                     .background(Color.white.opacity(0.08))
@@ -1544,7 +1554,7 @@ struct TerminalHeader: View {
 
             // Session name
             Text(session.name)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -1555,17 +1565,17 @@ struct TerminalHeader: View {
             if speechService.isListening {
                 HStack(spacing: 6) {
                     Image(systemName: "mic.fill")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .scaleEffect(micPulse ? 1.2 : 1.0)
                         .shadow(color: Color.red.opacity(micPulse ? 0.8 : 0.3), radius: micPulse ? 6 : 2)
 
                     if !speechService.transcript.isEmpty {
                         Text(speechService.transcript.prefix(30) + (speechService.transcript.count > 30 ? "..." : ""))
-                            .font(.system(size: 11))
+                            .font(.system(size: 13))
                             .lineLimit(1)
                     } else {
                         Text("Listening...")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 13, weight: .medium))
                     }
                 }
                 .foregroundStyle(.red)
@@ -1589,7 +1599,7 @@ struct TerminalHeader: View {
                     .fill(Color.green)
                     .frame(width: 6, height: 6)
                 Text("Running")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
             }
             .foregroundStyle(.green)
             .padding(.horizontal, 10)
@@ -1688,7 +1698,7 @@ struct TerminalArea: View {
                             .blur(radius: 30)
 
                         Image(systemName: "terminal.fill")
-                            .font(.system(size: 48))
+                            .font(.system(size: 52))
                             .foregroundStyle(
                                 LinearGradient(
                                     colors: [Color.white.opacity(0.4), Color.white.opacity(0.2)],
@@ -1700,11 +1710,11 @@ struct TerminalArea: View {
 
                     VStack(spacing: 8) {
                         Text("No Active Session")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(.secondary)
 
                         Text("Select a task from the sidebar or create a new one")
-                            .font(.system(size: 13))
+                            .font(.system(size: 15))
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -1756,7 +1766,7 @@ struct ExternalTerminalView: View {
                 }
 
                 Text(session.name)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
 
                 Spacer()
@@ -1767,7 +1777,7 @@ struct ExternalTerminalView: View {
                             .fill(Color.green)
                             .frame(width: 6, height: 6)
                         Text("Running in Terminal")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                     }
                     .foregroundStyle(.green)
                     .padding(.horizontal, 10)
@@ -1793,7 +1803,7 @@ struct ExternalTerminalView: View {
                         .blur(radius: 25)
 
                     Image(systemName: "terminal.fill")
-                        .font(.system(size: 48))
+                        .font(.system(size: 52))
                         .foregroundStyle(
                             LinearGradient(
                                 colors: [Color.blue.opacity(0.8), Color.blue.opacity(0.5)],
@@ -1806,11 +1816,11 @@ struct ExternalTerminalView: View {
                 if isLaunched {
                     VStack(spacing: 8) {
                         Text("Session Running Externally")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(.primary)
 
                         Text("Check Terminal.app for this session")
-                            .font(.system(size: 13))
+                            .font(.system(size: 15))
                             .foregroundStyle(.secondary)
                     }
 
@@ -1830,7 +1840,7 @@ struct ExternalTerminalView: View {
                             Image(systemName: "arrow.up.forward.app")
                             Text("Switch to Terminal")
                         }
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 15, weight: .medium))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
                         .background(Color.blue.opacity(0.2))
@@ -1840,11 +1850,11 @@ struct ExternalTerminalView: View {
                 } else {
                     VStack(spacing: 8) {
                         Text("Ready to Launch")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(.primary)
 
                         Text("This will open in a new Terminal window")
-                            .font(.system(size: 13))
+                            .font(.system(size: 15))
                             .foregroundStyle(.secondary)
                     }
 
@@ -1855,7 +1865,7 @@ struct ExternalTerminalView: View {
                             Image(systemName: "play.fill")
                             Text("Open in Terminal")
                         }
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)
@@ -1958,14 +1968,14 @@ struct BillingSheetView: View {
             // Header
             VStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 48))
+                    .font(.system(size: 52))
                     .foregroundStyle(.green)
 
                 Text("Complete Task")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 22, weight: .semibold))
 
                 Text(taskName)
-                    .font(.system(size: 14))
+                    .font(.system(size: 16))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -1979,15 +1989,15 @@ struct BillingSheetView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Actual Time")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(.secondary)
                         Text("Based on conversation timestamps")
-                            .font(.system(size: 11))
+                            .font(.system(size: 13))
                             .foregroundStyle(.tertiary)
                     }
                     Spacer()
                     Text(billing.actualDisplay)
-                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 18, weight: .semibold, design: .monospaced))
                         .foregroundStyle(.primary)
                 }
                 .padding(.horizontal, 16)
@@ -1999,15 +2009,15 @@ struct BillingSheetView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Suggested Billing")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(.secondary)
                         Text("Industry standard (1.5x actual)")
-                            .font(.system(size: 11))
+                            .font(.system(size: 13))
                             .foregroundStyle(.tertiary)
                     }
                     Spacer()
                     Text(billing.suggestedDisplay)
-                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 18, weight: .semibold, design: .monospaced))
                         .foregroundStyle(.blue)
                 }
                 .padding(.horizontal, 16)
@@ -2018,7 +2028,7 @@ struct BillingSheetView: View {
                 // Billed hours picker
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Bill for:")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(.secondary)
 
                     Picker("Hours", selection: $selectedHours) {
@@ -2045,7 +2055,7 @@ struct BillingSheetView: View {
                     onCancel()
                 } label: {
                     Text("Cancel")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 16, weight: .medium))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                 }
@@ -2057,7 +2067,7 @@ struct BillingSheetView: View {
                     onConfirm(selectedHours)
                 } label: {
                     Text("Complete")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)

@@ -232,11 +232,11 @@ struct TerminalView: View {
 
                     VStack(spacing: 8) {
                         Text("Starting Claude...")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(Color(red: 0.85, green: 0.88, blue: 0.95))
 
                         Text(session.projectPath)
-                            .font(.system(size: 12))
+                            .font(.system(size: 14))
                             .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
                     }
                 }
@@ -638,7 +638,7 @@ class TerminalController: ObservableObject {
         )
 
         // Set font - SF Mono for cleaner look, slightly larger for readability
-        if let sfMono = NSFont(name: "SF Mono", size: 13.5) {
+        if let sfMono = NSFont(name: "SF Mono", size: 15.5) {
             terminal.font = sfMono
         } else {
             terminal.font = NSFont.monospacedSystemFont(ofSize: 13.5, weight: .regular)

@@ -74,7 +74,7 @@ struct LauncherView: View {
                     HStack {
                         Spacer()
                         Text("Claude Hub")
-                            .font(.system(size: 42, weight: .bold, design: .rounded))
+                            .font(.system(size: 46, weight: .bold, design: .rounded))
                             .foregroundStyle(.primary)
                         Spacer()
                     }
@@ -86,7 +86,7 @@ struct LauncherView: View {
                                     .fill(Color.blue)
                                     .frame(width: 8, height: 8)
                                 Text("\(appState.terminalControllers.count) running")
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(.system(size: 14, weight: .medium))
                                     .foregroundStyle(.secondary)
                             }
                             .padding(.horizontal, 10)
@@ -102,7 +102,7 @@ struct LauncherView: View {
                                 showCleanup = true
                             } label: {
                                 Image(systemName: "tray.full.fill")
-                                    .font(.system(size: 18))
+                                    .font(.system(size: 20))
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
@@ -112,7 +112,7 @@ struct LauncherView: View {
                                 showSettings = true
                             } label: {
                                 Image(systemName: "gearshape.fill")
-                                    .font(.system(size: 18))
+                                    .font(.system(size: 20))
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
@@ -129,7 +129,7 @@ struct LauncherView: View {
                         if !defaultMainProjects.isEmpty || !additionalMainProjects.isEmpty {
                             VStack(alignment: .leading, spacing: 20) {
                                 Text("PROJECTS")
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .font(.system(size: 16, weight: .semibold))
                                     .foregroundStyle(.secondary)
                                     .tracking(1.5)
 
@@ -151,7 +151,7 @@ struct LauncherView: View {
                         if !defaultClientProjects.isEmpty || !additionalClientProjects.isEmpty {
                             VStack(alignment: .leading, spacing: 20) {
                                 Text("CLIENTS")
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .font(.system(size: 16, weight: .semibold))
                                     .foregroundStyle(.secondary)
                                     .tracking(1.5)
 
@@ -172,7 +172,7 @@ struct LauncherView: View {
                         // Development Section - Claude Hub itself (at the bottom)
                         VStack(alignment: .leading, spacing: 20) {
                             Text("DEVELOPMENT")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(.secondary)
                                 .tracking(1.5)
 
@@ -205,7 +205,7 @@ struct DefaultProjectSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(accentColor)
                 .tracking(1.5)
 
@@ -249,7 +249,7 @@ struct DefaultProjectCard: View {
             VStack(spacing: 14) {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: icon)
-                        .font(.system(size: 36))
+                        .font(.system(size: 40))
                         .foregroundStyle(.primary)
 
                     // Show blue dot for running sessions
@@ -262,7 +262,7 @@ struct DefaultProjectCard: View {
                 }
 
                 Text(name)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(.primary)
             }
             .frame(width: 120, height: 120)
@@ -357,7 +357,7 @@ struct ProjectSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(accentColor)
                 .tracking(1.5)
 
@@ -387,11 +387,11 @@ struct ClaudeHubCard: View {
         } label: {
             VStack(spacing: 14) {
                 Image(systemName: "terminal.fill")
-                    .font(.system(size: 36))
+                    .font(.system(size: 40))
                     .foregroundStyle(.blue)
 
                 Text("Claude Hub")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(.primary)
             }
             .frame(width: 120, height: 120)
@@ -500,7 +500,7 @@ struct ProjectCard: View {
             VStack(spacing: 14) {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: project.icon)
-                        .font(.system(size: 36))
+                        .font(.system(size: 40))
                         .foregroundStyle(.primary)
 
                     // Show blue dot for running sessions
@@ -513,7 +513,7 @@ struct ProjectCard: View {
                 }
 
                 Text(project.name)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(.primary)
             }
             .frame(width: 120, height: 120)

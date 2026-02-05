@@ -44,7 +44,7 @@ struct SessionCleanupView: View {
             // Header
             HStack {
                 Text("Manage Sessions")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 22, weight: .semibold))
 
                 Spacer()
 
@@ -174,16 +174,16 @@ struct ProjectSessionGroup: View {
             } label: {
                 HStack {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .frame(width: 16)
 
                     Text(projectName)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.primary)
 
                     Text("(\(sessions.count))")
-                        .font(.system(size: 12))
+                        .font(.system(size: 14))
                         .foregroundStyle(.secondary)
 
                     Spacer()
@@ -194,7 +194,7 @@ struct ProjectSessionGroup: View {
                             selectedSessions.insert(session.id)
                         }
                     }
-                    .font(.system(size: 11))
+                    .font(.system(size: 13))
                     .buttonStyle(.plain)
                     .foregroundStyle(.blue)
                 }
@@ -247,7 +247,7 @@ struct SessionCleanupRow: View {
                 onToggle()
             } label: {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 18))
+                    .font(.system(size: 20))
                     .foregroundStyle(isSelected ? .blue : .secondary)
             }
             .buttonStyle(.plain)
@@ -261,12 +261,12 @@ struct SessionCleanupRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(session.name)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 15, weight: .medium))
                         .lineLimit(1)
 
                     if session.isCompleted {
                         Text("Completed")
-                            .font(.system(size: 10))
+                            .font(.system(size: 12))
                             .foregroundStyle(.green)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -278,7 +278,7 @@ struct SessionCleanupRow: View {
                 // Summary or description
                 if let summary = claudeSummary ?? session.sessionDescription {
                     Text(summary)
-                        .font(.system(size: 11))
+                        .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
@@ -288,7 +288,7 @@ struct SessionCleanupRow: View {
 
             // Age
             Text(ageText)
-                .font(.system(size: 11))
+                .font(.system(size: 13))
                 .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 6)

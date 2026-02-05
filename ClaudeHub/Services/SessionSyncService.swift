@@ -337,6 +337,7 @@ class SessionSyncService {
         session.taskFolderPath = metadata.taskFolderPath
         session.isCompleted = metadata.isCompleted
         session.completedAt = metadata.completedAt
+        session.isHidden = metadata.isHidden
         session.isWaitingForInput = metadata.isWaitingForInput
         session.hasBeenLaunched = metadata.hasBeenLaunched
 

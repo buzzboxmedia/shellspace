@@ -164,7 +164,7 @@ struct NavigationRailView: View {
                 showAddProject = true
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 36, height: 36)
                     .background(
@@ -317,7 +317,7 @@ struct RailItem: View {
         } label: {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: icon)
-                    .font(.system(size: 20))
+                    .font(.system(size: 22))
                     .foregroundStyle(hasActiveSessions ? .primary : .secondary)
                     .frame(width: 36, height: 36)
                     .background(
@@ -478,7 +478,7 @@ struct AddProjectSheet: View {
                             projectIcon = icon
                         } label: {
                             Image(systemName: icon)
-                                .font(.system(size: 16))
+                                .font(.system(size: 18))
                                 .foregroundStyle(projectIcon == icon ? .white : .primary)
                                 .frame(width: 32, height: 32)
                                 .background(
