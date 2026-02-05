@@ -7,6 +7,7 @@ private let appLogger = Logger(subsystem: "com.buzzbox.claudehub", category: "Ap
 // MARK: - Notification Names
 extension Notification.Name {
     static let toggleDictation = Notification.Name("toggleDictation")
+    static let sendDictationToTerminal = Notification.Name("sendDictationToTerminal")
 }
 
 /// Per-window state - each window gets its own instance
@@ -82,12 +83,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Ensure app can become active
         NSApplication.shared.activate(ignoringOtherApps: true)
 
-        // Global hotkey for voice dictation: Option+D
+        // Global hotkeys for voice dictation
         hotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            // Option+D (keyCode 2 is 'd')
-            if event.modifierFlags.contains(.option) && event.keyCode == 2 {
-                appLogger.info("Voice dictation hotkey triggered")
+            guard event.modifierFlags.contains(.option) else { return event }
+            // Option+D: start/stop dictation
+            if event.keyCode == 2 {
                 NotificationCenter.default.post(name: .toggleDictation, object: nil)
+                return nil
+            }
+            // Option+S: submit (send Enter)
+            if event.keyCode == 1 {
+                if SpeechService.shared.pendingSend {
+                    SpeechService.shared.confirmSend()
+                }
                 return nil
             }
             return event

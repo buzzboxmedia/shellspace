@@ -13,16 +13,13 @@ class SpeechService: ObservableObject {
 
     @Published var isListening = false
     @Published var transcript = ""
+    @Published var pendingSend = false
 
     private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var audioEngine = AVAudioEngine()
     private let logger = Logger(subsystem: "com.buzzbox.claudehub", category: "SpeechService")
-
-    private var onComplete: ((String) -> Void)?
-    private var silenceTimer: Timer?
-    private var lastTranscriptTime: Date?
 
     init() {
         speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
@@ -45,7 +42,7 @@ class SpeechService: ObservableObject {
         }
     }
 
-    func startListening(onComplete: @escaping (String) -> Void) {
+    func startListening() {
         guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else {
             logger.error("Speech recognizer not available")
             return
@@ -53,8 +50,6 @@ class SpeechService: ObservableObject {
 
         // Stop any existing session
         stopListening(send: false)
-
-        self.onComplete = onComplete
 
         do {
             // macOS doesn't need AVAudioSession configuration like iOS
@@ -83,20 +78,14 @@ class SpeechService: ObservableObject {
             DispatchQueue.main.async {
                 self.isListening = true
                 self.transcript = ""
-                self.lastTranscriptTime = Date()
             }
-
-            // Start silence detection timer (longer delay)
-            startSilenceTimer()
 
             recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
                 guard let self = self else { return }
 
                 if let error = error {
                     self.logger.error("Recognition error: \(error.localizedDescription)")
-                    // Don't stop on transient errors, only on final
                     if (error as NSError).code == 1110 {
-                        // "No speech detected" - this is normal, keep listening
                         return
                     }
                 }
@@ -104,12 +93,6 @@ class SpeechService: ObservableObject {
                 if let result = result {
                     DispatchQueue.main.async {
                         self.transcript = result.bestTranscription.formattedString
-                        self.lastTranscriptTime = Date()
-                        self.logger.info("Transcript: \(result.bestTranscription.formattedString)")
-                    }
-
-                    if result.isFinal {
-                        self.stopListening(send: true)
                     }
                 }
             }
@@ -122,31 +105,9 @@ class SpeechService: ObservableObject {
         }
     }
 
-    private func startSilenceTimer() {
-        silenceTimer?.invalidate()
-        silenceTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            guard let self = self, self.isListening else { return }
-
-            // If no new transcript for 2.5 seconds and we have some text, auto-send
-            if let lastTime = self.lastTranscriptTime,
-               Date().timeIntervalSince(lastTime) > 2.5,
-               !self.transcript.isEmpty {
-                self.logger.info("Silence detected, sending transcript")
-                self.stopListening(send: true)
-            }
-
-            // Timeout after 30 seconds even with no transcript
-            if let lastTime = self.lastTranscriptTime,
-               Date().timeIntervalSince(lastTime) > 30 {
-                self.logger.info("Timeout, stopping")
-                self.stopListening(send: false)
-            }
-        }
-    }
-
     func stopListening(send: Bool) {
-        silenceTimer?.invalidate()
-        silenceTimer = nil
+        // Capture transcript BEFORE cancelling (cancel can clear results)
+        let finalTranscript = self.transcript
 
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
@@ -156,34 +117,49 @@ class SpeechService: ObservableObject {
         recognitionRequest = nil
         recognitionTask = nil
 
-        // Must capture transcript and call callback on main thread
-        DispatchQueue.main.async {
-            let finalTranscript = self.transcript
-            let callback = self.onComplete
+        if send && !finalTranscript.isEmpty {
+            self.pendingSend = true
+        }
 
+        DispatchQueue.main.async {
             self.isListening = false
             self.transcript = ""
-            self.onComplete = nil
 
             if send && !finalTranscript.isEmpty {
-                self.logger.info("Sending transcript to terminal: \(finalTranscript)")
-                callback?(finalTranscript)
+                self.logger.info("Posting transcript to terminal: \(finalTranscript)")
+                NotificationCenter.default.post(
+                    name: .sendDictationToTerminal,
+                    object: finalTranscript
+                )
             } else {
                 self.logger.info("Not sending - send:\(send), transcript empty:\(finalTranscript.isEmpty)")
             }
         }
     }
 
-    func toggleListening(onComplete: @escaping (String) -> Void) {
+    func confirmSend() {
+        pendingSend = false
+        logger.info("Confirming send - posting Enter")
+        NotificationCenter.default.post(
+            name: .sendDictationToTerminal,
+            object: "\r"
+        )
+    }
+
+    func toggleListening() {
+        if pendingSend {
+            // Was pending send, cancel it and start fresh
+            pendingSend = false
+        }
         if isListening {
             stopListening(send: true)
         } else {
+            // First tap: start listening
             requestAuthorization { authorized in
                 if authorized {
-                    self.startListening(onComplete: onComplete)
+                    self.startListening()
                 } else {
                     self.logger.warning("Speech recognition not authorized")
-                    // Open System Preferences
                     NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")!)
                 }
             }
@@ -375,21 +351,7 @@ class TerminalController: ObservableObject {
     // MARK: - Voice Dictation
 
     func toggleDictation() {
-        logger.info("toggleDictation called, terminalView exists: \(self.terminalView != nil)")
-        print("DEBUG: toggleDictation called, terminalView exists: \(self.terminalView != nil)")
-
-        SpeechService.shared.toggleListening { [weak self] transcript in
-            guard let self = self else {
-                print("DEBUG: self is nil in callback!")
-                return
-            }
-            print("DEBUG: Callback received transcript: \(transcript)")
-            print("DEBUG: terminalView exists: \(self.terminalView != nil)")
-
-            // Append transcript and send (with newline to submit)
-            self.sendToTerminal(transcript + "\n")
-            self.logger.info("Dictation sent: \(transcript)")
-        }
+        SpeechService.shared.toggleListening()
     }
 
     // MARK: - Log Management
@@ -743,12 +705,29 @@ class ClaudeHubTerminalView: LocalProcessTerminalView {
 
     // MARK: - Setup
 
+    private var dictationObserver: Any?
+
     func configureClaudeHub() {
         allowMouseReporting = false
         setupDragDrop()
         setupKeyMonitor()
         setupMouseMoveMonitor()
+        setupDictationListener()
     }
+
+    private func setupDictationListener() {
+        dictationObserver = NotificationCenter.default.addObserver(
+            forName: .sendDictationToTerminal,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self = self,
+                  let transcript = notification.object as? String else { return }
+            self.chLogger.info("Dictation received via notification: \(transcript)")
+            self.send(txt: transcript)
+        }
+    }
+
 
     private func setupDragDrop() {
         registerForDraggedTypes([.fileURL, .png, .tiff, .pdf] + NSFilePromiseReceiver.readableDraggedTypes.map { NSPasteboard.PasteboardType($0) })
@@ -827,10 +806,7 @@ class ClaudeHubTerminalView: LocalProcessTerminalView {
 
             // Check for Cmd+Shift+D (dictation)
             if event.modifierFlags.contains(.shift) && event.charactersIgnoringModifiers == "d" {
-                SpeechService.shared.toggleListening { transcript in
-                    self.send(txt: transcript + "\n")
-                    self.chLogger.info("Dictation sent: \(transcript)")
-                }
+                SpeechService.shared.toggleListening()
                 return nil
             }
 
@@ -1008,6 +984,9 @@ class ClaudeHubTerminalView: LocalProcessTerminalView {
         }
         if let monitor = mouseMoveMonitor {
             NSEvent.removeMonitor(monitor)
+        }
+        if let observer = dictationObserver {
+            NotificationCenter.default.removeObserver(observer)
         }
     }
 }
