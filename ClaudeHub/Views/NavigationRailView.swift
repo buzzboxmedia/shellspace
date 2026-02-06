@@ -296,14 +296,14 @@ struct RailItem: View {
         windowState.selectedProject?.path == path
     }
 
-    /// Count of sessions with active terminal controllers (running)
+    /// Count of sessions with active terminal controllers (running) - excludes hidden
     private var runningCount: Int {
-        sessions.filter { appState.terminalControllers[$0.id] != nil }.count
+        sessions.filter { !$0.isHidden && appState.terminalControllers[$0.id] != nil }.count
     }
 
-    /// Check if any session in this project needs attention
+    /// Check if any session in this project needs attention - excludes hidden
     private var needsAttention: Bool {
-        sessions.contains { appState.sessionsNeedingAttention.contains($0.id) }
+        sessions.contains { !$0.isHidden && appState.sessionsNeedingAttention.contains($0.id) }
     }
 
     /// Has any active sessions (tasks open)
