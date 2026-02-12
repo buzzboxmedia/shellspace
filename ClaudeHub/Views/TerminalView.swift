@@ -170,6 +170,7 @@ struct TerminalView: View {
     let session: Session
     @EnvironmentObject var appState: AppState
     @State private var forceRefresh = false
+    @State private var showTerminal = false  // Delay showing terminal until Claude initializes
 
     // Get controller from AppState so it persists when switching sessions
     var terminalController: TerminalController {
@@ -177,7 +178,7 @@ struct TerminalView: View {
     }
 
     var isStarted: Bool {
-        terminalController.terminalView != nil
+        terminalController.terminalView != nil && showTerminal
     }
 
     var body: some View {
@@ -206,11 +207,11 @@ struct TerminalView: View {
                     }
 
                     VStack(spacing: 8) {
-                        Text("Starting Claude...")
+                        Text("Initializing Claude...")
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(Color(red: 0.85, green: 0.88, blue: 0.95))
 
-                        Text(session.projectPath)
+                        Text(session.name)
                             .font(.system(size: 14))
                             .foregroundColor(Color(red: 0.5, green: 0.55, blue: 0.65))
                     }
@@ -219,6 +220,14 @@ struct TerminalView: View {
                 .background(Color(NSColor(calibratedRed: 0.075, green: 0.082, blue: 0.11, alpha: 1.0)))
                 .onAppear {
                     viewLogger.info("TerminalView appeared for session: \(session.name), claudeSessionId: \(session.claudeSessionId ?? "none")")
+
+                    // If session already has a running terminal, show it immediately
+                    if terminalController.terminalView != nil {
+                        viewLogger.info("Session already running, showing terminal immediately")
+                        showTerminal = true
+                        return
+                    }
+
                     // Auto-start Claude with delay to avoid fork crash
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                         viewLogger.info("Starting Claude in: \(session.projectPath)")
@@ -232,9 +241,10 @@ struct TerminalView: View {
                         )
                         // Mark session as launched (for --continue logic on reopening)
                         session.hasBeenLaunched = true
-                        // Trigger view refresh and capture session ID
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            forceRefresh.toggle()
+                        // Wait for Claude to finish initializing before showing terminal
+                        // (avoids showing rapid scrolling startup output)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                            showTerminal = true
                         }
                         // After Claude starts, try to capture the session ID
                         if session.claudeSessionId == nil {
