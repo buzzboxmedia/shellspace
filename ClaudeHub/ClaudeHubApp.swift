@@ -282,7 +282,7 @@ struct WindowContainer: View {
                 Color.clear
             }
         }
-        .frame(minWidth: 900, minHeight: 600)
+        .frame(minWidth: 520, minHeight: 500)
         .onAppear {
             // Get or create window state for this window's unique ID
             if windowState == nil {
