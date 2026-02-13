@@ -1839,18 +1839,36 @@ struct TerminalArea: View {
 
 // MARK: - Session Details View (for projects that open in Terminal.app)
 
+// MARK: - TASK.md Parser Types
+
+struct TaskMdParsed {
+    var status: String = ""
+    var description: String = ""
+    var progressEntries: [TaskProgressEntry] = []
+}
+
+struct TaskProgressEntry: Identifiable {
+    let id = UUID()
+    let title: String       // e.g. "2026-02-12: Phase 1 Complete - Title"
+    let bullets: [String]   // e.g. ["Did thing 1", "Did thing 2"]
+}
+
 struct SessionDetailsView: View {
     let session: Session
     let project: Project
     @Binding var launchedSessions: Set<UUID>
     @Binding var isSidebarCollapsed: Bool
     @State private var taskMdContent: String = ""
-    @State private var recentLogContent: String = ""
+    @State private var parsedTask: TaskMdParsed = TaskMdParsed()
+    @State private var conversationEntries: [ConversationEntry] = []
     @State private var progressNote: String = ""
     @State private var showProgressSaved = false
     @State private var processState: SessionProcessState = .stopped
     @State private var processCheckCancellable: AnyCancellable?
     @State private var contentRefreshCancellable: AnyCancellable?
+    @State private var showCompletionSheet = false
+    @State private var completionSummary: String = ""
+    @State private var showAllProgress = false
 
     var isLaunched: Bool {
         launchedSessions.contains(session.id)
@@ -1894,10 +1912,11 @@ struct SessionDetailsView: View {
                     sessionInfoSection
                     quickActionsSection
                     if !taskMdContent.isEmpty {
-                        taskMdSection
+                        taskMetadataCard
+                        progressTimeline
                     }
-                    if !recentLogContent.isEmpty {
-                        recentLogSection
+                    if !conversationEntries.isEmpty {
+                        conversationSection
                     }
                 }
                 .padding(20)
@@ -1946,9 +1965,13 @@ struct SessionDetailsView: View {
         .onChange(of: session.id) { _, _ in
             loadContent()
             checkProcessState()
+            showAllProgress = false
             // Restart timers for new session
             stopTimers()
             startTimers()
+        }
+        .sheet(isPresented: $showCompletionSheet) {
+            completionSheet
         }
     }
 
@@ -2135,7 +2158,7 @@ struct SessionDetailsView: View {
     private var secondaryActions: some View {
         HStack(spacing: 12) {
             if !session.isCompleted {
-                Button { markComplete() } label: {
+                Button { showCompletionSheet = true } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark.circle")
                         Text("Mark Complete")
@@ -2145,6 +2168,22 @@ struct SessionDetailsView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
                     .background(Color.green.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+            }
+
+            if session.taskFolderPath != nil {
+                Button { openInFinder() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "folder")
+                        Text("View in Finder")
+                    }
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color.white.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)
@@ -2180,48 +2219,338 @@ struct SessionDetailsView: View {
         }
     }
 
-    // MARK: - TASK.md Preview Section
+    // MARK: - Task Metadata Card
 
-    private var taskMdSection: some View {
+    private var taskMetadataCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("TASK.md", systemImage: "doc.text")
+            Label("Task Details", systemImage: "doc.text")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.secondary)
 
-            ScrollView {
-                Text(taskMdContent)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
+            VStack(spacing: 8) {
+                if !parsedTask.status.isEmpty {
+                    taskInfoRow(label: "Status", value: parsedTask.status, valueColor: statusColor(parsedTask.status))
+                }
+                if !parsedTask.description.isEmpty {
+                    HStack(alignment: .top) {
+                        Text("Description")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 100, alignment: .leading)
+                        Text(parsedTask.description)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(4)
+                        Spacer()
+                    }
+                }
             }
-            .frame(maxHeight: 250)
-            .background(Color.black.opacity(0.3))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(14)
+            .background(Color.white.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
     }
 
-    // MARK: - Recent Log Section
+    private func taskInfoRow(label: String, value: String, valueColor: Color = .secondary) -> some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 13))
+                .foregroundStyle(.tertiary)
+                .frame(width: 100, alignment: .leading)
+            Text(value)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(valueColor)
+            Spacer()
+        }
+    }
 
-    private var recentLogSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Recent Activity", systemImage: "text.alignleft")
+    private func statusColor(_ status: String) -> Color {
+        let lower = status.lowercased()
+        if lower.contains("complete") { return .green }
+        if lower.contains("active") || lower.contains("in progress") { return .blue }
+        if lower.contains("blocked") { return .red }
+        return .secondary
+    }
+
+    // MARK: - Progress Timeline
+
+    private var progressTimeline: some View {
+        let entries = parsedTask.progressEntries
+        let visibleEntries = showAllProgress ? entries : Array(entries.prefix(3))
+        let hasMore = entries.count > 3
+
+        return VStack(alignment: .leading, spacing: 12) {
+            Label("Progress", systemImage: "clock.arrow.circlepath")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.secondary)
 
-            ScrollView {
-                Text(recentLogContent)
-                    .font(.system(size: 11, design: .monospaced))
+            if entries.isEmpty {
+                Text("No progress notes yet")
+                    .font(.system(size: 13))
                     .foregroundStyle(.tertiary)
-                    .textSelection(.enabled)
+                    .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(visibleEntries.enumerated()), id: \.element.id) { index, entry in
+                            progressEntryRow(entry: entry, isLast: index == visibleEntries.count - 1)
+                        }
+
+                        if hasMore && !showAllProgress {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showAllProgress = true
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "chevron.down")
+                                    Text("Show all \(entries.count) entries")
+                                }
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.blue)
+                                .padding(.leading, 20)
+                                .padding(.vertical, 8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        if showAllProgress && hasMore {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showAllProgress = false
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "chevron.up")
+                                    Text("Show less")
+                                }
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.blue)
+                                .padding(.leading, 20)
+                                .padding(.vertical, 8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                     .padding(12)
+                }
+                .frame(maxHeight: 300)
+                .background(Color.black.opacity(0.3))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             }
-            .frame(maxHeight: 200)
+        }
+    }
+
+    private func progressEntryRow(entry: TaskProgressEntry, isLast: Bool) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            // Timeline bar
+            VStack(spacing: 0) {
+                Circle()
+                    .fill(Color.blue)
+                    .frame(width: 8, height: 8)
+                    .padding(.top, 4)
+                if !isLast {
+                    Rectangle()
+                        .fill(Color.blue.opacity(0.3))
+                        .frame(width: 2)
+                        .frame(maxHeight: .infinity)
+                }
+            }
+            .frame(width: 8)
+            .padding(.trailing, 10)
+
+            // Entry content
+            VStack(alignment: .leading, spacing: 4) {
+                Text(entry.title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.primary)
+
+                ForEach(entry.bullets, id: \.self) { bullet in
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("\u{2022}")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                        Text(bullet)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+            .padding(.bottom, isLast ? 0 : 12)
+        }
+    }
+
+    // MARK: - Completion Sheet
+
+    private var completionSheet: some View {
+        VStack(spacing: 20) {
+            VStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.green)
+                Text("Complete Task")
+                    .font(.system(size: 18, weight: .semibold))
+                Text(session.name)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 12)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Summary (what was accomplished)")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                TextEditor(text: $completionSummary)
+                    .font(.system(size: 13))
+                    .frame(minHeight: 80, maxHeight: 120)
+                    .padding(8)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                    )
+            }
+            .padding(.horizontal, 16)
+
+            HStack(spacing: 12) {
+                Button("Cancel") {
+                    completionSummary = ""
+                    showCompletionSheet = false
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button("Complete") {
+                    confirmCompletion()
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+            }
+            .padding(.bottom, 12)
+        }
+        .frame(width: 380)
+        .padding(8)
+    }
+
+    // MARK: - Conversation Section
+
+    private var conversationSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Conversation", systemImage: "bubble.left.and.bubble.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 0) {
+                ForEach(Array(conversationEntries.enumerated()), id: \.element.id) { index, entry in
+                    conversationRow(entry: entry, isLast: index == conversationEntries.count - 1)
+                }
+            }
             .background(Color.black.opacity(0.3))
             .clipShape(RoundedRectangle(cornerRadius: 8))
+            .frame(maxHeight: 350)
         }
+    }
+
+    private func conversationRow(entry: ConversationEntry, isLast: Bool) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            // Role icon
+            Image(systemName: entry.role == .user ? "person.fill" : "sparkle")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(entry.role == .user ? Color.blue : Color.purple)
+                .frame(width: 20, alignment: .center)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 6) {
+                // Role + timestamp
+                HStack(spacing: 6) {
+                    Text(entry.role == .user ? "You" : "Claude")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(entry.role == .user ? Color.blue : Color.purple)
+
+                    Text(formatTime(entry.timestamp))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                }
+
+                // Content text
+                if !entry.content.isEmpty {
+                    Text(entry.content)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .lineLimit(6)
+                }
+
+                // Tool calls as compact pills
+                if !entry.toolCalls.isEmpty {
+                    FlowLayout(spacing: 4) {
+                        ForEach(entry.toolCalls) { tool in
+                            toolPill(tool)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(entry.role == .user ? Color.blue.opacity(0.06) : Color.clear)
+        .overlay(alignment: .bottom) {
+            if !isLast {
+                Rectangle()
+                    .fill(Color.white.opacity(0.06))
+                    .frame(height: 1)
+            }
+        }
+    }
+
+    private func toolPill(_ tool: ToolCallInfo) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: toolIcon(tool.toolName))
+                .font(.system(size: 9, weight: .medium))
+            Text(tool.toolName)
+                .font(.system(size: 10, weight: .medium))
+            if !tool.summary.isEmpty {
+                Text(tool.summary)
+                    .font(.system(size: 10))
+                    .lineLimit(1)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .foregroundStyle(.secondary)
+    }
+
+    private func toolIcon(_ name: String) -> String {
+        switch name {
+        case "Read": return "doc.text"
+        case "Write": return "square.and.pencil"
+        case "Edit": return "pencil"
+        case "Bash": return "terminal"
+        case "Grep": return "magnifyingglass"
+        case "Glob": return "folder.badge.questionmark"
+        case "WebSearch": return "globe"
+        case "WebFetch": return "arrow.down.doc"
+        case "LSP": return "chevron.left.forwardslash.chevron.right"
+        default: return "wrench"
+        }
+    }
+
+    private func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mma"
+        return formatter.string(from: date).lowercased()
     }
 
     // MARK: - Actions
@@ -2277,6 +2606,51 @@ struct SessionDetailsView: View {
     private func markComplete() {
         session.isCompleted = true
         session.completedAt = Date()
+    }
+
+    private func openInFinder() {
+        guard let taskFolder = session.taskFolderPath else { return }
+        NSWorkspace.shared.open(URL(fileURLWithPath: taskFolder))
+    }
+
+    private func confirmCompletion() {
+        session.isCompleted = true
+        session.completedAt = Date()
+
+        // Append summary to TASK.md progress section and update status
+        if let taskFolder = session.taskFolderPath {
+            let taskMdPath = "\(taskFolder)/TASK.md"
+            do {
+                if FileManager.default.fileExists(atPath: taskMdPath) {
+                    var content = try String(contentsOfFile: taskMdPath, encoding: .utf8)
+
+                    // Update status line from active to completed
+                    content = content.replacingOccurrences(
+                        of: "**Status:** active",
+                        with: "**Status:** completed"
+                    )
+
+                    // Append completion note to Progress section
+                    let formatter = DateFormatter()
+                    formatter.dateFormat = "yyyy-MM-dd"
+                    let dateStr = formatter.string(from: Date())
+
+                    var completionNote = "\n### \(dateStr): Completed\n"
+                    if !completionSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        completionNote += "- \(completionSummary.trimmingCharacters(in: .whitespacesAndNewlines))\n"
+                    }
+
+                    content += completionNote
+                    try content.write(toFile: taskMdPath, atomically: true, encoding: .utf8)
+                    loadTaskMd()
+                }
+            } catch {
+                // Non-critical - session is still marked complete
+            }
+        }
+
+        completionSummary = ""
+        showCompletionSheet = false
     }
 
     private func saveProgressNote() {
@@ -2353,14 +2727,16 @@ struct SessionDetailsView: View {
             if let newContent = try? String(contentsOfFile: taskMdPath, encoding: .utf8) {
                 if newContent != taskMdContent {
                     taskMdContent = newContent
+                    parsedTask = Self.parseTaskMd(newContent)
                 }
             }
         }
 
-        // Refresh recent log
-        let newLogContent = fetchRecentLog()
-        if newLogContent != recentLogContent {
-            recentLogContent = newLogContent
+        // Refresh conversation entries
+        let newEntries = fetchConversationEntries()
+        if newEntries.count != conversationEntries.count ||
+           newEntries.last?.id != conversationEntries.last?.id {
+            conversationEntries = newEntries
         }
     }
 
@@ -2374,22 +2750,102 @@ struct SessionDetailsView: View {
     private func loadTaskMd() {
         guard let taskFolder = session.taskFolderPath else {
             taskMdContent = ""
+            parsedTask = TaskMdParsed()
             return
         }
         let taskMdPath = "\(taskFolder)/TASK.md"
         if let content = try? String(contentsOfFile: taskMdPath, encoding: .utf8) {
             taskMdContent = content
+            parsedTask = Self.parseTaskMd(content)
         } else {
             taskMdContent = ""
+            parsedTask = TaskMdParsed()
         }
     }
 
-    private func loadRecentLog() {
-        recentLogContent = fetchRecentLog()
+    // MARK: - TASK.md Parser
+
+    static func parseTaskMd(_ content: String) -> TaskMdParsed {
+        var result = TaskMdParsed()
+        let lines = content.components(separatedBy: "\n")
+
+        // Extract status: look for **Status:** value
+        for line in lines {
+            if line.contains("**Status:**") {
+                let parts = line.components(separatedBy: "**Status:**")
+                if parts.count > 1 {
+                    result.status = parts[1].trimmingCharacters(in: .whitespaces)
+                }
+                break
+            }
+        }
+
+        // Extract description section
+        var inDescription = false
+        var descriptionLines: [String] = []
+        for line in lines {
+            if line.hasPrefix("## Description") {
+                inDescription = true
+                continue
+            }
+            if inDescription {
+                if line.hasPrefix("## ") {
+                    break
+                }
+                descriptionLines.append(line)
+            }
+        }
+        result.description = descriptionLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Extract progress entries (### headings under ## Progress)
+        var inProgress = false
+        var currentTitle: String? = nil
+        var currentBullets: [String] = []
+        var entries: [TaskProgressEntry] = []
+
+        for line in lines {
+            if line.hasPrefix("## Progress") {
+                inProgress = true
+                continue
+            }
+            if !inProgress { continue }
+            // Stop at next top-level section
+            if line.hasPrefix("## ") && !line.hasPrefix("### ") {
+                break
+            }
+
+            if line.hasPrefix("### ") {
+                // Save previous entry
+                if let title = currentTitle {
+                    entries.append(TaskProgressEntry(title: title, bullets: currentBullets))
+                }
+                // Start new entry -- strip "### " and optional date prefix formatting
+                currentTitle = String(line.dropFirst(4)).trimmingCharacters(in: .whitespaces)
+                currentBullets = []
+            } else if line.hasPrefix("- ") {
+                let bullet = String(line.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+                if !bullet.isEmpty {
+                    currentBullets.append(bullet)
+                }
+            }
+            // Skip blank lines and other content
+        }
+        // Don't forget the last entry
+        if let title = currentTitle {
+            entries.append(TaskProgressEntry(title: title, bullets: currentBullets))
+        }
+
+        // Reverse for newest-first display
+        result.progressEntries = entries.reversed()
+        return result
     }
 
-    /// Fetch recent log content (pure function, returns string)
-    private func fetchRecentLog() -> String {
+    private func loadRecentLog() {
+        conversationEntries = fetchConversationEntries()
+    }
+
+    /// Find the most recent .jsonl file and parse it into conversation entries.
+    private func fetchConversationEntries() -> [ConversationEntry] {
         let workingDir = session.taskFolderPath ?? session.projectPath
         let resolvedPath = URL(fileURLWithPath: workingDir).resolvingSymlinksInPath().path
         let claudeProjectPath = resolvedPath.replacingOccurrences(of: "/", with: "-")
@@ -2398,7 +2854,7 @@ struct SessionDetailsView: View {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: claudeProjectsDir),
               let files = try? fileManager.contentsOfDirectory(atPath: claudeProjectsDir) else {
-            return ""
+            return []
         }
 
         // Find the most recent .jsonl file
@@ -2412,17 +2868,10 @@ struct SessionDetailsView: View {
             .sorted { $0.1 > $1.1 }
 
         guard let mostRecent = jsonlFiles.first else {
-            return ""
+            return []
         }
 
-        if let content = try? String(contentsOfFile: mostRecent.0, encoding: .utf8) {
-            // Take last ~30 lines
-            let lines = content.components(separatedBy: "\n")
-            let lastLines = lines.suffix(30)
-            return lastLines.joined(separator: "\n")
-        } else {
-            return ""
-        }
+        return ConversationParser.parse(filePath: mostRecent.0, lastN: 15)
     }
 
     /// Check if there's an existing Claude session for the given directory
@@ -2437,6 +2886,50 @@ struct SessionDetailsView: View {
             return false
         }
         return files.contains { $0.hasSuffix(".jsonl") }
+    }
+}
+
+// MARK: - Flow Layout for Tool Pills
+
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var currentX: CGFloat = 0
+        var currentY: CGFloat = 0
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > maxWidth && currentX > 0 {
+                currentX = 0
+                currentY += rowHeight + spacing
+                rowHeight = 0
+            }
+            currentX += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+
+        return CGSize(width: maxWidth, height: currentY + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var currentX: CGFloat = bounds.minX
+        var currentY: CGFloat = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > bounds.maxX && currentX > bounds.minX {
+                currentX = bounds.minX
+                currentY += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: currentX, y: currentY), proposal: .unspecified)
+            currentX += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
     }
 }
 
