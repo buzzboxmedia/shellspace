@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Combine
 
 struct WorkspaceView: View {
     @Environment(\.modelContext) private var modelContext
@@ -1099,30 +1100,32 @@ struct TaskRow: View {
         return formatter.localizedString(for: session.createdAt, relativeTo: Date())
     }
 
-    var body: some View {
-        HStack(spacing: 10) {
-            // Status indicator
-            ZStack {
-                if isCompleted {
-                    // Green checkmark for completed tasks
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.green)
-                } else if isActive {
-                    Circle()
-                        .fill(Color.blue.opacity(0.3))
-                        .frame(width: 16, height: 16)
-                    Circle()
-                        .fill(Color.blue)
-                        .frame(width: 8, height: 8)
-                } else {
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 8, height: 8)
-                }
-            }
-            .frame(width: 16, height: 16)
+    // MARK: - Extracted sub-views (breaks up body for Swift type-checker)
 
+    private var statusIndicator: some View {
+        ZStack {
+            if isCompleted {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.green)
+            } else if isActive {
+                Circle()
+                    .fill(Color.blue.opacity(0.3))
+                    .frame(width: 16, height: 16)
+                Circle()
+                    .fill(Color.blue)
+                    .frame(width: 8, height: 8)
+            } else {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 8, height: 8)
+            }
+        }
+        .frame(width: 16, height: 16)
+    }
+
+    private var taskContent: some View {
+        Group {
             if isEditing {
                 TextField("Task name", text: $editedName, onCommit: {
                     session.name = editedName
@@ -1139,7 +1142,6 @@ struct TaskRow: View {
                             .lineLimit(1)
                             .truncationMode(.tail)
 
-                        // Show "Logged" badge for tasks with summaries
                         if isLogged {
                             Text("Logged")
                                 .font(.system(size: 11, weight: .medium))
@@ -1152,7 +1154,6 @@ struct TaskRow: View {
                         }
                     }
 
-                    // Show summary preview if logged
                     if let summary = session.lastSessionSummary, !summary.isEmpty {
                         Text(summary)
                             .font(.system(size: 13))
@@ -1160,91 +1161,44 @@ struct TaskRow: View {
                             .lineLimit(2)
                             .truncationMode(.tail)
                     }
-
                 }
             }
+        }
+    }
 
-            Spacer()
-
-            // Timestamp on hover
-            if isHovered && !isEditing {
-                Text(relativeTime)
+    private var actionButtons: some View {
+        HStack(spacing: 4) {
+            Button {
+                let controller = appState.getOrCreateController(for: session)
+                let workingDir = session.taskFolderPath ?? session.projectPath
+                controller.popOutToTerminal(workingDir: workingDir)
+            } label: {
+                Image(systemName: "arrow.up.forward")
                     .font(.system(size: 12))
-                    .foregroundStyle(.tertiary)
-                    .padding(.trailing, 4)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .help("Open in Terminal.app")
 
-            // Action buttons - simplified: just primary action + delete
-            HStack(spacing: 4) {
-                // Open in Terminal.app
-                Button {
-                    let controller = appState.getOrCreateController(for: session)
-                    let workingDir = session.taskFolderPath ?? session.projectPath
-                    controller.popOutToTerminal(workingDir: workingDir)
-                } label: {
-                    Image(systemName: "arrow.up.forward")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24, height: 24)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Open in Terminal.app")
+            Button {
+                archiveTask()
+            } label: {
+                Image(systemName: "eye.slash")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Hide this task")
+        }
+        .opacity(isHovered && !isEditing ? 1 : 0)
+    }
 
-                // Hide button - hides task from list (can reopen by typing name)
-                Button {
-                    archiveTask()
-                } label: {
-                    Image(systemName: "eye.slash")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24, height: 24)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Hide this task")
-            }
-            .opacity(isHovered && !isEditing ? 1 : 0)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, indented ? 8 : 10)
-        .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isActive ? Color.blue.opacity(0.15) : (isHovered ? Color.white.opacity(0.08) : Color.clear))
-        }
-        .overlay {
-            if isActive {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-            }
-        }
-        .padding(.leading, indented ? 32 : 8)
-        .padding(.trailing, 8)
-        .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            editedName = session.name
-            isEditing = true
-        }
-        .onTapGesture(count: 1) {
-            // Reopen completed tasks when clicked
-            if session.isCompleted {
-                session.isCompleted = false
-                session.completedAt = nil
-            }
-            // Toggle: click active task again to deselect
-            if windowState.activeSession?.id == session.id {
-                windowState.activeSession = nil
-            } else {
-                windowState.activeSession = session
-            }
-        }
-        .onHover { hovering in
-            isHovered = hovering
-        }
-        .onDrag {
-            NSItemProvider(object: session.id.uuidString as NSString)
-        }
-        .contextMenu {
+    private var taskContextMenu: some View {
+        Group {
             Button {
                 editedName = session.name
                 isEditing = true
@@ -1260,7 +1214,6 @@ struct TaskRow: View {
                 }
             }
 
-            // Only show "Promote to Project" for tasks not already in a group
             if session.taskGroup == nil && !isCompleted {
                 Button {
                     promoteToProject()
@@ -1290,19 +1243,84 @@ struct TaskRow: View {
                 Label("Delete", systemImage: "trash")
             }
         }
-        .sheet(isPresented: $showBillingSheet) {
-            BillingSheetView(
-                taskName: session.name,
-                billing: calculatedBilling ?? BillingHours(actualHours: 0.25, suggestedHours: 0.25),
-                onConfirm: { billedHours in
-                    showBillingSheet = false
-                    finalizeCompletion(billedHours: billedHours)
-                },
-                onCancel: {
-                    showBillingSheet = false
-                }
-            )
+    }
+
+    private var rowBackgroundColor: Color {
+        if isActive { return Color.blue.opacity(0.15) }
+        if isHovered { return Color.white.opacity(0.08) }
+        return Color.clear
+    }
+
+    private var leadingPadding: CGFloat { indented ? 32 : 8 }
+    private var verticalPadding: CGFloat { indented ? 8 : 10 }
+
+    var body: some View {
+        rowContent
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) {
+                editedName = session.name
+                isEditing = true
+            }
+            .onTapGesture(count: 1) { handleTap() }
+            .onHover { hovering in isHovered = hovering }
+            .onDrag { NSItemProvider(object: session.id.uuidString as NSString) }
+            .contextMenu { taskContextMenu }
+            .sheet(isPresented: $showBillingSheet) { billingSheet }
+    }
+
+    private var rowContent: some View {
+        HStack(spacing: 10) {
+            statusIndicator
+            taskContent
+            Spacer()
+
+            if isHovered && !isEditing {
+                Text(relativeTime)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.tertiary)
+                    .padding(.trailing, 4)
+            }
+
+            actionButtons
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, verticalPadding)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(rowBackgroundColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(isActive ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
+        .padding(.leading, leadingPadding)
+        .padding(.trailing, 8)
+    }
+
+    private func handleTap() {
+        if session.isCompleted {
+            session.isCompleted = false
+            session.completedAt = nil
+        }
+        if windowState.activeSession?.id == session.id {
+            windowState.activeSession = nil
+        } else {
+            windowState.activeSession = session
+        }
+    }
+
+    private var billingSheet: some View {
+        BillingSheetView(
+            taskName: session.name,
+            billing: calculatedBilling ?? BillingHours(actualHours: 0.25, suggestedHours: 0.25),
+            onConfirm: { billedHours in
+                showBillingSheet = false
+                finalizeCompletion(billedHours: billedHours)
+            },
+            onCancel: {
+                showBillingSheet = false
+            }
+        )
     }
 
     /// Complete a task - calculate billing hours and show confirmation
@@ -1650,6 +1668,8 @@ struct TerminalArea: View {
     @State private var launchedExternalSessions: Set<UUID> = []
 
     private func handleDictation() {
+        // Skip dictation for external terminal mode - no embedded terminal to send to
+        guard !project.usesExternalTerminal else { return }
         guard let session = windowState.activeSession else { return }
         let controller = appState.getOrCreateController(for: session)
         controller.toggleDictation()
@@ -1660,11 +1680,25 @@ struct TerminalArea: View {
             if let session = windowState.activeSession {
                 // Check if this project uses external terminal
                 if project.usesExternalTerminal {
-                    ExternalTerminalView(
+                    SessionDetailsView(
                         session: session,
                         project: project,
-                        launchedSessions: $launchedExternalSessions
+                        launchedSessions: $launchedExternalSessions,
+                        isSidebarCollapsed: $isSidebarCollapsed
                     )
+                    .onAppear {
+                        // Auto-launch in Terminal.app on first selection
+                        if !launchedExternalSessions.contains(session.id) {
+                            launchSessionInTerminal(session)
+                        }
+                    }
+                    .onChange(of: windowState.activeSession?.id) { _, newId in
+                        // Auto-launch when switching to a new session
+                        if let newId = newId, !launchedExternalSessions.contains(newId),
+                           let newSession = windowState.activeSession {
+                            launchSessionInTerminal(newSession)
+                        }
+                    }
                 } else {
                     VStack(spacing: 0) {
                         TerminalHeader(session: session, project: project, isSidebarCollapsed: $isSidebarCollapsed)
@@ -1754,155 +1788,130 @@ struct TerminalArea: View {
             handleDictation()
         }
     }
+
+    /// Launch a session in external Terminal.app with proper flags
+    private func launchSessionInTerminal(_ session: Session) {
+        let workingDir = session.taskFolderPath ?? project.path
+
+        // Check for existing Claude session to determine --continue flag
+        let shouldContinue = session.hasBeenLaunched && checkForExistingClaudeSession(in: workingDir)
+
+        var claudeArgs = "claude --dangerously-skip-permissions"
+        if shouldContinue {
+            claudeArgs += " --continue"
+        }
+
+        // Escape single quotes for AppleScript string interpolation
+        let escapedPath = workingDir.replacingOccurrences(of: "'", with: "'\\''")
+        let escapedArgs = claudeArgs.replacingOccurrences(of: "'", with: "'\\''")
+
+        let script = """
+        tell application "Terminal"
+            activate
+            do script "cd '\(escapedPath)' && \(escapedArgs)"
+        end tell
+        """
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
+        }
+
+        // Track launch state
+        launchedExternalSessions.insert(session.id)
+        session.hasBeenLaunched = true
+        session.lastAccessedAt = Date()
+    }
+
+    /// Check if there's an existing Claude session for the given directory
+    private func checkForExistingClaudeSession(in directory: String) -> Bool {
+        let resolvedPath = URL(fileURLWithPath: directory).resolvingSymlinksInPath().path
+        let claudeProjectPath = resolvedPath.replacingOccurrences(of: "/", with: "-")
+        let claudeProjectsDir = "\(NSHomeDirectory())/.claude/projects/\(claudeProjectPath)"
+
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: claudeProjectsDir),
+              let files = try? fileManager.contentsOfDirectory(atPath: claudeProjectsDir) else {
+            return false
+        }
+        return files.contains { $0.hasSuffix(".jsonl") }
+    }
 }
 
-// MARK: - External Terminal View (for projects that open in Terminal.app)
+// MARK: - Session Details View (for projects that open in Terminal.app)
 
-struct ExternalTerminalView: View {
+struct SessionDetailsView: View {
     let session: Session
     let project: Project
     @Binding var launchedSessions: Set<UUID>
+    @Binding var isSidebarCollapsed: Bool
+    @State private var taskMdContent: String = ""
+    @State private var recentLogContent: String = ""
+    @State private var progressNote: String = ""
+    @State private var showProgressSaved = false
+    @State private var processState: SessionProcessState = .stopped
+    @State private var processCheckCancellable: AnyCancellable?
+    @State private var contentRefreshCancellable: AnyCancellable?
 
     var isLaunched: Bool {
         launchedSessions.contains(session.id)
     }
 
+    /// Time since session was last accessed, human-readable
+    private var timeSinceActivity: String {
+        let interval = Date().timeIntervalSince(session.lastAccessedAt)
+        if interval < 60 { return "Just now" }
+        if interval < 3600 { return "\(Int(interval / 60))m ago" }
+        if interval < 86400 { return "\(Int(interval / 3600))h ago" }
+        return "\(Int(interval / 86400))d ago"
+    }
+
+    /// Formatted creation date
+    private var creationDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: session.createdAt)
+    }
+
     var body: some View {
-        VStack(spacing: 24) {
-            // Header
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(isLaunched ? Color.green.opacity(0.2) : Color.blue.opacity(0.2))
-                        .frame(width: 18, height: 18)
+        VStack(spacing: 0) {
+            headerBar
 
-                    Circle()
-                        .fill(isLaunched ? Color.green : Color.blue)
-                        .frame(width: 8, height: 8)
-                }
+            // Separator
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.2), Color.blue.opacity(0.3)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(height: 1)
 
-                Text(session.name)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.primary)
-
-                Spacer()
-
-                if isLaunched {
-                    HStack(spacing: 5) {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 6, height: 6)
-                        Text("Running in Terminal")
-                            .font(.system(size: 13, weight: .semibold))
+            // MARK: - Scrollable content area
+            ScrollView {
+                VStack(spacing: 20) {
+                    sessionInfoSection
+                    quickActionsSection
+                    if !taskMdContent.isEmpty {
+                        taskMdSection
                     }
-                    .foregroundStyle(.green)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color.green.opacity(0.12))
-                    .clipShape(Capsule())
+                    if !recentLogContent.isEmpty {
+                        recentLogSection
+                    }
                 }
+                .padding(20)
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
-            .background(
-                VisualEffectView(material: .headerView, blendingMode: .withinWindow)
-            )
-
-            Spacer()
-
-            // Main content area
-            VStack(spacing: 20) {
-                ZStack {
-                    Circle()
-                        .fill(Color.blue.opacity(0.1))
-                        .frame(width: 100, height: 100)
-                        .blur(radius: 25)
-
-                    Image(systemName: "terminal.fill")
-                        .font(.system(size: 52))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [Color.blue.opacity(0.8), Color.blue.opacity(0.5)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                }
-
-                if isLaunched {
-                    VStack(spacing: 8) {
-                        Text("Session Running Externally")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(.primary)
-
-                        Text("Check Terminal.app for this session")
-                            .font(.system(size: 15))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Button {
-                        // Bring Terminal to front
-                        let script = """
-                        tell application "Terminal"
-                            activate
-                        end tell
-                        """
-                        if let appleScript = NSAppleScript(source: script) {
-                            var error: NSDictionary?
-                            appleScript.executeAndReturnError(&error)
-                        }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "arrow.up.forward.app")
-                            Text("Switch to Terminal")
-                        }
-                        .font(.system(size: 15, weight: .medium))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color.blue.opacity(0.2))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    VStack(spacing: 8) {
-                        Text("Ready to Launch")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(.primary)
-
-                        Text("This will open in a new Terminal window")
-                            .font(.system(size: 15))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Button {
-                        launchInExternalTerminal()
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "play.fill")
-                            Text("Open in Terminal")
-                        }
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(Color.blue)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             ZStack {
                 Color.black.opacity(0.4)
                 RadialGradient(
-                    colors: [Color.blue.opacity(0.08), Color.clear],
-                    center: .center,
+                    colors: [Color.blue.opacity(0.05), Color.clear],
+                    center: .top,
                     startRadius: 50,
-                    endRadius: 300
+                    endRadius: 400
                 )
             }
         )
@@ -1921,19 +1930,331 @@ struct ExternalTerminalView: View {
                     ),
                     lineWidth: 1
                 )
+                .allowsHitTesting(false)
         )
         .shadow(color: .black.opacity(0.4), radius: 12, x: 0, y: 6)
+        .shadow(color: Color.blue.opacity(0.1), radius: 20, x: 0, y: 0)
         .padding(14)
+        .onAppear {
+            loadContent()
+            checkProcessState()
+            startTimers()
+        }
+        .onDisappear {
+            stopTimers()
+        }
+        .onChange(of: session.id) { _, _ in
+            loadContent()
+            checkProcessState()
+            // Restart timers for new session
+            stopTimers()
+            startTimers()
+        }
     }
 
-    private func launchInExternalTerminal() {
-        // Use task folder if available, otherwise project path
+    // MARK: - Header Bar
+
+    private var headerBar: some View {
+        HStack(spacing: 14) {
+            // Sidebar toggle
+            Button {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isSidebarCollapsed.toggle()
+                }
+            } label: {
+                Image(systemName: isSidebarCollapsed ? "sidebar.leading" : "sidebar.left")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .help(isSidebarCollapsed ? "Show Sidebar" : "Hide Sidebar")
+
+            // Status dot (driven by real process state)
+            ZStack {
+                Circle()
+                    .fill(processState == .running ? Color.green.opacity(0.2) : Color.gray.opacity(0.2))
+                    .frame(width: 18, height: 18)
+                Circle()
+                    .fill(processState == .running ? Color.green : Color.gray)
+                    .frame(width: 8, height: 8)
+                    .shadow(color: processState == .running ? Color.green.opacity(0.8) : Color.clear, radius: 4)
+                    .modifier(PulseAnimation(active: processState == .running))
+            }
+
+            // Session name
+            Text(session.name)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Spacer()
+
+            // Status badge (driven by real process state)
+            statusBadge
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(
+            ZStack {
+                VisualEffectView(material: .headerView, blendingMode: .withinWindow)
+                LinearGradient(
+                    colors: [Color.white.opacity(0.08), Color.clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        )
+    }
+
+    private var statusBadge: some View {
+        let isRunning = processState == .running
+        let color: Color = isRunning ? .green : .gray
+        return HStack(spacing: 5) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+            Text(isRunning ? "Running in Terminal" : "Stopped")
+                .font(.system(size: 13, weight: .semibold))
+        }
+        .foregroundStyle(isRunning ? .green : .secondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(color.opacity(0.12))
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(color.opacity(0.3), lineWidth: 1)
+        )
+    }
+
+    // MARK: - Session Info Section
+
+    private var sessionInfoSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Session Info", systemImage: "info.circle")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 8) {
+                infoRow(label: "Task", value: session.name)
+                infoRow(label: "Project", value: project.name)
+                infoRow(label: "Created", value: creationDate)
+                if let taskFolder = session.taskFolderPath {
+                    infoRow(label: "Task Folder", value: (taskFolder as NSString).lastPathComponent)
+                }
+                infoRow(label: "Last Activity", value: timeSinceActivity)
+            }
+            .padding(14)
+            .background(Color.white.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    private func infoRow(label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 13))
+                .foregroundStyle(.tertiary)
+                .frame(width: 100, alignment: .leading)
+            Text(value)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer()
+        }
+    }
+
+    // MARK: - Quick Actions Section
+
+    private var quickActionsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Actions", systemImage: "bolt.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            terminalButtons
+            secondaryActions
+        }
+    }
+
+    private var terminalButtons: some View {
+        HStack(spacing: 12) {
+            if isLaunched {
+                Button { switchToTerminal() } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.up.forward.app")
+                        Text("Switch to Terminal")
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.blue)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+
+                Button { relaunchInTerminal() } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.clockwise")
+                        Text("Relaunch")
+                    }
+                    .font(.system(size: 14, weight: .medium))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+            } else {
+                Button { relaunchInTerminal() } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "play.fill")
+                        Text("Open in Terminal")
+                    }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.blue)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var secondaryActions: some View {
+        HStack(spacing: 12) {
+            if !session.isCompleted {
+                Button { markComplete() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle")
+                        Text("Mark Complete")
+                    }
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.green)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color.green.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+            }
+
+            progressNoteField
+        }
+    }
+
+    @ViewBuilder
+    private var progressNoteField: some View {
+        if session.taskFolderPath != nil {
+            HStack(spacing: 8) {
+                TextField("Progress note...", text: $progressNote)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .padding(8)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                Button {
+                    saveProgressNote()
+                } label: {
+                    let iconName = showProgressSaved ? "checkmark" : "square.and.arrow.down"
+                    let iconColor: Color = showProgressSaved ? .green : (progressNote.isEmpty ? .secondary : .orange)
+                    Image(systemName: iconName)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(iconColor)
+                }
+                .buttonStyle(.plain)
+                .disabled(progressNote.isEmpty)
+            }
+        }
+    }
+
+    // MARK: - TASK.md Preview Section
+
+    private var taskMdSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("TASK.md", systemImage: "doc.text")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            ScrollView {
+                Text(taskMdContent)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+            }
+            .frame(maxHeight: 250)
+            .background(Color.black.opacity(0.3))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    // MARK: - Recent Log Section
+
+    private var recentLogSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Recent Activity", systemImage: "text.alignleft")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            ScrollView {
+                Text(recentLogContent)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+            }
+            .frame(maxHeight: 200)
+            .background(Color.black.opacity(0.3))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    // MARK: - Actions
+
+    private func switchToTerminal() {
+        let script = """
+        tell application "Terminal"
+            activate
+        end tell
+        """
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
+        }
+    }
+
+    private func relaunchInTerminal() {
         let workingDir = session.taskFolderPath ?? project.path
+        let shouldContinue = session.hasBeenLaunched && SessionDetailsView.checkForExistingClaudeSession(in: workingDir)
+
+        var claudeArgs = "claude --dangerously-skip-permissions"
+        if shouldContinue {
+            claudeArgs += " --continue"
+        }
+
+        // Escape single quotes for AppleScript string interpolation
+        let escapedPath = workingDir.replacingOccurrences(of: "'", with: "'\\''")
+        let escapedArgs = claudeArgs.replacingOccurrences(of: "'", with: "'\\''")
 
         let script = """
         tell application "Terminal"
             activate
-            do script "cd '\(workingDir)' && claude"
+            do script "cd '\(escapedPath)' && \(escapedArgs)"
         end tell
         """
         if let appleScript = NSAppleScript(source: script) {
@@ -1941,27 +2262,208 @@ struct ExternalTerminalView: View {
             appleScript.executeAndReturnError(&error)
         }
 
-        // Mark as launched
         launchedSessions.insert(session.id)
+        session.hasBeenLaunched = true
+        session.lastAccessedAt = Date()
+
+        // Invalidate cache so next process check picks up the new process
+        ProcessMonitor.shared.invalidateCache(for: workingDir)
+        // Optimistically set running after a brief delay (process needs time to start)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            checkProcessState()
+        }
+    }
+
+    private func markComplete() {
+        session.isCompleted = true
+        session.completedAt = Date()
+    }
+
+    private func saveProgressNote() {
+        guard let taskFolder = session.taskFolderPath else { return }
+        guard !progressNote.isEmpty else { return }
+        let taskMdPath = "\(taskFolder)/TASK.md"
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        let timestamp = formatter.string(from: Date())
+
+        let note = "\n- [\(timestamp)] \(progressNote)\n"
+
+        do {
+            let fileManager = FileManager.default
+            if fileManager.fileExists(atPath: taskMdPath) {
+                let existing = try String(contentsOfFile: taskMdPath, encoding: .utf8)
+                try (existing + note).write(toFile: taskMdPath, atomically: true, encoding: .utf8)
+            }
+            session.lastProgressSavedAt = Date()
+            progressNote = ""  // Clear the input after saving
+            showProgressSaved = true
+            // Reset after 2 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                showProgressSaved = false
+            }
+            // Refresh the TASK.md preview
+            loadTaskMd()
+        } catch {
+            // Silently fail - not critical
+        }
+    }
+
+    // MARK: - Timers & Process Monitoring
+
+    private func startTimers() {
+        // Process status check every 3 seconds
+        processCheckCancellable = Timer.publish(every: 3, on: .main, in: .common)
+            .autoconnect()
+            .sink { _ in
+                checkProcessState()
+            }
+
+        // Content refresh every 10 seconds
+        contentRefreshCancellable = Timer.publish(every: 10, on: .main, in: .common)
+            .autoconnect()
+            .sink { _ in
+                refreshContentIfChanged()
+            }
+    }
+
+    private func stopTimers() {
+        processCheckCancellable?.cancel()
+        processCheckCancellable = nil
+        contentRefreshCancellable?.cancel()
+        contentRefreshCancellable = nil
+    }
+
+    private func checkProcessState() {
+        let workingDir = session.taskFolderPath ?? project.path
+        let newState = ProcessMonitor.shared.isClaudeRunning(for: workingDir)
+        if newState != processState {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                processState = newState
+            }
+        }
+    }
+
+    /// Reload content only if it actually changed (avoids unnecessary redraws)
+    private func refreshContentIfChanged() {
+        // Refresh TASK.md
+        if let taskFolder = session.taskFolderPath {
+            let taskMdPath = "\(taskFolder)/TASK.md"
+            if let newContent = try? String(contentsOfFile: taskMdPath, encoding: .utf8) {
+                if newContent != taskMdContent {
+                    taskMdContent = newContent
+                }
+            }
+        }
+
+        // Refresh recent log
+        let newLogContent = fetchRecentLog()
+        if newLogContent != recentLogContent {
+            recentLogContent = newLogContent
+        }
+    }
+
+    // MARK: - Content Loading
+
+    private func loadContent() {
+        loadTaskMd()
+        loadRecentLog()
+    }
+
+    private func loadTaskMd() {
+        guard let taskFolder = session.taskFolderPath else {
+            taskMdContent = ""
+            return
+        }
+        let taskMdPath = "\(taskFolder)/TASK.md"
+        if let content = try? String(contentsOfFile: taskMdPath, encoding: .utf8) {
+            taskMdContent = content
+        } else {
+            taskMdContent = ""
+        }
+    }
+
+    private func loadRecentLog() {
+        recentLogContent = fetchRecentLog()
+    }
+
+    /// Fetch recent log content (pure function, returns string)
+    private func fetchRecentLog() -> String {
+        let workingDir = session.taskFolderPath ?? session.projectPath
+        let resolvedPath = URL(fileURLWithPath: workingDir).resolvingSymlinksInPath().path
+        let claudeProjectPath = resolvedPath.replacingOccurrences(of: "/", with: "-")
+        let claudeProjectsDir = "\(NSHomeDirectory())/.claude/projects/\(claudeProjectPath)"
+
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: claudeProjectsDir),
+              let files = try? fileManager.contentsOfDirectory(atPath: claudeProjectsDir) else {
+            return ""
+        }
+
+        // Find the most recent .jsonl file
+        let jsonlFiles = files.filter { $0.hasSuffix(".jsonl") }
+            .compactMap { fileName -> (String, Date)? in
+                let fullPath = "\(claudeProjectsDir)/\(fileName)"
+                guard let attrs = try? fileManager.attributesOfItem(atPath: fullPath),
+                      let modified = attrs[.modificationDate] as? Date else { return nil }
+                return (fullPath, modified)
+            }
+            .sorted { $0.1 > $1.1 }
+
+        guard let mostRecent = jsonlFiles.first else {
+            return ""
+        }
+
+        if let content = try? String(contentsOfFile: mostRecent.0, encoding: .utf8) {
+            // Take last ~30 lines
+            let lines = content.components(separatedBy: "\n")
+            let lastLines = lines.suffix(30)
+            return lastLines.joined(separator: "\n")
+        } else {
+            return ""
+        }
+    }
+
+    /// Check if there's an existing Claude session for the given directory
+    static func checkForExistingClaudeSession(in directory: String) -> Bool {
+        let resolvedPath = URL(fileURLWithPath: directory).resolvingSymlinksInPath().path
+        let claudeProjectPath = resolvedPath.replacingOccurrences(of: "/", with: "-")
+        let claudeProjectsDir = "\(NSHomeDirectory())/.claude/projects/\(claudeProjectPath)"
+
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: claudeProjectsDir),
+              let files = try? fileManager.contentsOfDirectory(atPath: claudeProjectsDir) else {
+            return false
+        }
+        return files.contains { $0.hasSuffix(".jsonl") }
     }
 }
 
 // MARK: - Pulse Animation for Working Indicator
 
 struct PulseAnimation: ViewModifier {
+    var active: Bool = true
     @State private var isPulsing = false
 
     func body(content: Content) -> some View {
         content
-            .scaleEffect(isPulsing ? 1.3 : 1.0)
-            .opacity(isPulsing ? 0.7 : 1.0)
+            .scaleEffect(isPulsing && active ? 1.3 : 1.0)
+            .opacity(isPulsing && active ? 0.7 : 1.0)
             .animation(
-                Animation.easeInOut(duration: 0.8)
-                    .repeatForever(autoreverses: true),
-                value: isPulsing
+                active
+                    ? Animation.easeInOut(duration: 0.8).repeatForever(autoreverses: true)
+                    : Animation.easeInOut(duration: 0.2),
+                value: isPulsing && active
             )
             .onAppear {
                 isPulsing = true
+            }
+            .onChange(of: active) { _, newValue in
+                if !newValue { isPulsing = false }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    isPulsing = true
+                }
             }
     }
 }

@@ -53,6 +53,18 @@ struct ClaudeHubApp: App {
                     // Give AppDelegate access to appState for cleanup on quit
                     appDelegate.appState = appState
 
+                    // One-time migration: flip all existing projects to external terminal
+                    if !UserDefaults.standard.bool(forKey: "migratedToExternalTerminal") {
+                        let descriptor = FetchDescriptor<Project>()
+                        if let projects = try? sharedModelContainer.mainContext.fetch(descriptor) {
+                            for project in projects {
+                                project.usesExternalTerminal = true
+                            }
+                            try? sharedModelContainer.mainContext.save()
+                        }
+                        UserDefaults.standard.set(true, forKey: "migratedToExternalTerminal")
+                    }
+
                     // Enable session sync
                     SessionSyncService.shared.isEnabled = true
 
@@ -332,9 +344,7 @@ struct WindowContent: View {
         guard FileManager.default.fileExists(atPath: path) else { return }
 
         let project = Project(name: name, path: path, icon: icon, category: category)
-        if name == "Claude Hub" || name == "ClaudeHub" {
-            project.usesExternalTerminal = true
-        }
+        // All projects default to usesExternalTerminal = true (no special-casing needed)
 
         windowState.selectedProject = project
     }
