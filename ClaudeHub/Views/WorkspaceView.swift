@@ -107,10 +107,11 @@ struct WorkspaceView: View {
                 // Save whenever session changes
                 UserDefaults.standard.set(newSession.id.uuidString, forKey: "lastSession:\(project.path)")
 
-                // Auto-launch in Terminal.app if not already launched
-                if !launchedExternalSessions.contains(newSession.id) {
+                // Only launch terminal when user explicitly tapped a task
+                if windowState.userTappedSession && !launchedExternalSessions.contains(newSession.id) {
                     launchSessionInTerminal(newSession)
                 }
+                windowState.userTappedSession = false
             } else if !sessions.isEmpty {
                 // If activeSession is nil (project just changed), try to restore
                 restoreLastSession()
@@ -284,6 +285,7 @@ struct SessionSidebar: View {
     @State private var selectedGroupForNewTask: ProjectGroup?
     @State private var draggedGroupId: UUID?
     @State private var isCompletedExpanded: Bool = false
+    @State private var showTaskList: Bool = false
     @State private var showingAddTaskSheet = false
     @FocusState private var isTaskFieldFocused: Bool
     @FocusState private var isGroupFieldFocused: Bool
@@ -351,6 +353,8 @@ struct SessionSidebar: View {
                 existingSession.isHidden = false
             }
             existingSession.lastAccessedAt = Date()
+            showTaskList = true
+            windowState.userTappedSession = true
             windowState.activeSession = existingSession
             SessionSyncService.shared.exportSession(existingSession)
 
@@ -386,6 +390,8 @@ struct SessionSidebar: View {
         SessionSyncService.shared.exportSession(session)
 
         selectedGroupForNewTask = nil
+        showTaskList = true
+        windowState.userTappedSession = true
         windowState.activeSession = session
         isCreatingTask = false
         newTaskName = ""
@@ -616,17 +622,19 @@ struct SessionSidebar: View {
                         }
                         .padding(.horizontal, 16)
 
-                        // Tasks list (flat, no groups)
-                        if activeSessions.isEmpty {
-                            Text("No tasks yet")
-                                .font(.system(size: 14))
-                                .foregroundStyle(.tertiary)
-                                .frame(maxWidth: .infinity, minHeight: 40)
-                                .padding(.horizontal, 16)
-                        } else {
-                            LazyVStack(spacing: 4) {
-                                ForEach(activeSessions) { session in
-                                    TaskRow(session: session, project: project)
+                        // Tasks list (flat, no groups) - hidden until user searches/clicks GO
+                        if showTaskList {
+                            if activeSessions.isEmpty {
+                                Text("No tasks yet")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.tertiary)
+                                    .frame(maxWidth: .infinity, minHeight: 40)
+                                    .padding(.horizontal, 16)
+                            } else {
+                                LazyVStack(spacing: 4) {
+                                    ForEach(activeSessions) { session in
+                                        TaskRow(session: session, project: project)
+                                    }
                                 }
                             }
                         }
@@ -641,6 +649,9 @@ struct SessionSidebar: View {
         .background(
             VisualEffectView(material: .sidebar, blendingMode: .behindWindow)
         )
+        .onChange(of: project.path) { _, _ in
+            showTaskList = false
+        }
     }
 }
 
@@ -1348,6 +1359,7 @@ struct TaskRow: View {
         if windowState.activeSession?.id == session.id {
             windowState.activeSession = nil
         } else {
+            windowState.userTappedSession = true
             windowState.activeSession = session
         }
     }

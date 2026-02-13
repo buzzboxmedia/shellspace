@@ -15,6 +15,7 @@ class WindowState: ObservableObject {
     @Published var selectedProject: Project?
     @Published var activeSession: Session?
     @Published var isEditingTextField: Bool = false  // Prevents terminal from stealing focus
+    var userTappedSession: Bool = false  // Only launch terminal on explicit tap
 }
 
 @main
