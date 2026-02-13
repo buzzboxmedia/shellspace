@@ -281,8 +281,10 @@ struct RailSection: View {
 // MARK: - Rail Item
 
 struct RailItem: View {
+    @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var windowState: WindowState
+    @Query private var allProjects: [Project]
 
     let name: String
     let path: String
@@ -291,6 +293,23 @@ struct RailItem: View {
 
     @State private var isHovered = false
     @State private var isPulsing = false
+    @State private var showIconPicker = false
+
+    private var persistedProject: Project? {
+        allProjects.first { $0.path == path }
+    }
+
+    private let editableIcons = [
+        "folder.fill", "house.fill", "building.fill", "building.2.fill",
+        "hammer.fill", "wrench.and.screwdriver.fill", "paintbrush.fill", "ruler.fill",
+        "person.fill", "person.2.fill", "briefcase.fill", "doc.fill",
+        "cart.fill", "cup.and.saucer.fill", "shippingbox.fill", "gearshape.fill",
+        "star.fill", "heart.fill", "bolt.fill", "leaf.fill",
+        "globe", "cloud.fill", "server.rack", "desktopcomputer",
+        "laptopcomputer", "iphone", "gamecontroller.fill", "camera.fill",
+        "music.note", "film.fill", "book.fill", "graduationcap.fill",
+        "cross.case.fill", "building.columns.fill", "shield.fill", "eye.fill"
+    ]
 
     private var isSelected: Bool {
         windowState.selectedProject?.path == path
@@ -369,6 +388,43 @@ struct RailItem: View {
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
             }
+        }
+        .contextMenu {
+            Button("Change Icon...") {
+                showIconPicker = true
+            }
+        }
+        .popover(isPresented: $showIconPicker, arrowEdge: .trailing) {
+            VStack(spacing: 12) {
+                Text("Choose Icon")
+                    .font(.headline)
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(36), spacing: 8), count: 6), spacing: 8) {
+                    ForEach(editableIcons, id: \.self) { iconName in
+                        Button {
+                            if let project = persistedProject {
+                                project.icon = iconName
+                                // Also update the selected project if it's the current one
+                                if windowState.selectedProject?.path == path {
+                                    windowState.selectedProject?.icon = iconName
+                                }
+                            }
+                            showIconPicker = false
+                        } label: {
+                            Image(systemName: iconName)
+                                .font(.system(size: 18))
+                                .foregroundStyle(icon == iconName ? .white : .primary)
+                                .frame(width: 32, height: 32)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(icon == iconName ? Color.accentColor : Color.primary.opacity(0.1))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding()
+            .frame(width: 280)
         }
     }
 
