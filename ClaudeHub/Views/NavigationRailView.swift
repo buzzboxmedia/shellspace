@@ -42,6 +42,11 @@ struct NavigationRailView: View {
         "Talkspresso": "cup.and.saucer.fill"
     ]
 
+    /// Look up persisted icon for a path, falling back to the default
+    private func iconFor(path: String, fallback: String) -> String {
+        allProjects.first(where: { $0.path == path })?.icon ?? fallback
+    }
+
     // Scan filesystem for projects (called once on appear)
     private func refreshProjectLists() {
         // Main projects
@@ -49,7 +54,8 @@ struct NavigationRailView: View {
             ("Miller", "\(dropboxPath)/Miller", "person.fill"),
             ("Talkspresso", "\(dropboxPath)/Talkspresso", "cup.and.saucer.fill"),
             ("Buzzbox", "\(dropboxPath)/Buzzbox", "shippingbox.fill")
-        ].filter { FileManager.default.fileExists(atPath: $0.1) }
+        ].map { (name: $0.0, path: $0.1, icon: iconFor(path: $0.1, fallback: $0.2)) }
+         .filter { FileManager.default.fileExists(atPath: $0.path) }
         cachedMainProjects = sortItems(mainItems, using: projectsOrder)
 
         // Clients
@@ -66,7 +72,8 @@ struct NavigationRailView: View {
                 return nil
             }
             guard !name.hasPrefix(".") else { return nil }
-            let icon = clientIcons[name] ?? "hammer.fill"
+            let defaultIcon = clientIcons[name] ?? "hammer.fill"
+            let icon = iconFor(path: path, fallback: defaultIcon)
             return (name, path, icon)
         }.sorted { $0.0 < $1.0 }
 
@@ -76,7 +83,7 @@ struct NavigationRailView: View {
     private var developmentProjects: [(name: String, path: String, icon: String)] {
         let claudeHubPath = "\(dropboxPath)/ClaudeHub"
         if FileManager.default.fileExists(atPath: claudeHubPath) {
-            return [("Claude Hub", claudeHubPath, "terminal.fill")]
+            return [("Claude Hub", claudeHubPath, iconFor(path: claudeHubPath, fallback: "terminal.fill"))]
         }
         return []
     }
@@ -182,6 +189,9 @@ struct NavigationRailView: View {
         .frame(width: 52)
         .background(.ultraThinMaterial)
         .onAppear {
+            refreshProjectLists()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .init("RefreshNavRail"))) { _ in
             refreshProjectLists()
         }
     }
@@ -403,12 +413,19 @@ struct RailItem: View {
                         Button {
                             if let project = persistedProject {
                                 project.icon = iconName
-                                // Also update the selected project if it's the current one
-                                if windowState.selectedProject?.path == path {
-                                    windowState.selectedProject?.icon = iconName
-                                }
+                            } else {
+                                // Create a persisted project so the icon is saved
+                                let category: ProjectCategory = path.contains("/Clients/") ? .client : .main
+                                let newProject = Project(name: name, path: path, icon: iconName, category: category)
+                                modelContext.insert(newProject)
+                            }
+                            // Update the selected project if it's the current one
+                            if windowState.selectedProject?.path == path {
+                                windowState.selectedProject?.icon = iconName
                             }
                             showIconPicker = false
+                            // Post notification to refresh nav rail
+                            NotificationCenter.default.post(name: .init("RefreshNavRail"), object: nil)
                         } label: {
                             Image(systemName: iconName)
                                 .font(.system(size: 18))
