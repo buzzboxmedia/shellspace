@@ -108,8 +108,13 @@ struct WorkspaceView: View {
                 UserDefaults.standard.set(newSession.id.uuidString, forKey: "lastSession:\(project.path)")
 
                 // Only launch terminal when user explicitly tapped a task
-                if windowState.userTappedSession && !launchedExternalSessions.contains(newSession.id) {
-                    launchSessionInTerminal(newSession)
+                if windowState.userTappedSession {
+                    if !launchedExternalSessions.contains(newSession.id) {
+                        launchSessionInTerminal(newSession)
+                    } else {
+                        // Already launched - bring Terminal to front
+                        activateTerminal()
+                    }
                 }
                 windowState.userTappedSession = false
             } else if !sessions.isEmpty {
@@ -237,6 +242,20 @@ struct WorkspaceView: View {
             return false
         }
         return files.contains { $0.hasSuffix(".jsonl") }
+    }
+
+    // MARK: - Terminal Activation
+
+    private func activateTerminal() {
+        let script = """
+        tell application "Terminal"
+            activate
+        end tell
+        """
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
+        }
     }
 
     // MARK: - Data Operations
@@ -422,6 +441,54 @@ struct SessionSidebar: View {
         }
     }
 
+    private func launchQuickSession() {
+        // Check if a root session already exists (no task folder, same name as project)
+        let existingRoot = sessions.first { $0.taskFolderPath == nil && !$0.isCompleted && !$0.isHidden }
+
+        let session: Session
+        if let existing = existingRoot {
+            // Reuse existing root session
+            existing.lastAccessedAt = Date()
+            existing.isHidden = false
+            session = existing
+        } else {
+            // Create a new session with no task folder
+            let newSession = Session(
+                name: project.name,
+                projectPath: project.path,
+                userNamed: true
+            )
+            newSession.project = effectiveProject
+            // No taskFolderPath - this opens in project root
+            modelContext.insert(newSession)
+            session = newSession
+        }
+
+        // Launch Terminal.app in project root
+        let escapedPath = project.path.replacingOccurrences(of: "'", with: "'\\''")
+        let shouldContinue = session.hasBeenLaunched
+        var claudeArgs = "claude --dangerously-skip-permissions"
+        if shouldContinue {
+            claudeArgs += " --continue"
+        }
+        let escapedArgs = claudeArgs.replacingOccurrences(of: "'", with: "'\\''")
+
+        let script = """
+        tell application "Terminal"
+            activate
+            do script "cd '\(escapedPath)' && \(escapedArgs)"
+        end tell
+        """
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
+        }
+
+        session.hasBeenLaunched = true
+        showTaskList = true
+        windowState.activeSession = session
+    }
+
     func createGroup() {
         let name = newGroupName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
@@ -538,6 +605,19 @@ struct SessionSidebar: View {
                         .font(.system(size: 24, weight: .semibold))
                         .lineLimit(2)
                         .truncationMode(.tail)
+
+                    Spacer()
+
+                    // Quick launch - opens claude in project root (no task folder)
+                    Button {
+                        launchQuickSession()
+                    } label: {
+                        Image(systemName: "terminal.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.blue)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open Claude in project root")
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
@@ -1162,6 +1242,11 @@ struct TaskRow: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 16))
                     .foregroundStyle(.green)
+            } else if isActive && session.hasBeenLaunched {
+                // Active and running in Terminal
+                Image(systemName: "terminal.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.green)
             } else if isActive {
                 Circle()
                     .fill(Color.blue.opacity(0.3))
@@ -1169,6 +1254,11 @@ struct TaskRow: View {
                 Circle()
                     .fill(Color.blue)
                     .frame(width: 8, height: 8)
+            } else if session.hasBeenLaunched {
+                // Launched but not currently selected
+                Image(systemName: "terminal")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.green.opacity(0.6))
             } else {
                 Circle()
                     .fill(statusColor)
@@ -1357,10 +1447,27 @@ struct TaskRow: View {
             session.completedAt = nil
         }
         if windowState.activeSession?.id == session.id {
-            windowState.activeSession = nil
+            // Already selected - bring Terminal to front if launched
+            if session.hasBeenLaunched {
+                activateTerminal()
+            } else {
+                windowState.activeSession = nil
+            }
         } else {
             windowState.userTappedSession = true
             windowState.activeSession = session
+        }
+    }
+
+    private func activateTerminal() {
+        let script = """
+        tell application "Terminal"
+            activate
+        end tell
+        """
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
         }
     }
 
