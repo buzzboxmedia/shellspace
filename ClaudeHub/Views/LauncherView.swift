@@ -32,7 +32,7 @@ struct LauncherView: View {
             ("Talkspresso", "\(dropboxPath)/Talkspresso", "cup.and.saucer.fill"),
             ("Buzzbox", "\(dropboxPath)/Buzzbox", "shippingbox.fill")
         ]
-        .filter { FileManager.default.fileExists(atPath: $0.path) }
+        .filter { FileManager.default.fileExists(atPath: $0.1) }
         .map { (name: $0.0, path: $0.1, icon: iconFor(path: $0.1, fallback: $0.2)) }
     }
 
@@ -44,7 +44,7 @@ struct LauncherView: View {
             ("INFAB", "\(clientsPath)/INFAB", "shield.fill"),
             ("TDS", "\(clientsPath)/TDS", "eye.fill")
         ]
-        .filter { FileManager.default.fileExists(atPath: $0.path) }
+        .filter { FileManager.default.fileExists(atPath: $0.1) }
         .map { (name: $0.0, path: $0.1, icon: iconFor(path: $0.1, fallback: $0.2)) }
     }
 
