@@ -20,13 +20,20 @@ struct LauncherView: View {
         return FileManager.default.fileExists(atPath: newPath) ? newPath : legacyPath
     }
 
-    // Default projects - always show if folder exists (no database needed)
+    /// Look up persisted icon for a path, falling back to the default
+    private func iconFor(path: String, fallback: String) -> String {
+        allProjects.first(where: { $0.path == path })?.icon ?? fallback
+    }
+
+    // Default projects - always show if folder exists, check DB for icon overrides
     private var defaultMainProjects: [(name: String, path: String, icon: String)] {
         [
             ("Miller", "\(dropboxPath)/Miller", "person.fill"),
             ("Talkspresso", "\(dropboxPath)/Talkspresso", "cup.and.saucer.fill"),
             ("Buzzbox", "\(dropboxPath)/Buzzbox", "shippingbox.fill")
-        ].filter { FileManager.default.fileExists(atPath: $0.path) }
+        ]
+        .filter { FileManager.default.fileExists(atPath: $0.path) }
+        .map { (name: $0.0, path: $0.1, icon: iconFor(path: $0.1, fallback: $0.2)) }
     }
 
     private var defaultClientProjects: [(name: String, path: String, icon: String)] {
@@ -36,7 +43,9 @@ struct LauncherView: View {
             ("AFL", "\(clientsPath)/AFL", "building.columns.fill"),
             ("INFAB", "\(clientsPath)/INFAB", "shield.fill"),
             ("TDS", "\(clientsPath)/TDS", "eye.fill")
-        ].filter { FileManager.default.fileExists(atPath: $0.path) }
+        ]
+        .filter { FileManager.default.fileExists(atPath: $0.path) }
+        .map { (name: $0.0, path: $0.1, icon: iconFor(path: $0.1, fallback: $0.2)) }
     }
 
     // Database projects excluding those already shown as defaults
