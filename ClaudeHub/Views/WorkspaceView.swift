@@ -83,6 +83,9 @@ struct WorkspaceView: View {
         .onAppear {
             workspaceOpenedAt = Date()
 
+            // Restore launched sessions state from persisted hasBeenLaunched flag
+            launchedExternalSessions = Set(sessions.filter { $0.hasBeenLaunched }.map { $0.id })
+
             // Try to restore last active session first (fast)
             restoreLastSession()
 
@@ -702,8 +705,8 @@ struct SessionSidebar: View {
                         }
                         .padding(.horizontal, 16)
 
-                        // Tasks list (flat, no groups) - hidden until user searches/clicks GO
-                        if showTaskList {
+                        // Tasks list - show if user searched/clicked GO, or if any sessions are launched
+                        if showTaskList || activeSessions.contains(where: { $0.hasBeenLaunched }) {
                             if activeSessions.isEmpty {
                                 Text("No tasks yet")
                                     .font(.system(size: 14))
