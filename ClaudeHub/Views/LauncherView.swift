@@ -468,16 +468,14 @@ struct ClaudeHubCard: View {
         let project: Project
         if let existing = claudeHubProjects.first {
             project = existing
-            // Ensure it uses external terminal
-            project.usesExternalTerminal = true
+            // Uses embedded terminal
         } else {
-            // Create Claude Hub project with external terminal flag
+            // Create Claude Hub project
             project = Project(
                 name: "Claude Hub",
                 path: claudeHubPath,
                 icon: "terminal.fill",
-                category: .main,
-                usesExternalTerminal: true
+                category: .main
             )
             modelContext.insert(project)
         }

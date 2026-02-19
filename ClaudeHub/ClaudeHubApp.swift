@@ -345,7 +345,7 @@ struct WindowContent: View {
         guard FileManager.default.fileExists(atPath: path) else { return }
 
         let project = Project(name: name, path: path, icon: icon, category: category)
-        // All projects default to usesExternalTerminal = true (no special-casing needed)
+        // All projects default to embedded terminal
 
         windowState.selectedProject = project
     }

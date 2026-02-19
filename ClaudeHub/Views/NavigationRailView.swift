@@ -456,10 +456,7 @@ struct RailItem: View {
         let category: ProjectCategory = path.contains("/Clients/") ? .client : .main
         let project = Project(name: name, path: path, icon: icon, category: category)
 
-        // Mark as external terminal for Claude Hub
-        if name == "Claude Hub" {
-            project.usesExternalTerminal = true
-        }
+        // Claude Hub uses embedded terminal like everything else
 
         // Set project and clear session in the same transaction
         // so restoreLastSession sees the new project (not the old one)
