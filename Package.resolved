@@ -12,10 +12,10 @@
     {
       "identity" : "swiftterm",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/buzzboxmedia/SwiftTerm.git",
+      "location" : "https://github.com/migueldeicaza/SwiftTerm.git",
       "state" : {
-        "branch" : "fix/savedY-clamp",
-        "revision" : "4632177b1230f31a2b87b65f696116aa73f7ce30"
+        "branch" : "main",
+        "revision" : "54a50668850a3007535e75bb16e5990bb3880bc5"
       }
     }
   ],

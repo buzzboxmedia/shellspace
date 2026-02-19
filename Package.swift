@@ -7,7 +7,7 @@ let package = Package(
         .macOS(.v14)
     ],
     dependencies: [
-        .package(url: "https://github.com/buzzboxmedia/SwiftTerm.git", branch: "fix/savedY-clamp")
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", branch: "main")
     ],
     targets: [
         .executableTarget(
