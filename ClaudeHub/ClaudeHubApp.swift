@@ -54,16 +54,16 @@ struct ClaudeHubApp: App {
                     // Give AppDelegate access to appState for cleanup on quit
                     appDelegate.appState = appState
 
-                    // One-time migration: flip all existing projects to external terminal
-                    if !UserDefaults.standard.bool(forKey: "migratedToExternalTerminal") {
+                    // One-time migration: flip all existing projects to embedded terminal
+                    if !UserDefaults.standard.bool(forKey: "migratedToEmbeddedTerminal") {
                         let descriptor = FetchDescriptor<Project>()
                         if let projects = try? sharedModelContainer.mainContext.fetch(descriptor) {
                             for project in projects {
-                                project.usesExternalTerminal = true
+                                project.usesExternalTerminal = false
                             }
                             try? sharedModelContainer.mainContext.save()
                         }
-                        UserDefaults.standard.set(true, forKey: "migratedToExternalTerminal")
+                        UserDefaults.standard.set(true, forKey: "migratedToEmbeddedTerminal")
                     }
 
                     // Enable session sync
