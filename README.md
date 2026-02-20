@@ -1,42 +1,23 @@
-# Claude Hub
+# Shellspace
 
 A native macOS app for managing Claude Code sessions across projects.
 
-## Setup Instructions
-
-### Option 1: Open in Xcode (Recommended)
-
-1. Open Xcode
-2. File → New → Project
-3. Choose "macOS" → "App"
-4. Settings:
-   - Product Name: `ClaudeHub`
-   - Interface: `SwiftUI`
-   - Language: `Swift`
-   - Save to: `~/Dropbox/Buzzbox/ClaudeHub` (replace existing)
-5. Delete the auto-generated ContentView.swift
-6. Add existing files: Drag the `ClaudeHub/` folder contents into Xcode
-7. Add SwiftTerm package:
-   - File → Add Package Dependencies
-   - URL: `https://github.com/migueldeicaza/SwiftTerm.git`
-   - Add to target: ClaudeHub
-8. Build and run (Cmd+R)
-
-### Option 2: Swift Package Manager
+## Setup
 
 ```bash
-cd ~/Dropbox/Buzzbox/ClaudeHub
-swift build
-swift run
-```
+# New machine (after Dropbox syncs):
+~/Dropbox/Shellspace/go.sh
 
-Note: SPM works for building but Xcode gives a better experience for Mac app development.
+# Or from scratch:
+git clone git@github.com:buzzboxmedia/shellspace.git ~/Code/shellspace
+cd ~/Code/shellspace && ./install.sh
+```
 
 ## Project Structure
 
 ```
-ClaudeHub/
-├── ClaudeHubApp.swift      # Main app entry + AppState
+Shellspace/
+├── ShellspaceApp.swift      # Main app entry + AppState
 ├── Models/
 │   ├── Project.swift       # Project definition
 │   └── Session.swift       # Chat session model

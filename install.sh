@@ -1,11 +1,11 @@
 #!/bin/bash
-# ClaudeHub Install Script
+# Shellspace Install Script
 # Builds, installs, and pushes to GitHub
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_NAME="ClaudeHub"
+APP_NAME="Shellspace"
 APP_PATH="$HOME/Applications/$APP_NAME.app"
 
 cd "$SCRIPT_DIR"
@@ -50,9 +50,9 @@ fi
 cp ".build/debug/$APP_NAME" "$APP_PATH/Contents/MacOS/"
 
 # Copy icon
-if [ -f "$SCRIPT_DIR/ClaudeHub/Resources/AppIcon.icns" ]; then
+if [ -f "$SCRIPT_DIR/Shellspace/Resources/AppIcon.icns" ]; then
     mkdir -p "$APP_PATH/Contents/Resources"
-    cp "$SCRIPT_DIR/ClaudeHub/Resources/AppIcon.icns" "$APP_PATH/Contents/Resources/"
+    cp "$SCRIPT_DIR/Shellspace/Resources/AppIcon.icns" "$APP_PATH/Contents/Resources/"
 fi
 
 # Always update Info.plist (version changes each build) - MUST be before codesign
@@ -62,13 +62,13 @@ cat > "$APP_PATH/Contents/Info.plist" << PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>ClaudeHub</string>
+    <string>Shellspace</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>com.buzzbox.claudehub</string>
+    <string>com.buzzbox.shellspace</string>
     <key>CFBundleName</key>
-    <string>ClaudeHub</string>
+    <string>Shellspace</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -80,16 +80,16 @@ cat > "$APP_PATH/Contents/Info.plist" << PLIST
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>ClaudeHub uses the microphone for voice dictation to send commands to Claude.</string>
+    <string>Shellspace uses the microphone for voice dictation to send commands to Claude.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>ClaudeHub uses speech recognition to convert your voice into text commands for Claude.</string>
+    <string>Shellspace uses speech recognition to convert your voice into text commands for Claude.</string>
 </dict>
 </plist>
 PLIST
 
 # Sign the app with entitlements for CloudKit (after Info.plist exists)
 echo "Signing with entitlements..."
-codesign --force --sign - --entitlements "$SCRIPT_DIR/ClaudeHub.entitlements" "$APP_PATH"
+codesign --force --sign - --entitlements "$SCRIPT_DIR/Shellspace.entitlements" "$APP_PATH"
 
 # Register with Launch Services
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_PATH"
@@ -105,14 +105,14 @@ APP_PATH = "$APP_PATH"
 result = subprocess.run(['defaults', 'export', 'com.apple.dock', '-'], capture_output=True)
 dock = plistlib.loads(result.stdout)
 
-# Check if ClaudeHub is already in the Dock
+# Check if Shellspace is already in the Dock
 already_in_dock = any(
-    'ClaudeHub' in app.get('tile-data', {}).get('file-data', {}).get('_CFURLString', '')
+    'Shellspace' in app.get('tile-data', {}).get('file-data', {}).get('_CFURLString', '')
     for app in dock.get('persistent-apps', [])
 )
 
 if not already_in_dock:
-    # Add ClaudeHub
+    # Add Shellspace
     dock['persistent-apps'].append({
         'tile-data': {
             'file-data': {
@@ -134,15 +134,15 @@ PYTHON
 # Add to Login Items (so menu bar icon is always available)
 osascript << 'APPLESCRIPT'
 tell application "System Events"
-    set appPath to POSIX file (POSIX path of (path to home folder) & "/Applications/ClaudeHub.app") as alias
+    set appPath to POSIX file (POSIX path of (path to home folder) & "/Applications/Shellspace.app") as alias
     set loginItems to name of every login item
-    if "ClaudeHub" is not in loginItems then
+    if "Shellspace" is not in loginItems then
         make login item at end with properties {path:appPath, hidden:false}
         log "✓ Added to Login Items"
     end if
 end tell
 APPLESCRIPT
-echo "✓ ClaudeHub will start at login"
+echo "✓ Shellspace will start at login"
 
 if [ "$FRESH_INSTALL" = true ]; then
     echo "✓ Installed to $APP_PATH"
@@ -153,7 +153,7 @@ fi
 # Add 'build' alias if not already in shell config
 if ! grep -q "alias build=" ~/.zshrc 2>/dev/null; then
     echo "" >> ~/.zshrc
-    echo "# ClaudeHub build command" >> ~/.zshrc
+    echo "# Shellspace build command" >> ~/.zshrc
     echo "alias build=\"$SCRIPT_DIR/install.sh\"" >> ~/.zshrc
     echo "✓ Added 'build' alias to ~/.zshrc"
 fi

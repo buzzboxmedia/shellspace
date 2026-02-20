@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "ClaudeHub",
+    name: "Shellspace",
     platforms: [
         .macOS(.v14)
     ],
@@ -11,9 +11,9 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "ClaudeHub",
+            name: "Shellspace",
             dependencies: ["SwiftTerm"],
-            path: "ClaudeHub",
+            path: "Shellspace",
             resources: [.copy("Resources/AppIcon.icns")]
         )
     ]

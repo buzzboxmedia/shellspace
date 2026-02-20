@@ -1,21 +1,21 @@
 #!/bin/bash
 # One-liner setup for new computers:
-# curl -sL https://raw.githubusercontent.com/buzzboxmedia/claudehub/main/setup.sh | bash
+# curl -sL https://raw.githubusercontent.com/buzzboxmedia/shellspace/main/setup.sh | bash
 #
-# Note: After Dropbox syncs, use ~/Dropbox/claudehub/go.sh instead
+# Note: After Dropbox syncs, use ~/Dropbox/shellspace/go.sh instead
 
 set -e
 
-echo "Setting up ClaudeHub..."
+echo "Setting up Shellspace..."
 
 # Clone if not exists
-if [ ! -d ~/Code/claudehub ]; then
+if [ ! -d ~/Code/shellspace ]; then
     mkdir -p ~/Code
-    git clone git@github.com:buzzboxmedia/claudehub.git ~/Code/claudehub
+    git clone git@github.com:buzzboxmedia/shellspace.git ~/Code/shellspace
 fi
 
 # Run install
-~/Code/claudehub/install.sh
+~/Code/shellspace/install.sh
 
 echo ""
-echo "Done! Once Dropbox syncs, use: ~/Dropbox/claudehub/go.sh"
+echo "Done! Once Dropbox syncs, use: ~/Dropbox/shellspace/go.sh"

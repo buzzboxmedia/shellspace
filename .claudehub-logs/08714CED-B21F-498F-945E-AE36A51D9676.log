@@ -1,0 +1,71 @@
+=== ClaudeHub Session Log ===
+Session: Landing Page
+Saved: 2026-01-19T13:17:41Z
+Project: /Users/baronmiller/Code/claudehub
+
+baronmiller@Mac / % cd '/Users/baronmiller/Code/claudehub' && clau
+de --dangerously-skip-permissions
+╭─────────────────────────────────────────────────────────────────
+─────────────────────────────────╮
+│                                                                 
+│
+│ Updates to Consumer Terms and Policies                          
+ _____________│
+│ We've updated our Consumer Terms and Privacy Policy.            
+ |          \  \│
+│                                                                 
+ | NEW TERMS \__\│
+│ What's changing?                                                
+ |              |│
+│                                                                 
+ |  ----------  |│
+│ Help improve Claude                                             
+ |  ----------  |│
+│ Allow the use of your chats and coding sessions to train and imp
+rove Anthropic  |  ----------  |│
+│ AI models. You can change this anytime in Privacy Settings      
+ |  ----------  |│
+│ https://claude.ai/settings/data-privacy-controls                
+ |  ----------  |│
+│                                                                 
+ |              |│
+│ How this affects data retention                                 
+ |______________|│
+│ Turning ON the improve Claude setting extends data retention fro
+m 30 days to 5 │
+│ years. Turning it OFF keeps the default 30-day data retention. D
+elete data │
+│ anytime.                                                        
+│
+│                                                                 
+│
+│ Learn more (https://www.anthropic.com/news/updates-to-our-consum
+er-terms) or │
+│ read the updated Consumer Terms (https://anthropic.com/legal/ter
+ms) and Privacy│
+│  Policy (https://anthropic.com/legal/privacy)                   
+│
+│                                                                 
+│
+│ ╭───────────────────────────────────────────────────────────────
+───────────────────────────────╮│
+│ │                                                               
+││
+│ │ Please select how you'd like to continue                      
+││
+│ │ Your choice takes effect immediately upon confirmation.       
+││
+│ │                                                               
+││
+│ │ ❯ 1. Accept terms • Help improve Claude: ON                   
+││
+│ │   2. Accept terms • Help improve Claude: OFF                  
+││
+│ │                                                               
+││
+│ ╰───────────────────────────────────────────────────────────────
+───────────────────────────────╯│
+╰─────────────────────────────────────────────────────────────────
+─────────────────────────────────╯
+ Enter to confirm · Esc to cancel
+
