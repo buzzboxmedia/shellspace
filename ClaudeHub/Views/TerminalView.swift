@@ -326,57 +326,54 @@ struct TerminalView: View {
 
 struct TalkButton: View {
     @ObservedObject var speechService: SpeechService
-    @State private var isPressed = false
+    @State private var pulseScale: CGFloat = 1.0
 
     var body: some View {
-        ZStack {
-            // Pulsing ring when listening
-            if speechService.isListening {
-                Circle()
-                    .stroke(Color.red.opacity(0.4), lineWidth: 3)
-                    .frame(width: 60, height: 60)
-                    .scaleEffect(isPressed ? 1.3 : 1.0)
-                    .opacity(isPressed ? 0.0 : 1.0)
-                    .animation(.easeOut(duration: 1.0).repeatForever(autoreverses: false), value: isPressed)
+        VStack(spacing: 8) {
+            // Transcript bubble above the button
+            if speechService.isListening && !speechService.transcript.isEmpty {
+                Text(speechService.transcript)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.black.opacity(0.75))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .frame(maxWidth: 280, alignment: .trailing)
             }
 
-            Circle()
-                .fill(speechService.isListening ? Color.red : Color(red: 0.25, green: 0.45, blue: 0.85))
-                .frame(width: 48, height: 48)
-                .shadow(color: speechService.isListening ? Color.red.opacity(0.5) : Color.blue.opacity(0.4), radius: 8)
-
-            Image(systemName: speechService.isListening ? "waveform" : "mic.fill")
-                .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(.white)
-        }
-        .contentShape(Circle())
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    if !isPressed {
-                        isPressed = true
-                        speechService.startListeningIfAuthorized()
-                    }
+            ZStack {
+                // Pulsing ring when listening
+                if speechService.isListening {
+                    Circle()
+                        .stroke(Color.red.opacity(0.4), lineWidth: 3)
+                        .frame(width: 60, height: 60)
+                        .scaleEffect(pulseScale)
+                        .opacity(2.0 - Double(pulseScale))
+                        .onAppear {
+                            withAnimation(.easeOut(duration: 1.0).repeatForever(autoreverses: false)) {
+                                pulseScale = 1.5
+                            }
+                        }
+                        .onDisappear {
+                            pulseScale = 1.0
+                        }
                 }
-                .onEnded { _ in
-                    isPressed = false
-                    if speechService.isListening {
-                        speechService.stopListening(send: true)
-                    }
-                }
-        )
-        .help("Hold to talk")
 
-        // Show transcript overlay when listening
-        if speechService.isListening && !speechService.transcript.isEmpty {
-            Text(speechService.transcript)
-                .font(.system(size: 13))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.black.opacity(0.75))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .offset(y: -60)
+                Circle()
+                    .fill(speechService.isListening ? Color.red : Color(red: 0.25, green: 0.45, blue: 0.85))
+                    .frame(width: 48, height: 48)
+                    .shadow(color: speechService.isListening ? Color.red.opacity(0.5) : Color.blue.opacity(0.4), radius: 8)
+
+                Image(systemName: speechService.isListening ? "waveform" : "mic.fill")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(.white)
+            }
+            .contentShape(Circle())
+            .onTapGesture {
+                speechService.toggleListening()
+            }
+            .help(speechService.isListening ? "Click to send" : "Click to talk")
         }
     }
 }
