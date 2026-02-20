@@ -16,7 +16,7 @@ if [[ -n $(git status --porcelain) ]]; then
     git add -A
     git commit -m "Update $(date '+%Y-%m-%d %H:%M')"
     echo "Pushing to GitHub..."
-    git push
+    git push || echo "⚠ Push failed (continuing with build)"
 else
     echo "No changes to commit"
 fi
