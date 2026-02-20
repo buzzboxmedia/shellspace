@@ -73,6 +73,12 @@ struct ShellspaceApp: App {
                         UserDefaults.standard.set(true, forKey: "migratedToPersistedProjects")
                     }
 
+                    // One-time migration: Deduplicate projects that share the same path
+                    if !UserDefaults.standard.bool(forKey: "deduplicatedProjectsByPath") {
+                        ProjectMigration.deduplicateByPath(in: sharedModelContainer.mainContext)
+                        UserDefaults.standard.set(true, forKey: "deduplicatedProjectsByPath")
+                    }
+
                     // Enable session sync
                     SessionSyncService.shared.isEnabled = true
 
@@ -480,5 +486,44 @@ enum ProjectMigration {
 
         try? context.save()
         appLogger.info("Project migration complete - all projects now persisted")
+    }
+
+    /// Remove duplicate projects that share the same path, keeping the one with the most sessions
+    static func deduplicateByPath(in context: ModelContext) {
+        let descriptor = FetchDescriptor<Project>()
+        guard let allProjects = try? context.fetch(descriptor) else { return }
+
+        // Group by path
+        var byPath: [String: [Project]] = [:]
+        for project in allProjects {
+            byPath[project.path, default: []].append(project)
+        }
+
+        var removed = 0
+        for (path, projects) in byPath where projects.count > 1 {
+            // Keep the project with the most sessions
+            let sorted = projects.sorted { $0.sessions.count > $1.sessions.count }
+            let keeper = sorted[0]
+            let duplicates = sorted.dropFirst()
+
+            for dup in duplicates {
+                // Reassign sessions to keeper
+                for session in dup.sessions {
+                    session.project = keeper
+                }
+                // Reassign task groups to keeper
+                for group in dup.taskGroups {
+                    group.project = keeper
+                }
+                context.delete(dup)
+                removed += 1
+                appLogger.info("Removed duplicate project '\(dup.name)' at \(path)")
+            }
+        }
+
+        if removed > 0 {
+            try? context.save()
+        }
+        appLogger.info("Dedup complete: removed \(removed) duplicate projects")
     }
 }

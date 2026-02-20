@@ -219,13 +219,19 @@ class SessionSyncService {
                 let decoder = JSONDecoder()
                 let metadata = try decoder.decode(ProjectMetadata.self, from: data)
 
-                // Check if project exists locally
-                let descriptor = FetchDescriptor<Project>(
-                    predicate: #Predicate { $0.id == metadata.id }
+                // Check if project exists locally (by ID or by path to prevent duplicates)
+                let metadataId = metadata.id
+                let metadataPath = metadata.path
+                let idDescriptor = FetchDescriptor<Project>(
+                    predicate: #Predicate { $0.id == metadataId }
                 )
-                let existingProjects = try modelContext.fetch(descriptor)
+                let pathDescriptor = FetchDescriptor<Project>(
+                    predicate: #Predicate { $0.path == metadataPath }
+                )
+                let existingById = try modelContext.fetch(idDescriptor)
+                let existingByPath = try modelContext.fetch(pathDescriptor)
 
-                if let existing = existingProjects.first {
+                if let existing = existingById.first ?? existingByPath.first {
                     // Update existing project
                     existing.updateFromMetadata(metadata)
                     updated += 1
