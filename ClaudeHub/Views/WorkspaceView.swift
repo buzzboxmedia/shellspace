@@ -75,7 +75,28 @@ struct WorkspaceView: View {
     }
 
     var body: some View {
-        SessionSidebar(project: project)
+        HSplitView {
+            SessionSidebar(project: project)
+                .frame(minWidth: 280, idealWidth: 320, maxWidth: 400)
+
+            // Terminal pane - shows embedded SwiftTerm when a session is active
+            if let activeSession = windowState.activeSession, activeSession.hasBeenLaunched {
+                TerminalView(session: activeSession)
+                    .frame(minWidth: 400)
+            } else {
+                // Empty state when no session is launched
+                VStack(spacing: 16) {
+                    Image(systemName: "terminal")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.tertiary)
+                    Text("Select a task to start a session")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(NSColor(calibratedRed: 0.075, green: 0.082, blue: 0.11, alpha: 1.0)))
+            }
+        }
         .background {
             VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
                 .ignoresSafeArea()
@@ -202,35 +223,10 @@ struct WorkspaceView: View {
 
     /// Launch a session in external Terminal.app with proper flags
     private func launchSessionInTerminal(_ session: Session) {
-        let workingDir = session.taskFolderPath ?? project.path
-
-        // Check for existing Claude session to determine --continue flag
-        let shouldContinue = session.hasBeenLaunched && checkForExistingClaudeSession(in: workingDir)
-
-        var claudeArgs = "claude --dangerously-skip-permissions"
-        if shouldContinue {
-            claudeArgs += " --continue"
-        }
-
-        // Escape single quotes for AppleScript string interpolation
-        let escapedPath = workingDir.replacingOccurrences(of: "'", with: "'\\''")
-        let escapedArgs = claudeArgs.replacingOccurrences(of: "'", with: "'\\''")
-
-        let script = """
-        tell application "Terminal"
-            activate
-            do script "cd '\(escapedPath)' && \(escapedArgs)"
-        end tell
-        """
-        if let appleScript = NSAppleScript(source: script) {
-            var error: NSDictionary?
-            appleScript.executeAndReturnError(&error)
-        }
-
-        // Track launch state
-        launchedExternalSessions.insert(session.id)
+        // Mark as launched - TerminalView will auto-start Claude via SwiftTerm
         session.hasBeenLaunched = true
         session.lastAccessedAt = Date()
+        launchedExternalSessions.insert(session.id)
     }
 
     /// Check if there's an existing Claude session for the given directory
@@ -250,14 +246,10 @@ struct WorkspaceView: View {
     // MARK: - Terminal Activation
 
     private func activateTerminal() {
-        let script = """
-        tell application "Terminal"
-            activate
-        end tell
-        """
-        if let appleScript = NSAppleScript(source: script) {
-            var error: NSDictionary?
-            appleScript.executeAndReturnError(&error)
+        // Terminal is embedded via SwiftTerm - just ensure the window is focused
+        if let window = NSApplication.shared.keyWindow {
+            window.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
         }
     }
 
@@ -467,26 +459,7 @@ struct SessionSidebar: View {
             session = newSession
         }
 
-        // Launch Terminal.app in project root
-        let escapedPath = project.path.replacingOccurrences(of: "'", with: "'\\''")
-        let shouldContinue = session.hasBeenLaunched
-        var claudeArgs = "claude --dangerously-skip-permissions"
-        if shouldContinue {
-            claudeArgs += " --continue"
-        }
-        let escapedArgs = claudeArgs.replacingOccurrences(of: "'", with: "'\\''")
-
-        let script = """
-        tell application "Terminal"
-            activate
-            do script "cd '\(escapedPath)' && \(escapedArgs)"
-        end tell
-        """
-        if let appleScript = NSAppleScript(source: script) {
-            var error: NSDictionary?
-            appleScript.executeAndReturnError(&error)
-        }
-
+        // Mark as launched - TerminalView will auto-start Claude via SwiftTerm
         session.hasBeenLaunched = true
         showTaskList = true
         windowState.activeSession = session
@@ -1463,14 +1436,10 @@ struct TaskRow: View {
     }
 
     private func activateTerminal() {
-        let script = """
-        tell application "Terminal"
-            activate
-        end tell
-        """
-        if let appleScript = NSAppleScript(source: script) {
-            var error: NSDictionary?
-            appleScript.executeAndReturnError(&error)
+        // Terminal is embedded via SwiftTerm - just ensure the window is focused
+        if let window = NSApplication.shared.keyWindow {
+            window.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
         }
     }
 
