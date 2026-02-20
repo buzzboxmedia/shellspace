@@ -104,8 +104,8 @@ class SpeechService: ObservableObject {
         }
     }
 
+    /// Stop recording. If send=true, immediately paste to terminal. If send=false, hold transcript for later paste.
     func stopListening(send: Bool) {
-        // Capture transcript BEFORE cancelling (cancel can clear results)
         let finalTranscript = self.transcript
 
         audioEngine.stop()
@@ -116,24 +116,44 @@ class SpeechService: ObservableObject {
         recognitionRequest = nil
         recognitionTask = nil
 
-        if send && !finalTranscript.isEmpty {
-            self.pendingSend = true
-        }
-
         DispatchQueue.main.async {
             self.isListening = false
-            self.transcript = ""
 
             if send && !finalTranscript.isEmpty {
+                // Immediate send (e.g. push-to-talk release)
+                self.transcript = ""
+                self.pendingSend = false
                 self.logger.info("Posting transcript to terminal: \(finalTranscript)")
                 NotificationCenter.default.post(
                     name: .sendDictationToTerminal,
                     object: finalTranscript
                 )
+            } else if !finalTranscript.isEmpty {
+                // Hold transcript for Option+F paste
+                self.transcript = finalTranscript
+                self.pendingSend = true
+                self.logger.info("Transcript ready to paste (\(finalTranscript.count) chars)")
             } else {
-                self.logger.info("Not sending - send:\(send), transcript empty:\(finalTranscript.isEmpty)")
+                self.transcript = ""
+                self.pendingSend = false
             }
         }
+    }
+
+    /// Paste the held transcript into the terminal (Option+F)
+    func pasteTranscript() {
+        guard !transcript.isEmpty else {
+            logger.info("No transcript to paste")
+            return
+        }
+        let text = transcript
+        logger.info("Pasting transcript to terminal: \(text)")
+        NotificationCenter.default.post(
+            name: .sendDictationToTerminal,
+            object: text
+        )
+        transcript = ""
+        pendingSend = false
     }
 
     func confirmSend() {
@@ -157,15 +177,13 @@ class SpeechService: ObservableObject {
         }
     }
 
+    /// Option+D: first press starts, second press stops (holds transcript for Option+F)
     func toggleListening() {
-        if pendingSend {
-            // Was pending send, cancel it and start fresh
-            pendingSend = false
-        }
         if isListening {
-            stopListening(send: true)
+            stopListening(send: false)
         } else {
-            // First tap: start listening
+            pendingSend = false
+            transcript = ""
             requestAuthorization { authorized in
                 if authorized {
                     self.startListening()
@@ -183,7 +201,7 @@ struct TerminalView: View {
     @EnvironmentObject var appState: AppState
     @State private var forceRefresh = false
     @State private var showTerminal = false  // Delay showing terminal until Claude initializes
-    @StateObject private var speechService = SpeechService.shared
+    @ObservedObject private var speechService = SpeechService.shared
 
     // Get controller from AppState so it persists when switching sessions
     var terminalController: TerminalController {
@@ -205,14 +223,46 @@ struct TerminalView: View {
                         terminalController.saveLog(for: session)
                     }
 
-                // Floating mic button - bottom right
+                // Floating mic bar - bottom right with transcript
                 VStack {
                     Spacer()
-                    HStack {
+                    HStack(spacing: 12) {
                         Spacer()
+
+                        // Live transcript (while recording) or held transcript (ready to paste)
+                        if speechService.isListening || speechService.pendingSend {
+                            HStack(spacing: 8) {
+                                if speechService.isListening && speechService.transcript.isEmpty {
+                                    Text("Listening...")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(.secondary)
+                                        .italic()
+                                } else if !speechService.transcript.isEmpty {
+                                    Text(speechService.transcript)
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(.white)
+                                        .lineLimit(3)
+                                    if speechService.pendingSend {
+                                        Text("⌥F to paste")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(.secondary)
+                                            .padding(.leading, 4)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(Color.black.opacity(0.8))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .frame(maxWidth: 400, alignment: .trailing)
+                            .transition(.opacity.combined(with: .move(edge: .trailing)))
+                            .animation(.easeInOut(duration: 0.2), value: speechService.isListening)
+                            .animation(.easeInOut(duration: 0.2), value: speechService.pendingSend)
+                        }
+
                         TalkButton(speechService: speechService)
-                            .padding(20)
                     }
+                    .padding(16)
                 }
             } else {
                 // Show loading state while auto-starting
@@ -251,29 +301,23 @@ struct TerminalView: View {
                         return
                     }
 
-                    // Auto-start Claude with delay to avoid fork crash
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                        viewLogger.info("Starting Claude in: \(session.projectPath)")
-                        terminalController.startClaude(
-                            in: session.projectPath,
-                            sessionId: session.id,
-                            claudeSessionId: session.claudeSessionId,
-                            parkerBriefing: session.parkerBriefing,
-                            taskFolderPath: session.taskFolderPath,
-                            hasBeenLaunched: session.hasBeenLaunched
-                        )
-                        // Mark session as launched (for --continue logic on reopening)
-                        session.hasBeenLaunched = true
-                        // Wait for Claude to finish initializing before showing terminal
-                        // (avoids showing rapid scrolling startup output)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                            showTerminal = true
-                        }
-                        // After Claude starts, try to capture the session ID
-                        if session.claudeSessionId == nil {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                                captureClaudeSessionId()
-                            }
+                    // Start Claude immediately and show terminal right away for debug visibility
+                    viewLogger.info("Starting Claude in: \(session.projectPath)")
+                    terminalController.startClaude(
+                        in: session.projectPath,
+                        sessionId: session.id,
+                        claudeSessionId: session.claudeSessionId,
+                        parkerBriefing: session.parkerBriefing,
+                        taskFolderPath: session.taskFolderPath,
+                        hasBeenLaunched: session.hasBeenLaunched
+                    )
+                    session.hasBeenLaunched = true
+                    // Show terminal immediately so we can see what's happening
+                    showTerminal = true
+                    // After Claude starts, try to capture the session ID
+                    if session.claudeSessionId == nil {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                            captureClaudeSessionId()
                         }
                     }
                 }
@@ -322,58 +366,111 @@ struct TerminalView: View {
     }
 }
 
-// MARK: - Talk Button (press and hold to dictate)
+// MARK: - Talk Button (tap to toggle, hold to push-to-talk)
+//
+// Quick tap: toggle recording on/off (stop sends transcript)
+// Hold (>0.3s): push-to-talk — starts on press, stops+sends on release
+// Shortcuts: Option+D to toggle, Cmd+Shift+D to toggle, Option+S to submit
 
 struct TalkButton: View {
     @ObservedObject var speechService: SpeechService
     @State private var pulseScale: CGFloat = 1.0
+    @State private var pulseOpacity: Double = 0.0
+    @State private var pressStartTime: Date?
+    @State private var wasListeningOnPress = false
+    @State private var isPressed: Bool = false
+    @State private var isHovered: Bool = false
+
+    private let holdThreshold: TimeInterval = 0.3
 
     var body: some View {
         VStack(spacing: 8) {
-            // Transcript bubble above the button
-            if speechService.isListening && !speechService.transcript.isEmpty {
-                Text(speechService.transcript)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.75))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .frame(maxWidth: 280, alignment: .trailing)
-            }
-
             ZStack {
-                // Pulsing ring when listening
-                if speechService.isListening {
-                    Circle()
-                        .stroke(Color.red.opacity(0.4), lineWidth: 3)
-                        .frame(width: 60, height: 60)
-                        .scaleEffect(pulseScale)
-                        .opacity(2.0 - Double(pulseScale))
-                        .onAppear {
+                // Pulse ring — always in the hierarchy, driven by opacity/scale only.
+                // Keeping it present avoids the add/remove jolt that resets animation state.
+                Circle()
+                    .stroke(Color.red.opacity(0.4), lineWidth: 3)
+                    .frame(width: 60, height: 60)
+                    .scaleEffect(pulseScale)
+                    .opacity(pulseOpacity * (2.0 - Double(pulseScale)))
+                    .onChange(of: speechService.isListening) { listening in
+                        if listening {
+                            // Reset to base before animating so there is never a jump-cut
+                            pulseScale = 1.0
+                            pulseOpacity = 1.0
                             withAnimation(.easeOut(duration: 1.0).repeatForever(autoreverses: false)) {
                                 pulseScale = 1.5
                             }
+                        } else {
+                            // Stop the repeating animation by removing it, then fade out
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                pulseOpacity = 0.0
+                            }
+                            // Reset scale after fade so next start is clean
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                                pulseScale = 1.0
+                            }
                         }
-                        .onDisappear {
-                            pulseScale = 1.0
-                        }
-                }
+                    }
 
                 Circle()
                     .fill(speechService.isListening ? Color.red : Color(red: 0.25, green: 0.45, blue: 0.85))
                     .frame(width: 48, height: 48)
-                    .shadow(color: speechService.isListening ? Color.red.opacity(0.5) : Color.blue.opacity(0.4), radius: 8)
+                    .shadow(
+                        color: speechService.isListening ? Color.red.opacity(0.5) : Color.blue.opacity(0.4),
+                        radius: 8
+                    )
+                    .scaleEffect(isPressed ? 0.88 : 1.0)
+                    .animation(.interactiveSpring(response: 0.18, dampingFraction: 0.6), value: isPressed)
 
                 Image(systemName: speechService.isListening ? "waveform" : "mic.fill")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(.white)
+                    .scaleEffect(isPressed ? 0.88 : 1.0)
+                    .animation(.interactiveSpring(response: 0.18, dampingFraction: 0.6), value: isPressed)
             }
             .contentShape(Circle())
-            .onTapGesture {
-                speechService.toggleListening()
+            // onHover gives instant cursor feedback without polling
+            .onHover { hovering in
+                isHovered = hovering
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
             }
-            .help(speechService.isListening ? "Click to send" : "Click to talk")
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        guard pressStartTime == nil else { return }
+                        pressStartTime = Date()
+                        wasListeningOnPress = speechService.isListening
+                        isPressed = true
+
+                        if !speechService.isListening {
+                            speechService.startListeningIfAuthorized()
+                        }
+                    }
+                    .onEnded { _ in
+                        let holdDuration = pressStartTime.map { Date().timeIntervalSince($0) } ?? 0
+                        pressStartTime = nil
+                        isPressed = false
+
+                        if holdDuration > holdThreshold {
+                            // Long press (push-to-talk): stop and send
+                            speechService.stopListening(send: true)
+                        } else {
+                            // Quick tap
+                            if wasListeningOnPress {
+                                // Was already recording — stop and send
+                                speechService.stopListening(send: true)
+                            }
+                            // else: started on press, leave running (toggle mode)
+                        }
+                        wasListeningOnPress = false
+                    }
+            )
+            .help("Tap to toggle / Hold for push-to-talk")
         }
     }
 }
@@ -511,31 +608,11 @@ class TerminalController: ObservableObject {
 
     /// Send text to the terminal (for the Update button)
     func sendToTerminal(_ text: String) {
-        print("DEBUG: sendToTerminal called with: \(text)")
-        print("DEBUG: terminalView is \(terminalView != nil ? "not nil" : "nil")")
         terminalView?.send(txt: text)
     }
 
-    // Get terminal content for summarization
-    func getTerminalContent() -> String {
-        guard let terminal = terminalView?.getTerminal() else {
-            logger.warning("No terminal available for content extraction")
-            return ""
-        }
-
-        // Use the public API to get buffer content
-        let data = terminal.getBufferAsData()
-        let content = String(data: data, encoding: .utf8) ?? ""
-
-        // Limit to ~4000 characters for API call
-        let truncated = String(content.suffix(4000))
-        logger.info("Extracted \(truncated.count) characters from terminal (from \(content.count) total)")
-        return truncated
-    }
-
     func startClaude(in directory: String, sessionId: UUID, claudeSessionId: String? = nil, parkerBriefing: String? = nil, taskFolderPath: String? = nil, hasBeenLaunched: Bool = false) {
-        logger.info("startClaude called for directory: \(directory), sessionId: \(sessionId), claudeSessionId: \(claudeSessionId ?? "none")")
-        logger.info("DEBUG: currentSessionId=\(String(describing: self.currentSessionId)), terminalView=\(self.terminalView != nil ? "exists" : "nil")")
+        logger.info("startClaude called for directory: \(directory), sessionId: \(sessionId)")
 
         // Don't restart if already running for this session
         if currentSessionId == sessionId && terminalView != nil {
@@ -543,94 +620,67 @@ class TerminalController: ObservableObject {
             return
         }
 
-        logger.info("DEBUG: Will start new Claude session (currentSessionId mismatch or no terminalView)")
-
         currentSessionId = sessionId
-        projectPath = directory  // Store for screenshot saving
+        projectPath = directory
 
-        // Create terminal view if needed
+        // Create terminal view
         if terminalView == nil {
-            logger.info("Creating new ClaudeHubTerminalView")
             let terminal = ClaudeHubTerminalView(frame: .zero)
             terminal.projectPath = directory
             terminalView = terminal
             configureTerminal()
         }
 
-        // Find claude path
+        let workingDir = taskFolderPath ?? directory
+        let hasExistingSession = checkForExistingSession(in: workingDir)
+        let shouldContinue = taskFolderPath != nil && hasExistingSession
         let claudePath = findClaudePath()
-        logger.info("Found claude at: \(claudePath)")
 
-        // Set up environment
+        logger.info("Claude at: \(claudePath), workingDir: \(workingDir), continue=\(shouldContinue)")
+
+        // Build claude args
+        var claudeArgs = [String]()
+        if shouldContinue { claudeArgs.append("--continue") }
+        claudeArgs.append("--dangerously-skip-permissions")
+
+        // Write a minimal startup script: cd + exec claude (no .zshrc sourcing)
+        let scriptDir = FileManager.default.temporaryDirectory.appendingPathComponent("claudehub")
+        try? FileManager.default.createDirectory(at: scriptDir, withIntermediateDirectories: true)
+        let scriptPath = scriptDir.appendingPathComponent("start-\(sessionId.uuidString).sh")
+
+        var scriptLines = ["#!/bin/zsh", "cd '\(workingDir)'"]
+        if let briefing = parkerBriefing {
+            scriptLines.append("echo '\(briefing.replacingOccurrences(of: "'", with: "'\\''"))'")
+        }
+        scriptLines.append("exec '\(claudePath)' \(claudeArgs.map { "'\($0)'" }.joined(separator: " "))")
+
+        try? scriptLines.joined(separator: "\n").appending("\n").write(to: scriptPath, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
+
+        // Environment: inherit user env, ensure nvm path + terminal support
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"
         env["COLORTERM"] = "truecolor"
         env["HOME"] = NSHomeDirectory()
-        env["PATH"] = "\(NSHomeDirectory())/.npm-global/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:\(NSHomeDirectory())/.local/bin"
-        env["BASH_SILENCE_DEPRECATION_WARNING"] = "1"
-
+        let nvmBin = "\(NSHomeDirectory())/.nvm/versions/node/v22.22.0/bin"
+        if let path = env["PATH"], !path.contains(nvmBin) {
+            env["PATH"] = "\(nvmBin):\(path)"
+        }
         let envArray = env.map { "\($0.key)=\($0.value)" }
 
-        // Start zsh shell
-        logger.info("Starting zsh shell")
+        // Launch: zsh runs the script which cd's and exec's claude
+        logger.info("Launching startup script: \(scriptPath.path)")
         terminalView?.startProcess(
             executable: "/bin/zsh",
+            args: [scriptPath.path],
             environment: envArray
         )
 
-        // Send commands with optional Parker briefing
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            // If there's a Parker briefing, echo it first
-            if let briefing = parkerBriefing {
-                let escapedBriefing = briefing.replacingOccurrences(of: "'", with: "'\\''")
-                self?.terminalView?.send(txt: "echo '\(escapedBriefing)'\n")
-                self?.logger.info("Echoed Parker briefing")
-
-                // Small delay before starting Claude so briefing is visible
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                    self?.startClaudeCommand(in: directory, claudeSessionId: claudeSessionId, taskFolderPath: taskFolderPath, hasBeenLaunched: hasBeenLaunched)
-                }
-            } else {
-                self?.startClaudeCommand(in: directory, claudeSessionId: claudeSessionId, taskFolderPath: taskFolderPath, hasBeenLaunched: hasBeenLaunched)
-            }
-        }
-    }
-
-    private func startClaudeCommand(in directory: String, claudeSessionId: String?, taskFolderPath: String? = nil, hasBeenLaunched: Bool = false) {
-        // Use task folder as working directory if available (enables per-task session isolation)
-        let workingDir = taskFolderPath ?? directory
-
-        // Check for existing Claude session
-        let hasExistingSession = checkForExistingSession(in: workingDir)
-
-        // Debug logging
-        logger.info("DEBUG startClaudeCommand: hasBeenLaunched=\(hasBeenLaunched), taskFolderPath=\(taskFolderPath ?? "nil"), hasExistingSession=\(hasExistingSession)")
-        print("DEBUG: hasBeenLaunched=\(hasBeenLaunched), taskFolderPath=\(taskFolderPath ?? "nil"), hasExistingSession=\(hasExistingSession)")
-
-        // Continue if there's a task folder with an existing Claude session
-        // (the presence of a session file is the reliable indicator, not hasBeenLaunched flag)
-        let shouldContinue = taskFolderPath != nil && hasExistingSession
-
-        let claudeCommand: String
-        if shouldContinue {
-            claudeCommand = "cd '\(workingDir)' && claude --continue --dangerously-skip-permissions\n"
-            logger.info("Starting Claude in: \(workingDir) with --continue (task has been launched before)")
-            print("DEBUG: Using --continue")
-        } else {
-            claudeCommand = "cd '\(workingDir)' && claude --dangerously-skip-permissions\n"
-            logger.info("Starting Claude in: \(workingDir) (new session or first launch)")
-            print("DEBUG: Starting fresh (no --continue)")
-        }
-        terminalView?.send(txt: claudeCommand)
-
-        // Ensure terminal has focus after Claude starts (only if no text field is active)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+        // Focus terminal after Claude starts
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             if let terminal = self?.terminalView, let window = terminal.window {
-                // Don't steal focus if user is typing in a text field
                 if let responder = window.firstResponder,
-                   responder is NSTextView || responder is NSTextField {
-                    return
-                }
+                   responder is NSTextView || responder is NSTextField { return }
                 NSApplication.shared.activate(ignoringOtherApps: true)
                 window.makeKeyAndOrderFront(nil)
                 window.makeFirstResponder(terminal)
@@ -745,7 +795,12 @@ class TerminalController: ObservableObject {
         logger.info("Installed ClaudeHub color palette")
     }
 
+    /// Cached claude path -- resolved once per app session to avoid repeated shell calls
+    private static var cachedClaudePath: String?
+
     private func findClaudePath() -> String {
+        if let cached = Self.cachedClaudePath { return cached }
+
         let possiblePaths = [
             "\(NSHomeDirectory())/.npm-global/bin/claude",
             "/usr/local/bin/claude",
@@ -756,11 +811,12 @@ class TerminalController: ObservableObject {
 
         for path in possiblePaths {
             if FileManager.default.fileExists(atPath: path) {
+                Self.cachedClaudePath = path
                 return path
             }
         }
 
-        // Try to find via `which`
+        // Try to find via `which` (synchronous, but only runs once)
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/which")
         task.arguments = ["claude"]
@@ -775,11 +831,14 @@ class TerminalController: ObservableObject {
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                !path.isEmpty {
+                Self.cachedClaudePath = path
                 return path
             }
         } catch {}
 
-        return "/usr/local/bin/claude"
+        let fallback = "/usr/local/bin/claude"
+        Self.cachedClaudePath = fallback
+        return fallback
     }
 }
 
@@ -790,7 +849,7 @@ class TerminalController: ObservableObject {
 class ClaudeHubTerminalView: LocalProcessTerminalView {
     var projectPath: String?
     private let chLogger = Logger(subsystem: "com.buzzbox.claudehub", category: "ClaudeHubTerminal")
-    private var keyMonitor: Any?
+    private(set) var keyMonitor: Any?
 
     // MARK: - Setup
 
@@ -800,7 +859,6 @@ class ClaudeHubTerminalView: LocalProcessTerminalView {
         allowMouseReporting = false
         setupDragDrop()
         setupKeyMonitor()
-        setupMouseMoveMonitor()
         setupDictationListener()
     }
 
@@ -1009,18 +1067,9 @@ class ClaudeHubTerminalView: LocalProcessTerminalView {
         }
     }
 
-    // Minimal mouse monitor - just triggers redraws, no URL detection
-    private var mouseMoveMonitor: Any?
-
-    func setupMouseMoveMonitor() {
-        mouseMoveMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .mouseEntered, .mouseExited]) { [weak self] event in
-            // Just trigger a redraw when mouse moves over terminal
-            if let self = self, event.window == self.window {
-                self.needsDisplay = true
-            }
-            return event
-        }
-    }
+    // Mouse move monitor removed - it was triggering needsDisplay on every pixel of mouse
+    // movement, causing continuous full terminal redraws. SwiftTerm handles its own cursor
+    // rendering and mouse tracking internally.
 
     // MARK: - Focus Management
 
@@ -1072,9 +1121,6 @@ class ClaudeHubTerminalView: LocalProcessTerminalView {
         if let monitor = keyMonitor {
             NSEvent.removeMonitor(monitor)
         }
-        if let monitor = mouseMoveMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
         if let observer = dictationObserver {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -1094,14 +1140,11 @@ struct SwiftTermView: NSViewRepresentable {
 
         let terminalView = controller.terminalView!
 
-        // Disable mouse reporting so text selection works
-        terminalView.allowMouseReporting = false
-
-        // Configure appearance
-        terminalView.configureNativeColors()
-
-        // Configure ClaudeHub features (drag-drop, key monitor)
-        terminalView.configureClaudeHub()
+        // Configure ClaudeHub features (drag-drop, key monitor, dictation)
+        // Skip if already configured (view can be re-made when switching sessions)
+        if terminalView.keyMonitor == nil {
+            terminalView.configureClaudeHub()
+        }
 
         // Scroll to bottom and focus after a short delay (ensures content is rendered)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -1115,12 +1158,9 @@ struct SwiftTermView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        // Scroll to bottom when view is updated (e.g., switching back to this session)
-        if let terminalView = nsView as? ClaudeHubTerminalView {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                terminalView.scrollToEnd()
-            }
-        }
+        // No-op: scrolling is handled by makeNSView and the .id(session.id) modifier
+        // ensures the view is recreated when switching sessions. Scrolling on every
+        // SwiftUI update cycle caused unnecessary work.
     }
 }
 

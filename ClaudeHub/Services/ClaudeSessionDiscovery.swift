@@ -122,13 +122,16 @@ private struct ClaudeSessionEntry: Codable {
     let projectPath: String?
     let isSidechain: Bool?
 
+    /// Shared formatter -- ISO8601DateFormatter is expensive to construct
+    private static let isoFormatter = ISO8601DateFormatter()
+
     var createdDate: Date? {
         guard let created = created else { return nil }
-        return ISO8601DateFormatter().date(from: created)
+        return Self.isoFormatter.date(from: created)
     }
 
     var modifiedDate: Date? {
         guard let modified = modified else { return nil }
-        return ISO8601DateFormatter().date(from: modified)
+        return Self.isoFormatter.date(from: modified)
     }
 }

@@ -2,7 +2,17 @@ import Foundation
 
 struct AppVersion {
     static let version = "1.3.0"
-    static let buildHash = getBuildHash() ?? "unknown"
+
+    /// Lazy-loaded build hash -- deferred from app startup so `git` doesn't block launch.
+    /// Only resolved the first time the Settings view is opened.
+    static var buildHash: String {
+        if let cached = _buildHash { return cached }
+        let resolved = getBuildHash() ?? "unknown"
+        _buildHash = resolved
+        return resolved
+    }
+
+    private static var _buildHash: String?
 
     private static func getBuildHash() -> String? {
         let possibleDirs = [

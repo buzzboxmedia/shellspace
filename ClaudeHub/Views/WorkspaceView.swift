@@ -112,11 +112,8 @@ struct WorkspaceView: View {
 
             // Import task folders in background (slow - don't block UI)
             Task.detached(priority: .background) {
-                let imported = await MainActor.run {
+                _ = await MainActor.run {
                     TaskImportService.shared.importTasks(for: project, modelContext: modelContext)
-                }
-                if imported > 0 {
-                    print("Background imported \(imported) tasks")
                 }
             }
         }
@@ -227,20 +224,6 @@ struct WorkspaceView: View {
         session.hasBeenLaunched = true
         session.lastAccessedAt = Date()
         launchedExternalSessions.insert(session.id)
-    }
-
-    /// Check if there's an existing Claude session for the given directory
-    private func checkForExistingClaudeSession(in directory: String) -> Bool {
-        let resolvedPath = URL(fileURLWithPath: directory).resolvingSymlinksInPath().path
-        let claudeProjectPath = resolvedPath.replacingOccurrences(of: "/", with: "-")
-        let claudeProjectsDir = "\(NSHomeDirectory())/.claude/projects/\(claudeProjectPath)"
-
-        let fileManager = FileManager.default
-        guard fileManager.fileExists(atPath: claudeProjectsDir),
-              let files = try? fileManager.contentsOfDirectory(atPath: claudeProjectsDir) else {
-            return false
-        }
-        return files.contains { $0.hasSuffix(".jsonl") }
     }
 
     // MARK: - Terminal Activation
@@ -613,9 +596,6 @@ struct SessionSidebar: View {
                                     .font(.system(size: 16))
                                     .focused($isTaskFieldFocused)
                                     .onSubmit { createTask() }
-                                    .onChange(of: newTaskName) { _, _ in
-                                        // Trigger autocomplete update
-                                    }
 
                                 Button {
                                     createTask()
@@ -1203,11 +1183,16 @@ struct TaskRow: View {
         return Color.gray.opacity(0.4)
     }
 
-    /// Relative time string for hover display
-    var relativeTime: String {
+    /// Shared formatter to avoid creating a new one on every render
+    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: session.createdAt, relativeTo: Date())
+        return formatter
+    }()
+
+    /// Relative time string for hover display
+    var relativeTime: String {
+        Self.relativeDateFormatter.localizedString(for: session.createdAt, relativeTo: Date())
     }
 
     // MARK: - Extracted sub-views (breaks up body for Swift type-checker)

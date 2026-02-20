@@ -201,33 +201,6 @@ struct LauncherView: View {
     }
 }
 
-// Section for default projects (based on folder existence, no database needed)
-struct DefaultProjectSection: View {
-    @Environment(\.modelContext) private var modelContext
-    @EnvironmentObject var windowState: WindowState
-
-    let title: String
-    let defaults: [(name: String, path: String, icon: String)]
-    let columns: [GridItem]
-    var accentColor: Color = .secondary
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text(title)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(accentColor)
-                .tracking(1.5)
-
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                ForEach(defaults, id: \.name) { item in
-                    DefaultProjectCard(name: item.name, path: item.path, icon: item.icon)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
 // Card for default projects - creates Project on demand when clicked
 struct DefaultProjectCard: View {
     @Environment(\.modelContext) private var modelContext
@@ -353,30 +326,6 @@ struct DefaultProjectCard: View {
         withAnimation(.spring(response: 0.3)) {
             windowState.selectedProject = project
         }
-    }
-}
-
-// Reusable section component with grid layout (for database-stored projects)
-struct ProjectSection: View {
-    let title: String
-    let projects: [Project]
-    let columns: [GridItem]
-    var accentColor: Color = .secondary
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text(title)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(accentColor)
-                .tracking(1.5)
-
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                ForEach(projects) { project in
-                    ProjectCard(project: project)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

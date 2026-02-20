@@ -90,18 +90,24 @@ struct ClaudeHubApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     weak var appState: AppState?
-    private var hotkeyMonitor: Any?
+    private var localHotkeyMonitor: Any?
+    private var globalHotkeyMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Ensure app can become active
         NSApplication.shared.activate(ignoringOtherApps: true)
 
-        // Global hotkeys for voice dictation
-        hotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        // Local hotkeys (when ClaudeHub is focused)
+        localHotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard event.modifierFlags.contains(.option) else { return event }
             // Option+D: start/stop dictation
             if event.keyCode == 2 {
-                NotificationCenter.default.post(name: .toggleDictation, object: nil)
+                Self.handleDictationToggle()
+                return nil
+            }
+            // Option+F: paste transcript into terminal
+            if event.keyCode == 3 {
+                SpeechService.shared.pasteTranscript()
                 return nil
             }
             // Option+S: submit (send Enter)
@@ -112,6 +118,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return nil
             }
             return event
+        }
+
+        // Global hotkeys (when ClaudeHub is NOT focused — requires Accessibility permission)
+        globalHotkeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+            guard event.modifierFlags.contains(.option) else { return }
+            // Option+D: toggle dictation from anywhere
+            if event.keyCode == 2 {
+                Self.handleDictationToggle()
+            }
+            // Option+F: paste transcript from anywhere
+            if event.keyCode == 3 {
+                DispatchQueue.main.async {
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                }
+                SpeechService.shared.pasteTranscript()
+            }
+            // Option+S: submit from anywhere
+            if event.keyCode == 1 {
+                if SpeechService.shared.pendingSend {
+                    SpeechService.shared.confirmSend()
+                }
+            }
+        }
+    }
+
+    /// Toggle dictation and bring ClaudeHub to front if starting
+    private static func handleDictationToggle() {
+        let wasListening = SpeechService.shared.isListening
+        SpeechService.shared.toggleListening()
+
+        // If we just started listening from the background, bring ClaudeHub forward
+        if !wasListening {
+            DispatchQueue.main.async {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            }
         }
     }
 
@@ -134,18 +175,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 /// Simplified AppState - SwiftData handles persistence, this handles local-only state
-@Observable
 class AppState: ObservableObject {
     // MARK: - Local-only state (not synced to CloudKit)
 
     /// Session IDs that have been launched in Terminal.app (not synced)
-    var launchedSessions: Set<UUID> = []
+    @Published var launchedSessions: Set<UUID> = []
 
     /// Terminal controllers by session ID (for embedded SwiftTerm)
-    var terminalControllers: [UUID: TerminalController] = [:]
+    @Published var terminalControllers: [UUID: TerminalController] = [:]
 
     /// Sessions that need attention (Claude finished outputting while not viewing)
-    var sessionsNeedingAttention: Set<UUID> = []
+    @Published var sessionsNeedingAttention: Set<UUID> = []
 
     /// Per-window states keyed by window ID
     private var windowStates: [UUID: WindowState] = [:]
@@ -169,13 +209,9 @@ class AppState: ObservableObject {
     // MARK: - Terminal Controllers (for embedded SwiftTerm)
 
     func getOrCreateController(for session: Session) -> TerminalController {
-        appLogger.info("getOrCreateController for session: \(session.name) id: \(session.id)")
-        appLogger.info("DEBUG: terminalControllers count: \(self.terminalControllers.count), keys: \(self.terminalControllers.keys.map { $0.uuidString })")
         if let existing = terminalControllers[session.id] {
-            appLogger.info("DEBUG: Found existing controller for session \(session.id)")
             return existing
         }
-        appLogger.info("DEBUG: Creating NEW controller for session \(session.id)")
         let controller = TerminalController()
         terminalControllers[session.id] = controller
         return controller
