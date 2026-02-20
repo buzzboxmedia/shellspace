@@ -145,6 +145,18 @@ class SpeechService: ObservableObject {
         )
     }
 
+    func startListeningIfAuthorized() {
+        guard !isListening else { return }
+        requestAuthorization { authorized in
+            if authorized {
+                self.startListening()
+            } else {
+                self.logger.warning("Speech recognition not authorized")
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")!)
+            }
+        }
+    }
+
     func toggleListening() {
         if pendingSend {
             // Was pending send, cancel it and start fresh
@@ -171,6 +183,7 @@ struct TerminalView: View {
     @EnvironmentObject var appState: AppState
     @State private var forceRefresh = false
     @State private var showTerminal = false  // Delay showing terminal until Claude initializes
+    @StateObject private var speechService = SpeechService.shared
 
     // Get controller from AppState so it persists when switching sessions
     var terminalController: TerminalController {
@@ -191,6 +204,16 @@ struct TerminalView: View {
                         // Save log when leaving the view
                         terminalController.saveLog(for: session)
                     }
+
+                // Floating mic button - bottom right
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        TalkButton(speechService: speechService)
+                            .padding(20)
+                    }
+                }
             } else {
                 // Show loading state while auto-starting
                 VStack(spacing: 24) {
@@ -295,6 +318,65 @@ struct TerminalView: View {
             session.claudeSessionId = sessionId
         } else {
             viewLogger.warning("No session files found in Claude projects directory")
+        }
+    }
+}
+
+// MARK: - Talk Button (press and hold to dictate)
+
+struct TalkButton: View {
+    @ObservedObject var speechService: SpeechService
+    @State private var isPressed = false
+
+    var body: some View {
+        ZStack {
+            // Pulsing ring when listening
+            if speechService.isListening {
+                Circle()
+                    .stroke(Color.red.opacity(0.4), lineWidth: 3)
+                    .frame(width: 60, height: 60)
+                    .scaleEffect(isPressed ? 1.3 : 1.0)
+                    .opacity(isPressed ? 0.0 : 1.0)
+                    .animation(.easeOut(duration: 1.0).repeatForever(autoreverses: false), value: isPressed)
+            }
+
+            Circle()
+                .fill(speechService.isListening ? Color.red : Color(red: 0.25, green: 0.45, blue: 0.85))
+                .frame(width: 48, height: 48)
+                .shadow(color: speechService.isListening ? Color.red.opacity(0.5) : Color.blue.opacity(0.4), radius: 8)
+
+            Image(systemName: speechService.isListening ? "waveform" : "mic.fill")
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(.white)
+        }
+        .contentShape(Circle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    if !isPressed {
+                        isPressed = true
+                        speechService.startListeningIfAuthorized()
+                    }
+                }
+                .onEnded { _ in
+                    isPressed = false
+                    if speechService.isListening {
+                        speechService.stopListening(send: true)
+                    }
+                }
+        )
+        .help("Hold to talk")
+
+        // Show transcript overlay when listening
+        if speechService.isListening && !speechService.transcript.isEmpty {
+            Text(speechService.transcript)
+                .font(.system(size: 13))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.black.opacity(0.75))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .offset(y: -60)
         }
     }
 }
