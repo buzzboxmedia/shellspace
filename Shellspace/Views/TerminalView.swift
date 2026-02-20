@@ -712,6 +712,8 @@ class TerminalController: ObservableObject {
         var claudeArgs = [String]()
         if shouldContinue { claudeArgs.append("--continue") }
         claudeArgs.append("--dangerously-skip-permissions")
+        claudeArgs.append("--model")
+        claudeArgs.append("claude-opus-4-6")
 
         // Write a minimal startup script: cd + exec claude (no .zshrc sourcing)
         let scriptDir = FileManager.default.temporaryDirectory.appendingPathComponent("shellspace")
