@@ -812,6 +812,9 @@ struct ProjectGroupSection: View {
                         })
                         .textFieldStyle(.plain)
                         .font(.system(size: 17, weight: .medium))
+                        .onExitCommand {
+                            isEditing = false
+                        }
                     }
                 } else {
                     HStack(spacing: 8) {
@@ -1261,6 +1264,9 @@ struct TaskRow: View {
                 })
                 .textFieldStyle(.plain)
                 .font(.system(size: 15))
+                .onExitCommand {
+                    isEditing = false
+                }
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
@@ -1426,6 +1432,11 @@ struct TaskRow: View {
     }
 
     private func handleTap() {
+        if isEditing {
+            session.name = editedName
+            isEditing = false
+            return
+        }
         if session.isCompleted {
             session.isCompleted = false
             session.completedAt = nil
