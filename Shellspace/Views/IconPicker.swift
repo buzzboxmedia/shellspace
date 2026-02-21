@@ -36,6 +36,10 @@ struct ProjectIcons {
         IconEntry(name: "ladybug.fill", keywords: ["bug", "debug", "testing"]),
         IconEntry(name: "ant.fill", keywords: ["bug", "debug", "testing", "ant"]),
         IconEntry(name: "curlybraces", keywords: ["code", "json", "braces", "programming"]),
+        IconEntry(name: "cylinder.fill", keywords: ["database", "db", "storage", "data"]),
+        IconEntry(name: "tablecells.fill", keywords: ["table", "spreadsheet", "grid", "data", "cells"]),
+        IconEntry(name: "brain.fill", keywords: ["brain", "ai", "intelligence", "neural", "thinking"]),
+        IconEntry(name: "brain.head.profile", keywords: ["brain", "ai", "mind", "cognitive", "thinking"]),
 
         // Buildings / Office
         IconEntry(name: "building.fill", keywords: ["building", "office", "company"]),
@@ -84,6 +88,8 @@ struct ProjectIcons {
         IconEntry(name: "scissors", keywords: ["cut", "edit", "scissors"]),
         IconEntry(name: "wand.and.stars", keywords: ["magic", "ai", "generate", "transform"]),
         IconEntry(name: "sparkles", keywords: ["ai", "magic", "new", "sparkle", "generate"]),
+        IconEntry(name: "swatchpalette.fill", keywords: ["swatch", "color", "palette", "design", "theme"]),
+        IconEntry(name: "pencil.and.ruler.fill", keywords: ["design", "draft", "blueprint", "architect"]),
 
         // Technology / Devices
         IconEntry(name: "desktopcomputer", keywords: ["desktop", "computer", "mac", "pc"]),
@@ -122,6 +128,8 @@ struct ProjectIcons {
         IconEntry(name: "flame.fill", keywords: ["fire", "hot", "trending", "flame"]),
         IconEntry(name: "wind", keywords: ["wind", "air", "weather"]),
         IconEntry(name: "snowflake", keywords: ["snow", "cold", "winter", "frozen"]),
+        IconEntry(name: "leaf.arrow.triangle.circlepath", keywords: ["recycle", "sustainability", "eco", "green", "circular"]),
+        IconEntry(name: "arrow.3.trianglepath", keywords: ["recycle", "recycling", "circular", "loop"]),
 
         // Health
         IconEntry(name: "cross.case.fill", keywords: ["health", "medical", "first aid", "emergency"]),
@@ -158,6 +166,57 @@ struct ProjectIcons {
         IconEntry(name: "hourglass", keywords: ["time", "waiting", "loading", "timer"]),
         IconEntry(name: "fossil.shell.fill", keywords: ["shell", "shellspace", "terminal", "fossil"]),
         IconEntry(name: "ruler.fill", keywords: ["ruler", "measure", "size", "layout"]),
+
+        // Transportation
+        IconEntry(name: "tram.fill", keywords: ["tram", "streetcar", "transit", "rail"]),
+        IconEntry(name: "bus.fill", keywords: ["bus", "transit", "transport"]),
+        IconEntry(name: "bicycle", keywords: ["bicycle", "bike", "cycling"]),
+        IconEntry(name: "ferry.fill", keywords: ["ferry", "boat", "ship"]),
+        IconEntry(name: "rocket.fill", keywords: ["rocket", "launch", "space", "startup"]),
+
+        // Food / Drink
+        IconEntry(name: "birthday.cake.fill", keywords: ["birthday", "cake", "celebration", "party"]),
+        IconEntry(name: "carrot.fill", keywords: ["carrot", "vegetable", "food", "healthy"]),
+        IconEntry(name: "popcorn.fill", keywords: ["popcorn", "movie", "snack", "entertainment"]),
+        IconEntry(name: "wineglass.fill", keywords: ["wine", "drink", "alcohol", "dining"]),
+        IconEntry(name: "mug.fill", keywords: ["mug", "drink", "beer", "beverage"]),
+
+        // Sports / Fitness
+        IconEntry(name: "figure.run", keywords: ["running", "exercise", "fitness", "jog"]),
+        IconEntry(name: "figure.yoga", keywords: ["yoga", "meditation", "wellness", "stretch"]),
+        IconEntry(name: "figure.hiking", keywords: ["hiking", "outdoors", "trail", "adventure"]),
+        IconEntry(name: "dumbbell.fill", keywords: ["gym", "workout", "fitness", "strength", "weight"]),
+        IconEntry(name: "soccerball", keywords: ["soccer", "football", "sports", "ball"]),
+        IconEntry(name: "sportscourt.fill", keywords: ["sports", "court", "tennis", "game"]),
+
+        // Entertainment
+        IconEntry(name: "tv.fill", keywords: ["television", "tv", "streaming", "video"]),
+        IconEntry(name: "theatermasks.fill", keywords: ["theater", "drama", "acting", "performance"]),
+        IconEntry(name: "ticket.fill", keywords: ["ticket", "event", "concert", "admission"]),
+
+        // Animals
+        IconEntry(name: "dog.fill", keywords: ["dog", "pet", "animal", "puppy"]),
+        IconEntry(name: "cat.fill", keywords: ["cat", "pet", "animal", "kitten"]),
+        IconEntry(name: "bird.fill", keywords: ["bird", "animal", "nature", "tweet"]),
+        IconEntry(name: "fish.fill", keywords: ["fish", "aquarium", "ocean", "marine"]),
+        IconEntry(name: "pawprint.fill", keywords: ["pet", "paw", "animal", "vet"]),
+        IconEntry(name: "hare.fill", keywords: ["rabbit", "hare", "fast", "animal"]),
+        IconEntry(name: "tortoise.fill", keywords: ["turtle", "tortoise", "slow", "animal"]),
+
+        // Maps / Navigation
+        IconEntry(name: "map.fill", keywords: ["map", "navigation", "geography", "location"]),
+        IconEntry(name: "signpost.right.fill", keywords: ["signpost", "direction", "guide", "navigation"]),
+        IconEntry(name: "binoculars.fill", keywords: ["binoculars", "search", "explore", "scout"]),
+        IconEntry(name: "compass.drawing", keywords: ["compass", "direction", "navigation", "drawing"]),
+
+        // Accessibility
+        IconEntry(name: "accessibility.fill", keywords: ["accessibility", "a11y", "inclusive"]),
+        IconEntry(name: "figure.roll", keywords: ["wheelchair", "accessibility", "mobility"]),
+
+        // Home / IoT
+        IconEntry(name: "lamp.desk.fill", keywords: ["lamp", "desk", "lighting", "office"]),
+        IconEntry(name: "fan.fill", keywords: ["fan", "cooling", "hvac", "climate"]),
+        IconEntry(name: "sensor.fill", keywords: ["sensor", "iot", "smart", "detect"]),
     ]
 }
 

@@ -216,7 +216,7 @@ struct WorkspaceView: View {
             rootSession.project = project
             modelContext.insert(rootSession)
 
-            rootSession.hasBeenLaunched = true
+            launchSessionInTerminal(rootSession)
             windowState.activeSession = rootSession
         } else {
             // Restore from UserDefaults
@@ -233,7 +233,7 @@ struct WorkspaceView: View {
             }
 
             if let session = restoredSession {
-                session.hasBeenLaunched = true
+                launchSessionInTerminal(session)
                 windowState.activeSession = session
             }
         }
