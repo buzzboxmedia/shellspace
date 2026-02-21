@@ -358,7 +358,7 @@ struct TerminalView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(NSColor(calibratedRed: 0.075, green: 0.082, blue: 0.11, alpha: 1.0)))
+                .background(Color(NSColor(calibratedRed: 0.14, green: 0.14, blue: 0.155, alpha: 1.0)))
             }
         }
         .task(id: session.id) {
@@ -795,10 +795,9 @@ class TerminalController: ObservableObject {
         // Disable mouse reporting so text selection works
         terminal.allowMouseReporting = false
 
-        // Shellspace custom theme - matches the glass UI with blue accents
-        // Background: Deep blue-grey to complement the glass aesthetic
+        // Shellspace custom theme - neutral grey to match sidebar
         terminal.nativeBackgroundColor = NSColor(
-            calibratedRed: 0.075, green: 0.082, blue: 0.11, alpha: 0.98
+            calibratedRed: 0.14, green: 0.14, blue: 0.155, alpha: 1.0
         )
 
         // Foreground: Near-white for crisp input text
@@ -833,8 +832,8 @@ class TerminalController: ObservableObject {
 
         // Shellspace palette - blue-tinted with purple/cyan accents
         let palette: [SwiftTerm.Color] = [
-            // 0: Black (deep blue-grey)
-            SwiftTerm.Color(red: 18, green: 22, blue: 30),
+            // 0: Black (neutral grey matching terminal background)
+            SwiftTerm.Color(red: 36, green: 36, blue: 40),
             // 1: Red (warm coral)
             SwiftTerm.Color(red: 255, green: 107, blue: 107),
             // 2: Green (mint)

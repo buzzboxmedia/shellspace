@@ -94,7 +94,7 @@ struct WorkspaceView: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(NSColor(calibratedRed: 0.075, green: 0.082, blue: 0.11, alpha: 1.0)))
+                .background(Color(NSColor(calibratedRed: 0.14, green: 0.14, blue: 0.155, alpha: 1.0)))
             }
         }
         .background {
