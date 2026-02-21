@@ -345,7 +345,6 @@ struct RailItem: View {
             UserDefaults.standard.set(currentSession.id.uuidString, forKey: "lastSession:\(currentProject.path)")
         }
 
-        let isNewProject = windowState.selectedProject?.path != path
         // Use persisted project from database instead of creating a new one
         guard let project = persistedProject else { return }
 
@@ -355,9 +354,6 @@ struct RailItem: View {
         // so restoreLastSession sees the new project (not the old one)
         withAnimation(.spring(response: 0.3)) {
             windowState.selectedProject = project
-            if isNewProject {
-                windowState.activeSession = nil
-            }
         }
 
         // Persist last-used project

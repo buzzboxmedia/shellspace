@@ -50,7 +50,8 @@ class TaskImportService {
             // Skip already completed sessions
             if session.isCompleted { continue }
 
-            // Check sessions WITHOUT taskFolderPath first
+            // Sessions WITHOUT taskFolderPath are root/quick sessions - not filesystem-backed.
+            // Only try to link them to completed task folders; never delete them.
             if session.taskFolderPath == nil {
                 let sessionSlug = taskFolderService.slugify(session.name)
 
@@ -60,20 +61,6 @@ class TaskImportService {
                     session.taskFolderPath = completedPath.path
                     session.isCompleted = true
                     session.completedAt = Date()
-                    continue
-                }
-
-                // Check if there's NO matching active task folder
-                if !activeTaskNames.contains(sessionSlug) {
-                    // Grace period: don't delete recently created sessions (folder creation is async)
-                    let sessionAge = Date().timeIntervalSince(session.createdAt)
-                    if sessionAge < gracePeriod {
-                        logger.info("Skipping recently created session (folder may still be creating): \(session.name)")
-                        continue
-                    }
-                    // Session has no folder path and no matching task folder - orphaned
-                    logger.info("Orphaned session (no matching task folder): \(session.name)")
-                    sessionsToDelete.append(session)
                 }
                 continue
             }

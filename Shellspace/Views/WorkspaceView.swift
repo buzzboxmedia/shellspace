@@ -110,7 +110,7 @@ struct WorkspaceView: View {
             // Try to restore last active session first (fast)
             restoreLastSession()
 
-            // Import task folders in background (slow - don't block UI)
+            // Import task folders in background
             Task.detached(priority: .background) {
                 _ = await MainActor.run {
                     TaskImportService.shared.importTasks(for: project, modelContext: modelContext)
@@ -128,14 +128,9 @@ struct WorkspaceView: View {
                 // Save whenever session changes
                 UserDefaults.standard.set(newSession.id.uuidString, forKey: "lastSession:\(project.path)")
 
-                // Only launch terminal when user explicitly tapped a task
-                if windowState.userTappedSession {
-                    if !launchedExternalSessions.contains(newSession.id) {
-                        launchSessionInTerminal(newSession)
-                    } else {
-                        // Already launched - bring Terminal to front
-                        activateTerminal()
-                    }
+                // Always ensure active session is launched (covers sidebar, group tap, restore, etc.)
+                if !newSession.hasBeenLaunched {
+                    launchSessionInTerminal(newSession)
                 }
                 windowState.userTappedSession = false
             } else if !sessions.isEmpty {

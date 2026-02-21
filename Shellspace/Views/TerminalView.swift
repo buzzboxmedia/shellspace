@@ -788,7 +788,7 @@ class TerminalController: ObservableObject {
         return hasSessionFiles
     }
 
-    private func configureTerminal() {
+    func configureTerminal() {
         guard let terminal = terminalView else { return }
 
         // Configure appearance
@@ -1215,6 +1215,7 @@ struct SwiftTermView: NSViewRepresentable {
         if controller.terminalView == nil {
             let terminal = ShellspaceTerminalView(frame: .zero)
             controller.terminalView = terminal
+            controller.configureTerminal()
         }
 
         let terminalView = controller.terminalView!
