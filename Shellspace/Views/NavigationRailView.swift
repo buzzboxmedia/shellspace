@@ -220,17 +220,7 @@ struct RailItem: View {
         allProjects.first { $0.path == path }
     }
 
-    private let editableIcons = [
-        "folder.fill", "house.fill", "building.fill", "building.2.fill",
-        "hammer.fill", "wrench.and.screwdriver.fill", "paintbrush.fill", "ruler.fill",
-        "person.fill", "person.2.fill", "briefcase.fill", "doc.fill",
-        "cart.fill", "cup.and.saucer.fill", "shippingbox.fill", "gearshape.fill",
-        "star.fill", "heart.fill", "bolt.fill", "leaf.fill",
-        "globe", "cloud.fill", "server.rack", "desktopcomputer",
-        "laptopcomputer", "iphone", "gamecontroller.fill", "camera.fill",
-        "music.note", "film.fill", "book.fill", "graduationcap.fill",
-        "cross.case.fill", "building.columns.fill", "shield.fill", "eye.fill"
-    ]
+    @State private var editingIcon = ""
 
     /// Use the persisted icon from the database (single source of truth)
     private var displayIcon: String {
@@ -323,40 +313,28 @@ struct RailItem: View {
             VStack(spacing: 12) {
                 Text("Choose Icon")
                     .font(.headline)
-                LazyVGrid(columns: Array(repeating: GridItem(.fixed(36), spacing: 8), count: 6), spacing: 8) {
-                    ForEach(editableIcons, id: \.self) { iconName in
-                        Button {
-                            if let project = persistedProject {
-                                project.icon = iconName
-                            } else {
-                                // Create a persisted project so the icon is saved
-                                let category: ProjectCategory = path.contains("/Clients/") ? .client : .main
-                                let newProject = Project(name: name, path: path, icon: iconName, category: category)
-                                modelContext.insert(newProject)
-                            }
-                            // Update the selected project if it's the current one
-                            if windowState.selectedProject?.path == path {
-                                windowState.selectedProject?.icon = iconName
-                            }
-                            showIconPicker = false
-                            // Post notification to refresh nav rail
-                            NotificationCenter.default.post(name: .init("RefreshNavRail"), object: nil)
-                        } label: {
-                            Image(systemName: iconName)
-                                .font(.system(size: 18))
-                                .foregroundStyle(displayIcon == iconName ? .white : .primary)
-                                .frame(width: 32, height: 32)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(displayIcon == iconName ? Color.accentColor : Color.primary.opacity(0.1))
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+                IconPickerView(selectedIcon: $editingIcon, columns: 6, maxHeight: 240)
             }
             .padding()
-            .frame(width: 280)
+            .frame(width: 300)
+            .onAppear {
+                editingIcon = displayIcon
+            }
+            .onChange(of: editingIcon) { _, newIcon in
+                guard newIcon != displayIcon, !newIcon.isEmpty else { return }
+                if let project = persistedProject {
+                    project.icon = newIcon
+                } else {
+                    let category: ProjectCategory = path.contains("/Clients/") ? .client : .main
+                    let newProject = Project(name: name, path: path, icon: newIcon, category: category)
+                    modelContext.insert(newProject)
+                }
+                if windowState.selectedProject?.path == path {
+                    windowState.selectedProject?.icon = newIcon
+                }
+                showIconPicker = false
+                NotificationCenter.default.post(name: .init("RefreshNavRail"), object: nil)
+            }
         }
     }
 
@@ -410,81 +388,14 @@ struct AddProjectSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var projectName = ""
     @State private var projectPath = ""
-    @State private var projectIcon = "folder.fill"
-
-    // Common SF Symbols for projects
-    private let availableIcons = [
-        "folder.fill",
-        "house.fill",
-        "building.fill",
-        "building.2.fill",
-        "hammer.fill",
-        "wrench.and.screwdriver.fill",
-        "paintbrush.fill",
-        "ruler.fill",
-        "person.fill",
-        "person.2.fill",
-        "briefcase.fill",
-        "doc.fill",
-        "cart.fill",
-        "cup.and.saucer.fill",
-        "shippingbox.fill",
-        "gearshape.fill",
-        "star.fill",
-        "heart.fill",
-        "bolt.fill",
-        "leaf.fill",
-        "globe",
-        "cloud.fill",
-        "server.rack",
-        "desktopcomputer",
-        "laptopcomputer",
-        "iphone",
-        "gamecontroller.fill",
-        "camera.fill",
-        "music.note",
-        "film.fill",
-        "book.fill",
-        "graduationcap.fill",
-        "cross.case.fill",
-        "building.columns.fill",
-        "shield.fill",
-        "eye.fill"
-    ]
+    @State private var projectIcon = ProjectIcons.defaultIcon
 
     var body: some View {
         VStack(spacing: 20) {
             Text("Add Project")
                 .font(.headline)
 
-            // Icon picker
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Icon")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                LazyVGrid(columns: Array(repeating: GridItem(.fixed(36), spacing: 8), count: 8), spacing: 8) {
-                    ForEach(availableIcons, id: \.self) { icon in
-                        Button {
-                            projectIcon = icon
-                        } label: {
-                            Image(systemName: icon)
-                                .font(.system(size: 18))
-                                .foregroundStyle(projectIcon == icon ? .white : .primary)
-                                .frame(width: 32, height: 32)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(projectIcon == icon ? Color.accentColor : Color.primary.opacity(0.1))
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-
-            TextField("Project Name", text: $projectName)
-                .textFieldStyle(.roundedBorder)
-
+            // 1. Path (primary action - browse to folder)
             HStack {
                 TextField("Path", text: $projectPath)
                     .textFieldStyle(.roundedBorder)
@@ -501,6 +412,19 @@ struct AddProjectSheet: View {
                         }
                     }
                 }
+            }
+
+            // 2. Name (auto-filled from folder, editable)
+            TextField("Project Name", text: $projectName)
+                .textFieldStyle(.roundedBorder)
+
+            // 3. Icon (optional, searchable)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Icon")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                IconPickerView(selectedIcon: $projectIcon, columns: 8)
             }
 
             HStack {
