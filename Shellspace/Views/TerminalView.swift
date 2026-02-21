@@ -879,11 +879,11 @@ class TerminalController: ObservableObject {
         if let cached = Self.cachedClaudePath { return cached }
 
         let possiblePaths = [
-            "\(NSHomeDirectory())/.npm-global/bin/claude",
+            "\(NSHomeDirectory())/.local/bin/claude",
+            "\(NSHomeDirectory())/.claude/local/claude",
             "/usr/local/bin/claude",
             "/opt/homebrew/bin/claude",
-            "\(NSHomeDirectory())/.local/bin/claude",
-            "\(NSHomeDirectory())/.claude/local/claude"
+            "\(NSHomeDirectory())/.npm-global/bin/claude"
         ]
 
         for path in possiblePaths {
