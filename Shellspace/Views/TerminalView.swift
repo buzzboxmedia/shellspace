@@ -270,9 +270,9 @@ struct TerminalView: View {
         appState.getOrCreateController(for: session)
     }
 
-    // Check if terminal exists (was previously started)
+    // Check if terminal exists AND process is still alive
     var terminalAlreadyExists: Bool {
-        terminalController.terminalView != nil
+        terminalController.terminalView?.process?.running == true
     }
 
     // Show terminal immediately if it already exists, or wait for showTerminal after init
@@ -359,34 +359,37 @@ struct TerminalView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(NSColor(calibratedRed: 0.075, green: 0.082, blue: 0.11, alpha: 1.0)))
-                .onAppear {
-                    viewLogger.info("TerminalView appeared for session: \(session.name), claudeSessionId: \(session.claudeSessionId ?? "none")")
+            }
+        }
+        .task(id: session.id) {
+            // .task runs asynchronously after view insertion — unlike .onAppear which
+            // can be swallowed when a parent's onAppear triggers this view's creation
+            await MainActor.run {
+                viewLogger.info("TerminalView task fired for session: \(session.name), claudeSessionId: \(session.claudeSessionId ?? "none")")
 
-                    // If session already has a running terminal, show it immediately
-                    if terminalController.terminalView != nil {
-                        viewLogger.info("Session already running, showing terminal immediately")
-                        showTerminal = true
-                        return
-                    }
-
-                    // Start Claude immediately and show terminal right away for debug visibility
-                    viewLogger.info("Starting Claude in: \(session.projectPath)")
-                    terminalController.startClaude(
-                        in: session.projectPath,
-                        sessionId: session.id,
-                        claudeSessionId: session.claudeSessionId,
-                        parkerBriefing: session.parkerBriefing,
-                        taskFolderPath: session.taskFolderPath,
-                        hasBeenLaunched: session.hasBeenLaunched
-                    )
-                    session.hasBeenLaunched = true
-                    // Show terminal immediately so we can see what's happening
+                // If session already has a running terminal, show it immediately
+                if terminalController.terminalView?.process?.running == true {
+                    viewLogger.info("Session already running, showing terminal immediately")
                     showTerminal = true
-                    // After Claude starts, try to capture the session ID
-                    if session.claudeSessionId == nil {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-                            captureClaudeSessionId()
-                        }
+                    return
+                }
+
+                // Start Claude immediately
+                viewLogger.info("Starting Claude in: \(session.projectPath)")
+                terminalController.startClaude(
+                    in: session.projectPath,
+                    sessionId: session.id,
+                    claudeSessionId: session.claudeSessionId,
+                    parkerBriefing: session.parkerBriefing,
+                    taskFolderPath: session.taskFolderPath,
+                    hasBeenLaunched: session.hasBeenLaunched
+                )
+                session.hasBeenLaunched = true
+                showTerminal = true
+
+                if session.claudeSessionId == nil {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                        captureClaudeSessionId()
                     }
                 }
             }
@@ -684,10 +687,15 @@ class TerminalController: ObservableObject {
     func startClaude(in directory: String, sessionId: UUID, claudeSessionId: String? = nil, parkerBriefing: String? = nil, taskFolderPath: String? = nil, hasBeenLaunched: Bool = false) {
         logger.info("startClaude called for directory: \(directory), sessionId: \(sessionId)")
 
-        // Don't restart if already running for this session
+        // Don't restart if already running for this session (check process is alive)
         if currentSessionId == sessionId && terminalView != nil {
-            logger.info("Claude already running for this session, skipping")
-            return
+            if terminalView?.process?.running == true {
+                logger.info("Claude already running for this session, skipping")
+                return
+            }
+            // Process is dead - clear terminal so we can restart
+            logger.info("Previous Claude process exited, restarting")
+            terminalView = nil
         }
 
         currentSessionId = sessionId
@@ -703,7 +711,7 @@ class TerminalController: ObservableObject {
 
         let workingDir = taskFolderPath ?? directory
         let hasExistingSession = checkForExistingSession(in: workingDir)
-        let shouldContinue = taskFolderPath != nil && hasExistingSession
+        let shouldContinue = hasExistingSession
         let claudePath = findClaudePath()
 
         logger.info("Claude at: \(claudePath), workingDir: \(workingDir), continue=\(shouldContinue)")
@@ -712,8 +720,6 @@ class TerminalController: ObservableObject {
         var claudeArgs = [String]()
         if shouldContinue { claudeArgs.append("--continue") }
         claudeArgs.append("--dangerously-skip-permissions")
-        claudeArgs.append("--model")
-        claudeArgs.append("claude-opus-4-6")
 
         // Write a minimal startup script: cd + exec claude (no .zshrc sourcing)
         let scriptDir = FileManager.default.temporaryDirectory.appendingPathComponent("shellspace")

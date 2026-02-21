@@ -12,20 +12,31 @@ struct LauncherView: View {
 
     @State private var showSettings = false
     @State private var showCleanup = false
+    @State private var showAddProject = false
+    @State private var draggedProject: Project?
 
-    // Main projects from database (excluding Shellspace which goes in Development)
-    var mainProjects: [Project] {
-        allProjects.filter { $0.category == .main && $0.name != "Shellspace" }
+    // Persisted order for dashboard
+    @AppStorage("dashboardOrder") private var orderData: Data = Data()
+
+    private var savedOrder: [String] {
+        (try? JSONDecoder().decode([String].self, from: orderData)) ?? []
     }
 
-    // Client projects from database
-    var clientProjects: [Project] {
-        allProjects.filter { $0.category == .client }
+    private func saveOrder(_ paths: [String]) {
+        if let data = try? JSONEncoder().encode(paths) {
+            orderData = data
+        }
     }
 
-    // Shellspace project (shown in Development section)
-    var shellspaceProject: Project? {
-        allProjects.first { $0.name == "Shellspace" }
+    // All projects sorted by persisted order
+    var displayProjects: [Project] {
+        let order = savedOrder
+        guard !order.isEmpty else { return allProjects.map { $0 } }
+        return allProjects.sorted { a, b in
+            let indexA = order.firstIndex(of: a.path) ?? Int.max
+            let indexB = order.firstIndex(of: b.path) ?? Int.max
+            return indexA < indexB
+        }
     }
 
     // Adaptive grid that responds to window width
@@ -96,54 +107,49 @@ struct LauncherView: View {
                     }
 
                     VStack(spacing: 36) {
-                        // Main Projects Section
-                        if !mainProjects.isEmpty {
-                            VStack(alignment: .leading, spacing: 20) {
-                                Text("PROJECTS")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(.secondary)
-                                    .tracking(1.5)
+                        // All projects in a single grid
+                        VStack(alignment: .leading, spacing: 20) {
+                            HStack {
+                                Spacer()
 
+                                Button {
+                                    showAddProject = true
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 14, weight: .medium))
+                                        Text("Add")
+                                            .font(.system(size: 14, weight: .medium))
+                                    }
+                                    .foregroundStyle(.blue)
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            if displayProjects.isEmpty {
+                                Text("No projects yet. Click Add to get started.")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.tertiary)
+                                    .padding(.vertical, 20)
+                            } else {
                                 LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 16) {
-                                    ForEach(mainProjects) { project in
+                                    ForEach(displayProjects) { project in
                                         ProjectCard(project: project)
+                                            .onDrag {
+                                                draggedProject = project
+                                                return NSItemProvider(object: project.path as NSString)
+                                            }
+                                            .onDrop(of: [.text], delegate: DashboardDropDelegate(
+                                                targetProject: project,
+                                                allProjects: displayProjects,
+                                                draggedProject: $draggedProject,
+                                                saveOrder: saveOrder
+                                            ))
                                     }
                                 }
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-
-                        // Clients Section
-                        if !clientProjects.isEmpty {
-                            VStack(alignment: .leading, spacing: 20) {
-                                Text("CLIENTS")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(.secondary)
-                                    .tracking(1.5)
-
-                                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 16) {
-                                    ForEach(clientProjects) { project in
-                                        ProjectCard(project: project)
-                                    }
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-
-                        // Development Section - Shellspace
-                        if let shellspace = shellspaceProject {
-                            VStack(alignment: .leading, spacing: 20) {
-                                Text("DEVELOPMENT")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundStyle(.secondary)
-                                    .tracking(1.5)
-
-                                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 16) {
-                                    ProjectCard(project: shellspace, highlight: true)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .padding(48)
@@ -152,16 +158,56 @@ struct LauncherView: View {
         .sheet(isPresented: $showCleanup) {
             SessionCleanupView()
         }
+        .sheet(isPresented: $showAddProject) {
+            AddProjectSheet()
+        }
     }
 }
 
+// MARK: - Dashboard Drop Delegate
+
+struct DashboardDropDelegate: DropDelegate {
+    let targetProject: Project
+    let allProjects: [Project]
+    @Binding var draggedProject: Project?
+    let saveOrder: ([String]) -> Void
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedProject = nil
+        return true
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let dragged = draggedProject,
+              dragged.path != targetProject.path,
+              let fromIndex = allProjects.firstIndex(where: { $0.path == dragged.path }),
+              let toIndex = allProjects.firstIndex(where: { $0.path == targetProject.path }) else {
+            return
+        }
+
+        var paths = allProjects.map { $0.path }
+        let movedPath = paths.remove(at: fromIndex)
+        paths.insert(movedPath, at: toIndex)
+
+        withAnimation(.easeInOut(duration: 0.2)) {
+            saveOrder(paths)
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+}
+
+// MARK: - Project Card
+
 struct ProjectCard: View {
+    @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var windowState: WindowState
-    @Query private var allSessions: [Session]
     let project: Project
-    var highlight: Bool = false  // Blue accent for special projects like Shellspace
     @State private var isHovered = false
+    @State private var showDeleteConfirm = false
 
     /// Count of sessions with active terminal controllers (running in background)
     var runningCount: Int {
@@ -169,89 +215,73 @@ struct ProjectCard: View {
     }
 
     var body: some View {
-        Button {
+        VStack(spacing: 14) {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: project.icon)
+                    .font(.system(size: 40))
+                    .foregroundStyle(.primary)
+
+                // Show blue dot for running sessions
+                if runningCount > 0 {
+                    Circle()
+                        .fill(Color.blue.opacity(0.7))
+                        .frame(width: 10, height: 10)
+                        .offset(x: 5, y: -5)
+                }
+            }
+
+            Text(project.name)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.primary)
+        }
+        .frame(width: 120, height: 120)
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .shadow(color: .black.opacity(isHovered ? 0.2 : 0.1), radius: isHovered ? 16 : 10)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(.white.opacity(0.2), lineWidth: 1)
+        }
+        .overlay(alignment: .topTrailing) {
+            // Delete button on hover
+            if isHovered {
+                Button {
+                    showDeleteConfirm = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(.secondary)
+                        .background(Circle().fill(.ultraThinMaterial).frame(width: 20, height: 20))
+                }
+                .buttonStyle(.plain)
+                .offset(x: -4, y: 4)
+                .transition(.opacity)
+            }
+        }
+        .scaleEffect(isHovered ? 1.05 : 1.0)
+        .contentShape(Rectangle())
+        .onTapGesture {
             withAnimation(.spring(response: 0.3)) {
                 windowState.selectedProject = project
             }
-        } label: {
-            VStack(spacing: 14) {
-                ZStack(alignment: .topTrailing) {
-                    Image(systemName: project.icon)
-                        .font(.system(size: 40))
-                        .foregroundStyle(highlight ? .blue : .primary)
-
-                    // Show blue dot for running sessions
-                    if runningCount > 0 {
-                        Circle()
-                            .fill(Color.blue.opacity(0.7))
-                            .frame(width: 10, height: 10)
-                            .offset(x: 5, y: -5)
-                    }
-                }
-
-                Text(project.name)
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(.primary)
-            }
-            .frame(width: 120, height: 120)
-            .background {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .shadow(color: .black.opacity(isHovered ? 0.2 : 0.1), radius: isHovered ? 16 : 10)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(highlight ? Color.blue.opacity(0.3) : .white.opacity(0.2), lineWidth: 1)
-            }
-            .scaleEffect(isHovered ? 1.05 : 1.0)
         }
-        .buttonStyle(.plain)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.2)) {
                 isHovered = hovering
             }
         }
-        .onDrop(of: [.text], isTargeted: nil) { providers in
-            handleTaskDrop(providers: providers)
-            return true
-        }
-    }
-
-    private func handleTaskDrop(providers: [NSItemProvider]) {
-        for provider in providers {
-            provider.loadItem(forTypeIdentifier: UTType.text.identifier, options: nil) { item, _ in
-                guard let data = item as? Data,
-                      let dropped = String(data: data, encoding: .utf8) else { return }
-
-                if dropped.hasPrefix("group:") { return }
-                guard let sessionId = UUID(uuidString: dropped) else { return }
-                guard let session = allSessions.first(where: { $0.id == sessionId }) else { return }
-                if session.projectPath == project.path { return }
-
-                Task { @MainActor in
-                    if let sourcePath = session.taskFolderPath {
-                        let sourceURL = URL(fileURLWithPath: sourcePath)
-                        do {
-                            if let newPath = try TaskFolderService.shared.moveTaskToProject(
-                                from: sourceURL,
-                                toProjectPath: project.path,
-                                toProjectName: project.name
-                            ) {
-                                session.projectPath = project.path
-                                session.taskFolderPath = newPath.path
-                                session.taskGroup = nil
-                            }
-                        } catch {
-                            print("Failed to move task: \(error)")
-                        }
-                    } else {
-                        session.projectPath = project.path
-                        session.taskGroup = nil
-                    }
-                }
+        .alert("Remove \(project.name)?", isPresented: $showDeleteConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove", role: .destructive) {
+                modelContext.delete(project)
             }
+        } message: {
+            Text("This removes it from Shellspace. Your files on disk are not affected.")
         }
     }
+
 }
 
 // NSVisualEffectView wrapper for glass effect

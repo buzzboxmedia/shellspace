@@ -201,17 +201,40 @@ struct WorkspaceView: View {
         } ?? false
 
         // Only restore if we don't have a valid session for this project
-        if !currentSessionBelongsToProject && !sessions.isEmpty {
-            // Restore from UserDefaults (more reliable than project.lastActiveSessionId for non-persisted projects)
+        guard !currentSessionBelongsToProject else { return }
+
+        // Only consider visible (non-hidden, non-completed) sessions for restore
+        let visibleSessions = sessions.filter { !$0.isHidden && !$0.isCompleted }
+
+        if visibleSessions.isEmpty {
+            // No visible sessions — create a root session for this project
+            let rootSession = Session(
+                name: project.name,
+                projectPath: project.path,
+                userNamed: false
+            )
+            rootSession.project = project
+            modelContext.insert(rootSession)
+
+            rootSession.hasBeenLaunched = true
+            windowState.activeSession = rootSession
+        } else {
+            // Restore from UserDefaults
             let lastId = UserDefaults.standard.string(forKey: "lastSession:\(project.path)")
                 .flatMap { UUID(uuidString: $0) }
 
+            let restoredSession: Session?
             if let lastId = lastId,
-               let lastSession = sessions.first(where: { $0.id == lastId }) {
-                windowState.activeSession = lastSession
+               let lastSession = visibleSessions.first(where: { $0.id == lastId }) {
+                restoredSession = lastSession
             } else {
-                // Fall back to most recent session
-                windowState.activeSession = sessions.first
+                // Fall back to most recent visible session
+                restoredSession = visibleSessions.first
+            }
+
+            if let session = restoredSession {
+                session.hasBeenLaunched = true
+                windowState.activeSession = session
             }
         }
     }

@@ -348,6 +348,7 @@ struct WindowContainer: View {
 struct WindowContent: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var windowState: WindowState
+    @Query private var allProjects: [Project]
 
     var body: some View {
         HStack(spacing: 0) {
@@ -355,8 +356,9 @@ struct WindowContent: View {
 
             if let project = windowState.selectedProject {
                 WorkspaceView(project: project)
+                    .id(project.path)
             } else {
-                EmptyProjectView()
+                LauncherView()
             }
         }
         .onAppear {
@@ -372,15 +374,10 @@ struct WindowContent: View {
         // Only restore if folder exists
         guard FileManager.default.fileExists(atPath: path) else { return }
 
-        // Try to find persisted project in database first
-        // (This view doesn't have direct @Query access, so we create a temporary project
-        // and let the navigation find the real one if it exists)
-        let url = URL(fileURLWithPath: path)
-        let name = url.lastPathComponent
-        let category: ProjectCategory = path.contains("/Clients/") ? .client : .main
-
-        let project = Project(name: name, path: path, icon: "folder.fill", category: category)
-        windowState.selectedProject = project
+        // Look up the persisted project from the database
+        if let project = allProjects.first(where: { $0.path == path }) {
+            windowState.selectedProject = project
+        }
     }
 }
 

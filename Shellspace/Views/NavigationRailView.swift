@@ -13,40 +13,18 @@ struct NavigationRailView: View {
     @State private var showAddProject = false
     @State private var draggedPath: String?
 
-    // Persisted order for each section
-    @AppStorage("railOrderProjects") private var projectsOrderData: Data = Data()
-    @AppStorage("railOrderClients") private var clientsOrderData: Data = Data()
+    // Persisted order for rail
+    @AppStorage("railOrder") private var orderData: Data = Data()
 
-    // Main projects from database (excluding Shellspace which goes in Development)
-    private var mainProjects: [(name: String, path: String, icon: String)] {
-        let items = allProjects
-            .filter { $0.category == .main && $0.name != "Shellspace" }
-            .map { ($0.name, $0.path, $0.icon) }
-        return sortItems(items, using: projectsOrder)
-    }
-
-    // Client projects from database
-    private var clientProjects: [(name: String, path: String, icon: String)] {
-        let items = allProjects
-            .filter { $0.category == .client }
-            .map { ($0.name, $0.path, $0.icon) }
-        return sortItems(items, using: clientsOrder)
-    }
-
-    // Shellspace project (shown in Development section)
-    private var developmentProjects: [(name: String, path: String, icon: String)] {
-        allProjects
-            .filter { $0.name == "Shellspace" }
-            .map { ($0.name, $0.path, $0.icon) }
+    // All projects sorted by persisted order
+    private var displayProjects: [(name: String, path: String, icon: String)] {
+        let items = allProjects.map { ($0.name, $0.path, $0.icon) }
+        return sortItems(items, using: savedOrder)
     }
 
     // Decode persisted order
-    private var projectsOrder: [String] {
-        (try? JSONDecoder().decode([String].self, from: projectsOrderData)) ?? []
-    }
-
-    private var clientsOrder: [String] {
-        (try? JSONDecoder().decode([String].self, from: clientsOrderData)) ?? []
+    private var savedOrder: [String] {
+        (try? JSONDecoder().decode([String].self, from: orderData)) ?? []
     }
 
     // Sort items by persisted order
@@ -62,43 +40,40 @@ struct NavigationRailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Shellspace icon at top - goes to dashboard/launcher
+            Button {
+                withAnimation(.spring(response: 0.3)) {
+                    windowState.selectedProject = nil
+                    windowState.activeSession = nil
+                }
+            } label: {
+                Image(systemName: "fossil.shell.fill")
+                    .font(.system(size: 24, weight: .medium))
+                    .foregroundStyle(windowState.selectedProject == nil ? .white : .secondary)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(windowState.selectedProject == nil ? Color.accentColor : .clear)
+                    )
+            }
+            .buttonStyle(.plain)
+            .help("Home")
+            .padding(.vertical, 12)
+
+            RailDivider()
+
             ScrollView {
                 VStack(spacing: 0) {
-                    // Projects section
-                    if !mainProjects.isEmpty {
+                    if !displayProjects.isEmpty {
                         ReorderableRailSection(
-                            items: mainProjects,
+                            items: displayProjects,
                             sessions: allSessions,
                             draggedPath: $draggedPath,
                             onReorder: { newOrder in
                                 if let data = try? JSONEncoder().encode(newOrder) {
-                                    projectsOrderData = data
+                                    orderData = data
                                 }
                             }
-                        )
-                        RailDivider()
-                    }
-
-                    // Clients section
-                    if !clientProjects.isEmpty {
-                        ReorderableRailSection(
-                            items: clientProjects,
-                            sessions: allSessions,
-                            draggedPath: $draggedPath,
-                            onReorder: { newOrder in
-                                if let data = try? JSONEncoder().encode(newOrder) {
-                                    clientsOrderData = data
-                                }
-                            }
-                        )
-                        RailDivider()
-                    }
-
-                    // Development section (not reorderable)
-                    if !developmentProjects.isEmpty {
-                        RailSection(
-                            items: developmentProjects,
-                            sessions: allSessions
                         )
                     }
                 }
@@ -257,6 +232,11 @@ struct RailItem: View {
         "cross.case.fill", "building.columns.fill", "shield.fill", "eye.fill"
     ]
 
+    /// Use the persisted icon from the database (single source of truth)
+    private var displayIcon: String {
+        persistedProject?.icon ?? icon
+    }
+
     private var isSelected: Bool {
         windowState.selectedProject?.path == path
     }
@@ -277,58 +257,57 @@ struct RailItem: View {
     }
 
     var body: some View {
-        Button {
-            selectProject()
-        } label: {
-            ZStack(alignment: .topTrailing) {
-                Image(systemName: icon)
-                    .font(.system(size: 22))
-                    .foregroundStyle(hasActiveSessions ? .primary : .secondary)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(isSelected ? Color.accentColor.opacity(0.2) : (isHovered ? Color.primary.opacity(0.1) : .clear))
-                    )
-                    // Glow effect when there are active sessions
-                    .shadow(
-                        color: hasActiveSessions ? Color.blue.opacity(0.5) : .clear,
-                        radius: hasActiveSessions ? 6 : 0
-                    )
-                    .overlay(
-                        // Selection indicator bar on left
-                        HStack {
-                            if isSelected {
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(Color.accentColor)
-                                    .frame(width: 3, height: 20)
-                                    .offset(x: -18)
-                            }
-                            Spacer()
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: displayIcon)
+                .font(.system(size: 22))
+                .foregroundStyle(hasActiveSessions ? .primary : .secondary)
+                .frame(width: 36, height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(isSelected ? Color.accentColor.opacity(0.2) : (isHovered ? Color.primary.opacity(0.1) : .clear))
+                )
+                // Glow effect when there are active sessions
+                .shadow(
+                    color: hasActiveSessions ? Color.blue.opacity(0.5) : .clear,
+                    radius: hasActiveSessions ? 6 : 0
+                )
+                .overlay(
+                    // Selection indicator bar on left
+                    HStack {
+                        if isSelected {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.accentColor)
+                                .frame(width: 3, height: 20)
+                                .offset(x: -18)
                         }
-                    )
+                        Spacer()
+                    }
+                )
 
-                // Badge overlay - pulsing blue dot for attention, static dot for running
-                if needsAttention {
-                    Circle()
-                        .fill(Color.blue)
-                        .frame(width: 10, height: 10)
-                        .shadow(color: Color.blue.opacity(0.8), radius: isPulsing ? 6 : 2)
-                        .scaleEffect(isPulsing ? 1.2 : 1.0)
-                        .offset(x: 2, y: -2)
-                        .onAppear {
-                            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                                isPulsing = true
-                            }
+            // Badge overlay - pulsing blue dot for attention, static dot for running
+            if needsAttention {
+                Circle()
+                    .fill(Color.blue)
+                    .frame(width: 10, height: 10)
+                    .shadow(color: Color.blue.opacity(0.8), radius: isPulsing ? 6 : 2)
+                    .scaleEffect(isPulsing ? 1.2 : 1.0)
+                    .offset(x: 2, y: -2)
+                    .onAppear {
+                        withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                            isPulsing = true
                         }
-                } else if runningCount > 0 {
-                    Circle()
-                        .fill(Color.blue.opacity(0.7))
-                        .frame(width: 8, height: 8)
-                        .offset(x: 2, y: -2)
-                }
+                    }
+            } else if runningCount > 0 {
+                Circle()
+                    .fill(Color.blue.opacity(0.7))
+                    .frame(width: 8, height: 8)
+                    .offset(x: 2, y: -2)
             }
         }
-        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectProject()
+        }
         .help(name)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
@@ -365,11 +344,11 @@ struct RailItem: View {
                         } label: {
                             Image(systemName: iconName)
                                 .font(.system(size: 18))
-                                .foregroundStyle(icon == iconName ? .white : .primary)
+                                .foregroundStyle(displayIcon == iconName ? .white : .primary)
                                 .frame(width: 32, height: 32)
                                 .background(
                                     RoundedRectangle(cornerRadius: 6)
-                                        .fill(icon == iconName ? Color.accentColor : Color.primary.opacity(0.1))
+                                        .fill(displayIcon == iconName ? Color.accentColor : Color.primary.opacity(0.1))
                                 )
                         }
                         .buttonStyle(.plain)
@@ -389,8 +368,8 @@ struct RailItem: View {
         }
 
         let isNewProject = windowState.selectedProject?.path != path
-        let category: ProjectCategory = path.contains("/Clients/") ? .client : .main
-        let project = Project(name: name, path: path, icon: icon, category: category)
+        // Use persisted project from database instead of creating a new one
+        guard let project = persistedProject else { return }
 
         // Shellspace uses embedded terminal like everything else
 
@@ -432,7 +411,6 @@ struct AddProjectSheet: View {
     @State private var projectName = ""
     @State private var projectPath = ""
     @State private var projectIcon = "folder.fill"
-    @State private var selectedCategory: ProjectCategory = .main
 
     // Common SF Symbols for projects
     private let availableIcons = [
@@ -525,13 +503,6 @@ struct AddProjectSheet: View {
                 }
             }
 
-            // Category picker
-            Picker("Category", selection: $selectedCategory) {
-                Text("Project").tag(ProjectCategory.main)
-                Text("Client").tag(ProjectCategory.client)
-            }
-            .pickerStyle(.segmented)
-
             HStack {
                 Spacer()
                 Button("Cancel") {
@@ -554,8 +525,7 @@ struct AddProjectSheet: View {
         let project = Project(
             name: projectName,
             path: projectPath,
-            icon: projectIcon,
-            category: selectedCategory
+            icon: projectIcon
         )
         modelContext.insert(project)
         dismiss()

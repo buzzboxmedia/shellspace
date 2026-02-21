@@ -207,7 +207,10 @@ extension Session {
         self.taskFolderPath = metadata.taskFolderPath?.canonicalPath
         self.isCompleted = metadata.isCompleted
         self.completedAt = metadata.completedAt
-        self.isHidden = metadata.isHidden
+        // Don't overwrite isHidden from remote - local hide is a user intent that should stick
+        if !self.isHidden {
+            self.isHidden = metadata.isHidden
+        }
         self.isWaitingForInput = metadata.isWaitingForInput
         self.hasBeenLaunched = metadata.hasBeenLaunched
 
