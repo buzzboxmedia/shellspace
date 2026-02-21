@@ -740,6 +740,8 @@ class TerminalController: ObservableObject {
         env["TERM"] = "xterm-256color"
         env["COLORTERM"] = "truecolor"
         env["HOME"] = NSHomeDirectory()
+        // Remove CLAUDECODE so Claude doesn't think it's a nested session
+        env.removeValue(forKey: "CLAUDECODE")
         let nvmBin = "\(NSHomeDirectory())/.nvm/versions/node/v22.22.0/bin"
         if let path = env["PATH"], !path.contains(nvmBin) {
             env["PATH"] = "\(nvmBin):\(path)"
