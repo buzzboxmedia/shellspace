@@ -801,9 +801,9 @@ class TerminalController: ObservableObject {
             calibratedRed: 0.075, green: 0.082, blue: 0.11, alpha: 0.98
         )
 
-        // Foreground: Bright blue-white for easy reading
+        // Foreground: Near-white for crisp input text
         terminal.nativeForegroundColor = NSColor(
-            calibratedRed: 0.95, green: 0.96, blue: 1.0, alpha: 1.0
+            calibratedRed: 1.0, green: 1.0, blue: 1.0, alpha: 1.0
         )
 
         // Selection: Matches the app's blue accent
@@ -847,8 +847,8 @@ class TerminalController: ObservableObject {
             SwiftTerm.Color(red: 199, green: 146, blue: 234),
             // 6: Cyan (bright teal)
             SwiftTerm.Color(red: 102, green: 217, blue: 239),
-            // 7: White (bright for readable input text)
-            SwiftTerm.Color(red: 235, green: 240, blue: 250),
+            // 7: White (pure white for crisp input text)
+            SwiftTerm.Color(red: 255, green: 255, blue: 255),
 
             // 8-15: Bright variants
             // 8: Bright Black (medium grey)
@@ -866,7 +866,7 @@ class TerminalController: ObservableObject {
             // 14: Bright Cyan
             SwiftTerm.Color(red: 150, green: 232, blue: 248),
             // 15: Bright White
-            SwiftTerm.Color(red: 230, green: 235, blue: 245),
+            SwiftTerm.Color(red: 255, green: 255, blue: 255),
         ]
 
         terminalCore.installPalette(colors: palette)
