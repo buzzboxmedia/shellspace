@@ -350,10 +350,13 @@ struct RailItem: View {
         // Use persisted project from database instead of creating a new one
         guard let project = persistedProject else { return }
 
-        // Shellspace uses embedded terminal like everything else
+        // If already on this project with an active session, don't disrupt it
+        if windowState.selectedProject?.path == project.path,
+           windowState.activeSession != nil {
+            return
+        }
 
-        // Set project and clear session in the same transaction
-        // so restoreLastSession sees the new project (not the old one)
+        // Clear session and set project so WorkspaceView restores the right session
         withAnimation(.spring(response: 0.3)) {
             windowState.activeSession = nil
             windowState.selectedProject = project

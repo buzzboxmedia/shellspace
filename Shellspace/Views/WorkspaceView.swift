@@ -144,6 +144,13 @@ struct WorkspaceView: View {
                 restoreLastSession()
             }
         }
+        // Safety net: when selectedProject changes (e.g. sidebar click during animation),
+        // onAppear may not fire if the view never fully disappeared. This catches that case.
+        .onChange(of: windowState.selectedProject?.path) { _, newPath in
+            if newPath == project.path && windowState.activeSession == nil {
+                restoreLastSession()
+            }
+        }
         .onDisappear {
             // Remember last active session for next time (both on Project and in UserDefaults)
             project.lastActiveSessionId = windowState.activeSession?.id
