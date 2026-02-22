@@ -380,18 +380,24 @@ struct RailDivider: View {
     }
 }
 
-// MARK: - Add Project Sheet
+// MARK: - Add/Edit Project Sheet
 
-struct AddProjectSheet: View {
+struct ProjectSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+
+    /// Pass an existing project to edit, or nil to add a new one
+    var editing: Project?
+
     @State private var projectName = ""
     @State private var projectPath = ""
     @State private var projectIcon = ProjectIcons.defaultIcon
 
+    private var isEditing: Bool { editing != nil }
+
     var body: some View {
         VStack(spacing: 20) {
-            Text("Add Project")
+            Text(isEditing ? "Edit Project" : "Add Project")
                 .font(.headline)
 
             // 1. Path (primary action - browse to folder)
@@ -404,6 +410,9 @@ struct AddProjectSheet: View {
                     panel.canChooseDirectories = true
                     panel.canChooseFiles = false
                     panel.allowsMultipleSelection = false
+                    if !projectPath.isEmpty {
+                        panel.directoryURL = URL(fileURLWithPath: projectPath)
+                    }
                     if panel.runModal() == .OK, let url = panel.url {
                         projectPath = url.path
                         if projectName.isEmpty {
@@ -433,8 +442,8 @@ struct AddProjectSheet: View {
                 }
                 .keyboardShortcut(.cancelAction)
 
-                Button("Add") {
-                    addProject()
+                Button(isEditing ? "Save" : "Add") {
+                    saveProject()
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(projectName.isEmpty || projectPath.isEmpty)
@@ -442,16 +451,36 @@ struct AddProjectSheet: View {
         }
         .padding()
         .frame(width: 400)
+        .onAppear {
+            if let project = editing {
+                projectName = project.name
+                projectPath = project.path
+                projectIcon = project.icon
+            }
+        }
     }
 
-    private func addProject() {
-        let project = Project(
-            name: projectName,
-            path: projectPath,
-            icon: projectIcon
-        )
-        modelContext.insert(project)
+    private func saveProject() {
+        if let project = editing {
+            project.name = projectName
+            project.path = projectPath
+            project.icon = projectIcon
+        } else {
+            let project = Project(
+                name: projectName,
+                path: projectPath,
+                icon: projectIcon
+            )
+            modelContext.insert(project)
+        }
         ProjectSyncService.shared.exportProjects(from: modelContext)
         dismiss()
+    }
+}
+
+/// Backward-compatible wrapper for add-only usage
+struct AddProjectSheet: View {
+    var body: some View {
+        ProjectSheet()
     }
 }

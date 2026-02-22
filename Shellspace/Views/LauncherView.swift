@@ -209,10 +209,7 @@ struct ProjectCard: View {
     let project: Project
     @State private var isHovered = false
     @State private var showDeleteConfirm = false
-    @State private var showRename = false
-    @State private var showIconPicker = false
-    @State private var editingName = ""
-    @State private var editingIcon = ""
+    @State private var showEditProject = false
 
     /// Count of sessions with active terminal controllers (running in background)
     var runningCount: Int {
@@ -284,17 +281,11 @@ struct ProjectCard: View {
                 }
             }
 
+            Button("Edit Project...") {
+                showEditProject = true
+            }
+
             Divider()
-
-            Button("Rename...") {
-                editingName = project.name
-                showRename = true
-            }
-
-            Button("Change Icon...") {
-                editingIcon = project.icon
-                showIconPicker = true
-            }
 
             Button("Show in Finder") {
                 NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: project.path)
@@ -311,50 +302,8 @@ struct ProjectCard: View {
                 showDeleteConfirm = true
             }
         }
-        .popover(isPresented: $showRename) {
-            VStack(spacing: 12) {
-                Text("Rename Project")
-                    .font(.headline)
-                TextField("Name", text: $editingName)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 200)
-                    .onSubmit {
-                        if !editingName.isEmpty {
-                            project.name = editingName
-                            ProjectSyncService.shared.exportProjects(from: modelContext)
-                        }
-                        showRename = false
-                    }
-                HStack {
-                    Button("Cancel") { showRename = false }
-                        .keyboardShortcut(.cancelAction)
-                    Button("Save") {
-                        if !editingName.isEmpty {
-                            project.name = editingName
-                            ProjectSyncService.shared.exportProjects(from: modelContext)
-                        }
-                        showRename = false
-                    }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(editingName.isEmpty)
-                }
-            }
-            .padding()
-        }
-        .popover(isPresented: $showIconPicker) {
-            VStack(spacing: 12) {
-                Text("Choose Icon")
-                    .font(.headline)
-                IconPickerView(selectedIcon: $editingIcon, columns: 6, maxHeight: 240)
-            }
-            .padding()
-            .frame(width: 300)
-            .onChange(of: editingIcon) { _, newIcon in
-                guard !newIcon.isEmpty, newIcon != project.icon else { return }
-                project.icon = newIcon
-                showIconPicker = false
-                ProjectSyncService.shared.exportProjects(from: modelContext)
-            }
+        .sheet(isPresented: $showEditProject) {
+            ProjectSheet(editing: project)
         }
         .alert("Remove \(project.name)?", isPresented: $showDeleteConfirm) {
             Button("Cancel", role: .cancel) {}
