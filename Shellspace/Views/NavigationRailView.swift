@@ -73,6 +73,7 @@ struct NavigationRailView: View {
                                 if let data = try? JSONEncoder().encode(newOrder) {
                                     orderData = data
                                 }
+                                ProjectSyncService.shared.exportProjects(from: modelContext)
                             }
                         )
                     }
@@ -334,6 +335,7 @@ struct RailItem: View {
                 }
                 showIconPicker = false
                 NotificationCenter.default.post(name: .init("RefreshNavRail"), object: nil)
+                ProjectSyncService.shared.exportProjects(from: modelContext)
             }
         }
     }
@@ -353,6 +355,7 @@ struct RailItem: View {
         // Set project and clear session in the same transaction
         // so restoreLastSession sees the new project (not the old one)
         withAnimation(.spring(response: 0.3)) {
+            windowState.activeSession = nil
             windowState.selectedProject = project
         }
 
@@ -448,6 +451,7 @@ struct AddProjectSheet: View {
             icon: projectIcon
         )
         modelContext.insert(project)
+        ProjectSyncService.shared.exportProjects(from: modelContext)
         dismiss()
     }
 }

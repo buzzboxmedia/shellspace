@@ -164,9 +164,7 @@ struct SettingsView: View {
 
                 let project = Project(name: name, path: path, icon: icon, category: category)
                 modelContext.insert(project)
-
-                // Export to Dropbox for sync
-                SessionSyncService.shared.exportProject(project)
+                ProjectSyncService.shared.exportProjects(from: modelContext)
             }
         }
     }
@@ -209,6 +207,7 @@ struct ProjectRow: View {
 
                 Button {
                     modelContext.delete(project)
+                    ProjectSyncService.shared.exportProjects(from: modelContext)
                 } label: {
                     Image(systemName: "minus.circle.fill")
                         .font(.system(size: 16))
@@ -235,6 +234,7 @@ struct ProjectRow: View {
         panel.begin { response in
             if response == .OK, let url = panel.url {
                 project.path = url.path
+                ProjectSyncService.shared.exportProjects(from: modelContext)
             }
         }
     }

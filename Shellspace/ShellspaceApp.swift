@@ -79,11 +79,17 @@ struct ShellspaceApp: App {
                         UserDefaults.standard.set(true, forKey: "deduplicatedProjectsByPath")
                     }
 
+                    // Import projects from Dropbox (before session sync)
+                    ProjectSyncService.shared.importProjects(into: sharedModelContainer.mainContext)
+
                     // Enable session sync
                     SessionSyncService.shared.isEnabled = true
 
                     // Import sessions from Dropbox (if sync is enabled)
                     SessionSyncService.shared.importAllSessions(modelContext: sharedModelContainer.mainContext)
+
+                    // Export projects (ensures JSON is up to date after migrations)
+                    ProjectSyncService.shared.exportProjects(from: sharedModelContainer.mainContext)
                 }
         }
         .modelContainer(sharedModelContainer)
