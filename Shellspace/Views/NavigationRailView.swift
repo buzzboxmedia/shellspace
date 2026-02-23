@@ -353,7 +353,6 @@ struct RailItem: View {
             UserDefaults.standard.set(currentSession.id.uuidString, forKey: "lastSession:\(currentProject.path)")
         }
 
-        // Use persisted project from database instead of creating a new one
         guard let project = persistedProject else { return }
 
         // If already on this project with an active session, don't disrupt it
@@ -362,29 +361,15 @@ struct RailItem: View {
             return
         }
 
-        // Find the right session to restore
-        let visibleSessions = sessions.filter { !$0.isHidden && !$0.isCompleted }
-        let lastId = UserDefaults.standard.string(forKey: "lastSession:\(project.path)")
-            .flatMap { UUID(uuidString: $0) }
-        let targetSession: Session? = {
-            if let lastId, let s = visibleSessions.first(where: { $0.id == lastId }) { return s }
-            return visibleSessions.first
-        }()
-
+        // Clear active session first so WorkspaceView gets a clean transition
+        // (matches exactly what the dashboard does — only set selectedProject)
         withAnimation(.spring(response: 0.3)) {
+            windowState.activeSession = nil
             windowState.selectedProject = project
-            // Set session if found — WorkspaceView will also try via restoreLastSession()
-            if let session = targetSession {
-                session.hasBeenLaunched = true
-                session.lastAccessedAt = Date()
-                windowState.activeSession = session
-            }
         }
 
-        // Persist last-used project
         UserDefaults.standard.set(path, forKey: "lastSelectedProjectPath")
 
-        // Clear attention for all sessions in this project when viewing it
         for session in sessions {
             appState.clearSessionAttention(session.id)
         }
