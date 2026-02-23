@@ -80,6 +80,7 @@ struct WorkspaceView: View {
                 .frame(minWidth: 280, idealWidth: 320, maxWidth: 400)
 
             // Terminal pane - shows embedded SwiftTerm when a session is active
+            let _ = print("[WorkspaceView] body: project=\(project.name), activeSession=\(windowState.activeSession?.name ?? "NIL"), hasBeenLaunched=\(windowState.activeSession?.hasBeenLaunched == true)")
             if let activeSession = windowState.activeSession, activeSession.hasBeenLaunched {
                 TerminalView(session: activeSession)
                     .id(activeSession.id)  // Force new view identity per session — prevents @State leaking across session switches
@@ -103,6 +104,10 @@ struct WorkspaceView: View {
                 .ignoresSafeArea()
         }
         .onAppear {
+            print("[WorkspaceView] onAppear for project: \(project.name) (\(project.path))")
+            print("[WorkspaceView]   sessions.count: \(sessions.count)")
+            print("[WorkspaceView]   windowState.activeSession: \(windowState.activeSession?.name ?? "NIL")")
+
             workspaceOpenedAt = Date()
 
             // Restore launched sessions state from persisted hasBeenLaunched flag
@@ -119,32 +124,38 @@ struct WorkspaceView: View {
             }
         }
         .onChange(of: sessions.count) { oldCount, newCount in
+            print("[WorkspaceView] onChange(sessions.count): \(oldCount) -> \(newCount) for \(project.name), activeSession: \(windowState.activeSession?.name ?? "NIL")")
             // When sessions become available (query populated), restore last session if we don't have one
             if oldCount == 0 && newCount > 0 && windowState.activeSession == nil {
+                print("[WorkspaceView]   Triggering restoreLastSession from sessions.count change")
                 restoreLastSession()
             }
         }
         .onChange(of: windowState.activeSession) { oldSession, newSession in
+            print("[WorkspaceView] onChange(activeSession): '\(oldSession?.name ?? "NIL")' -> '\(newSession?.name ?? "NIL")' for project \(project.name)")
             if let newSession = newSession {
                 // Save whenever session changes
                 UserDefaults.standard.set(newSession.id.uuidString, forKey: "lastSession:\(project.path)")
 
                 // Always ensure active session is launched (covers sidebar, group tap, restore, etc.)
                 if !newSession.hasBeenLaunched {
+                    print("[WorkspaceView]   Session not yet launched — calling launchSessionInTerminal")
                     launchSessionInTerminal(newSession)
+                } else {
+                    print("[WorkspaceView]   Session already launched (hasBeenLaunched=true) — skipping launchSessionInTerminal")
                 }
                 windowState.userTappedSession = false
             }
             // NOTE: Do NOT call restoreLastSession() when activeSession goes nil here.
-            // When the user taps a different project in the nav rail, selectProject() sets
-            // activeSession = nil BEFORE selectedProject changes. This onChange fires on the
-            // OLD WorkspaceView (still in hierarchy during animation) with the old project's
-            // sessions — causing it to immediately restore the old session back into
-            // windowState.activeSession, which then bleeds into the new project's WorkspaceView.
-            // Session restoration on project switch is handled by onAppear, onChange(sessions.count),
-            // and the safety net onChange(selectedProject?.path) instead.
+            // The nav rail no longer clears activeSession on project switch (it only sets
+            // selectedProject, matching dashboard behavior). However, if activeSession is
+            // cleared by other code paths, we still do NOT restore here because this onChange
+            // fires on whatever WorkspaceView is currently in the hierarchy — which during
+            // animation transitions may be the OLD project's view. Restoration is handled by
+            // onAppear, onChange(sessions.count), and onChange(selectedProject?.path) instead.
         }
         .onChange(of: project.path) { oldPath, newPath in
+            print("[WorkspaceView] onChange(project.path): '\(oldPath)' -> '\(newPath)'")
             // When project switches, restore the correct session for the new project
             if oldPath != newPath {
                 restoreLastSession()
@@ -153,7 +164,9 @@ struct WorkspaceView: View {
         // Safety net: when selectedProject changes (e.g. sidebar click during animation),
         // onAppear may not fire if the view never fully disappeared. This catches that case.
         .onChange(of: windowState.selectedProject?.path) { _, newPath in
+            print("[WorkspaceView] onChange(selectedProject.path) -> '\(newPath ?? "NIL")' for project \(project.name), activeSession: \(windowState.activeSession?.name ?? "NIL")")
             if newPath == project.path && windowState.activeSession == nil {
+                print("[WorkspaceView]   Safety net firing restoreLastSession")
                 restoreLastSession()
             }
         }
@@ -203,18 +216,29 @@ struct WorkspaceView: View {
 
     /// Restore the last active session from UserDefaults
     private func restoreLastSession() {
+        print("[WorkspaceView] restoreLastSession() for project: \(project.name)")
+        print("[WorkspaceView]   sessions.count: \(sessions.count)")
+        print("[WorkspaceView]   windowState.activeSession: \(windowState.activeSession?.name ?? "NIL")")
+
         // Check if current activeSession belongs to this project
         let currentSessionBelongsToProject = windowState.activeSession.map { session in
             sessions.contains { $0.id == session.id }
         } ?? false
 
+        print("[WorkspaceView]   currentSessionBelongsToProject: \(currentSessionBelongsToProject)")
+
         // Only restore if we don't have a valid session for this project
-        guard !currentSessionBelongsToProject else { return }
+        guard !currentSessionBelongsToProject else {
+            print("[WorkspaceView]   Guard passed — activeSession already belongs to this project, returning early")
+            return
+        }
 
         // Only consider visible (non-hidden, non-completed) sessions for restore
         let visibleSessions = sessions.filter { !$0.isHidden && !$0.isCompleted }
+        print("[WorkspaceView]   visibleSessions.count: \(visibleSessions.count)")
 
         if visibleSessions.isEmpty {
+            print("[WorkspaceView]   No visible sessions — creating root session")
             // No visible sessions — create a root session for this project
             let rootSession = Session(
                 name: project.name,
@@ -226,23 +250,29 @@ struct WorkspaceView: View {
 
             launchSessionInTerminal(rootSession)
             windowState.activeSession = rootSession
+            print("[WorkspaceView]   Created root session: \(rootSession.name), set as activeSession")
         } else {
             // Restore from UserDefaults
             let lastId = UserDefaults.standard.string(forKey: "lastSession:\(project.path)")
                 .flatMap { UUID(uuidString: $0) }
+            print("[WorkspaceView]   lastSession key: \(UserDefaults.standard.string(forKey: "lastSession:\(project.path)") ?? "NIL")")
 
             let restoredSession: Session?
             if let lastId = lastId,
                let lastSession = visibleSessions.first(where: { $0.id == lastId }) {
                 restoredSession = lastSession
+                print("[WorkspaceView]   Restoring from UserDefaults: \(lastSession.name)")
             } else {
                 // Fall back to most recent visible session
                 restoredSession = visibleSessions.first
+                print("[WorkspaceView]   No matching lastId, falling back to first visible: \(visibleSessions.first?.name ?? "NIL")")
             }
 
             if let session = restoredSession {
+                print("[WorkspaceView]   Calling launchSessionInTerminal for: \(session.name) (hasBeenLaunched=\(session.hasBeenLaunched))")
                 launchSessionInTerminal(session)
                 windowState.activeSession = session
+                print("[WorkspaceView]   Set windowState.activeSession = \(session.name)")
             }
         }
     }
@@ -251,10 +281,12 @@ struct WorkspaceView: View {
 
     /// Launch a session in external Terminal.app with proper flags
     private func launchSessionInTerminal(_ session: Session) {
+        print("[WorkspaceView] launchSessionInTerminal: \(session.name) (id=\(session.id), hasBeenLaunched=\(session.hasBeenLaunched))")
         // Mark as launched - TerminalView will auto-start Claude via SwiftTerm
         session.hasBeenLaunched = true
         session.lastAccessedAt = Date()
         launchedExternalSessions.insert(session.id)
+        print("[WorkspaceView]   hasBeenLaunched is now true")
     }
 
     // MARK: - Terminal Activation

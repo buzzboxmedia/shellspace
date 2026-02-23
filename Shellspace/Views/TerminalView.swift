@@ -282,6 +282,7 @@ struct TerminalView: View {
 
     var body: some View {
         let _ = forceRefresh  // Force view to depend on this state
+        let _ = print("[TerminalView] body render: session=\(session.name), isStarted=\(isStarted), terminalAlreadyExists=\(terminalAlreadyExists), showTerminal=\(showTerminal)")
         ZStack {
             if isStarted {
                 SwiftTermView(controller: terminalController)
@@ -362,10 +363,12 @@ struct TerminalView: View {
             }
         }
         .onAppear {
+            print("[TerminalView] onAppear for session: \(session.name)")
             ensureClaudeStarted()
         }
         .task(id: session.id) {
             await MainActor.run {
+                print("[TerminalView] .task(id:) fired for session: \(session.name)")
                 ensureClaudeStarted()
             }
         }
@@ -373,10 +376,12 @@ struct TerminalView: View {
 
     /// Start Claude if not already running — called from both onAppear and .task for reliability
     private func ensureClaudeStarted() {
+        print("[TerminalView] ensureClaudeStarted for session: \(session.name), showTerminal=\(showTerminal), processRunning=\(terminalController.terminalView?.process?.running == true)")
         viewLogger.info("ensureClaudeStarted for session: \(session.name)")
 
         // If session already has a running terminal, just show it
         if terminalController.terminalView?.process?.running == true {
+            print("[TerminalView]   Process already running — setting showTerminal=true immediately")
             viewLogger.info("Session already running, showing terminal immediately")
             showTerminal = true
             return
@@ -387,11 +392,13 @@ struct TerminalView: View {
         // always false for a new session. This guard only fires if ensureClaudeStarted
         // is called twice within the same view lifecycle (onAppear + .task race).
         guard !showTerminal else {
+            print("[TerminalView]   Skipping — showTerminal already true for this view instance")
             viewLogger.info("Skipping ensureClaudeStarted — already started for this view instance")
             return
         }
 
         // Start Claude
+        print("[TerminalView]   Calling startClaude in: \(session.projectPath)")
         viewLogger.info("Starting Claude in: \(session.projectPath)")
         terminalController.startClaude(
             in: session.projectPath,
@@ -403,6 +410,7 @@ struct TerminalView: View {
         )
         session.hasBeenLaunched = true
         showTerminal = true
+        print("[TerminalView]   startClaude called, showTerminal=true, hasBeenLaunched=true")
 
         if session.claudeSessionId == nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
