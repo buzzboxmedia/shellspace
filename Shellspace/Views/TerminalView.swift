@@ -382,8 +382,14 @@ struct TerminalView: View {
             return
         }
 
-        // Don't re-start if we already triggered startup
-        guard !showTerminal else { return }
+        // Don't re-start if we already triggered startup for THIS view instance.
+        // Note: with .id(session.id) on TerminalView in WorkspaceView, showTerminal is
+        // always false for a new session. This guard only fires if ensureClaudeStarted
+        // is called twice within the same view lifecycle (onAppear + .task race).
+        guard !showTerminal else {
+            viewLogger.info("Skipping ensureClaudeStarted — already started for this view instance")
+            return
+        }
 
         // Start Claude
         viewLogger.info("Starting Claude in: \(session.projectPath)")

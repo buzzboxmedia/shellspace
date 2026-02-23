@@ -82,6 +82,7 @@ struct WorkspaceView: View {
             // Terminal pane - shows embedded SwiftTerm when a session is active
             if let activeSession = windowState.activeSession, activeSession.hasBeenLaunched {
                 TerminalView(session: activeSession)
+                    .id(activeSession.id)  // Force new view identity per session — prevents @State leaking across session switches
                     .frame(minWidth: 400)
             } else {
                 // Empty state when no session is launched
