@@ -361,37 +361,46 @@ struct TerminalView: View {
                 .background(Color(NSColor(calibratedRed: 0.1, green: 0.1, blue: 0.11, alpha: 1.0)))
             }
         }
+        .onAppear {
+            ensureClaudeStarted()
+        }
         .task(id: session.id) {
-            // .task runs asynchronously after view insertion — unlike .onAppear which
-            // can be swallowed when a parent's onAppear triggers this view's creation
             await MainActor.run {
-                viewLogger.info("TerminalView task fired for session: \(session.name), claudeSessionId: \(session.claudeSessionId ?? "none")")
+                ensureClaudeStarted()
+            }
+        }
+    }
 
-                // If session already has a running terminal, show it immediately
-                if terminalController.terminalView?.process?.running == true {
-                    viewLogger.info("Session already running, showing terminal immediately")
-                    showTerminal = true
-                    return
-                }
+    /// Start Claude if not already running — called from both onAppear and .task for reliability
+    private func ensureClaudeStarted() {
+        viewLogger.info("ensureClaudeStarted for session: \(session.name)")
 
-                // Start Claude immediately
-                viewLogger.info("Starting Claude in: \(session.projectPath)")
-                terminalController.startClaude(
-                    in: session.projectPath,
-                    sessionId: session.id,
-                    claudeSessionId: session.claudeSessionId,
-                    parkerBriefing: session.parkerBriefing,
-                    taskFolderPath: session.taskFolderPath,
-                    hasBeenLaunched: session.hasBeenLaunched
-                )
-                session.hasBeenLaunched = true
-                showTerminal = true
+        // If session already has a running terminal, just show it
+        if terminalController.terminalView?.process?.running == true {
+            viewLogger.info("Session already running, showing terminal immediately")
+            showTerminal = true
+            return
+        }
 
-                if session.claudeSessionId == nil {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-                        captureClaudeSessionId()
-                    }
-                }
+        // Don't re-start if we already triggered startup
+        guard !showTerminal else { return }
+
+        // Start Claude
+        viewLogger.info("Starting Claude in: \(session.projectPath)")
+        terminalController.startClaude(
+            in: session.projectPath,
+            sessionId: session.id,
+            claudeSessionId: session.claudeSessionId,
+            parkerBriefing: session.parkerBriefing,
+            taskFolderPath: session.taskFolderPath,
+            hasBeenLaunched: session.hasBeenLaunched
+        )
+        session.hasBeenLaunched = true
+        showTerminal = true
+
+        if session.claudeSessionId == nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                captureClaudeSessionId()
             }
         }
     }
