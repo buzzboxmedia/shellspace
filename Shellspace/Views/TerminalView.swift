@@ -732,7 +732,10 @@ class TerminalController: ObservableObject {
             workingDir = directory
         }
         let hasExistingSession = checkForExistingSession(in: workingDir)
-        let shouldContinue = hasExistingSession
+        // Only continue if this session was previously launched AND has an existing Claude session.
+        // New tasks (hasBeenLaunched=false) should always start fresh, even if the fallback
+        // directory has an old conversation.
+        let shouldContinue = hasExistingSession && hasBeenLaunched
         let claudePath = findClaudePath()
 
         logger.info("Claude at: \(claudePath), workingDir: \(workingDir), continue=\(shouldContinue)")
