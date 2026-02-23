@@ -709,7 +709,13 @@ class TerminalController: ObservableObject {
             configureTerminal()
         }
 
-        let workingDir = taskFolderPath ?? directory
+        // Use task folder if it exists on disk, otherwise fall back to project directory
+        let workingDir: String
+        if let taskFolder = taskFolderPath, FileManager.default.fileExists(atPath: taskFolder) {
+            workingDir = taskFolder
+        } else {
+            workingDir = directory
+        }
         let hasExistingSession = checkForExistingSession(in: workingDir)
         let shouldContinue = hasExistingSession
         let claudePath = findClaudePath()
