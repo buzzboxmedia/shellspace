@@ -726,7 +726,7 @@ class TerminalController: ObservableObject {
         try? FileManager.default.createDirectory(at: scriptDir, withIntermediateDirectories: true)
         let scriptPath = scriptDir.appendingPathComponent("start-\(sessionId.uuidString).sh")
 
-        var scriptLines = ["#!/bin/zsh", "cd '\(workingDir)'"]
+        var scriptLines = ["#!/bin/zsh", "cd '\(workingDir)' 2>/dev/null || cd '\(directory)'"]
         if let briefing = parkerBriefing {
             scriptLines.append("echo '\(briefing.replacingOccurrences(of: "'", with: "'\\''"))'")
         }
