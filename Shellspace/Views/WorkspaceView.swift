@@ -134,10 +134,15 @@ struct WorkspaceView: View {
                     launchSessionInTerminal(newSession)
                 }
                 windowState.userTappedSession = false
-            } else if !sessions.isEmpty {
-                // If activeSession is nil (project just changed), try to restore
-                restoreLastSession()
             }
+            // NOTE: Do NOT call restoreLastSession() when activeSession goes nil here.
+            // When the user taps a different project in the nav rail, selectProject() sets
+            // activeSession = nil BEFORE selectedProject changes. This onChange fires on the
+            // OLD WorkspaceView (still in hierarchy during animation) with the old project's
+            // sessions — causing it to immediately restore the old session back into
+            // windowState.activeSession, which then bleeds into the new project's WorkspaceView.
+            // Session restoration on project switch is handled by onAppear, onChange(sessions.count),
+            // and the safety net onChange(selectedProject?.path) instead.
         }
         .onChange(of: project.path) { oldPath, newPath in
             // When project switches, restore the correct session for the new project
