@@ -356,10 +356,25 @@ struct RailItem: View {
             return
         }
 
-        // Clear session and set project so WorkspaceView restores the right session
+        // Find the right session to restore (same logic as restoreLastSession)
+        let visibleSessions = sessions.filter { !$0.isHidden && !$0.isCompleted }
+        let lastId = UserDefaults.standard.string(forKey: "lastSession:\(project.path)")
+            .flatMap { UUID(uuidString: $0) }
+        let targetSession: Session? = {
+            if let lastId, let s = visibleSessions.first(where: { $0.id == lastId }) { return s }
+            return visibleSessions.first
+        }()
+
+        // Set project AND session together so WorkspaceView has both immediately
         withAnimation(.spring(response: 0.3)) {
-            windowState.activeSession = nil
             windowState.selectedProject = project
+            if let session = targetSession {
+                session.hasBeenLaunched = true
+                session.lastAccessedAt = Date()
+                windowState.activeSession = session
+            } else {
+                windowState.activeSession = nil
+            }
         }
 
         // Persist last-used project
