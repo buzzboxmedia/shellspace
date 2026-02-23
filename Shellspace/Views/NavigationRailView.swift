@@ -125,7 +125,10 @@ struct ReorderableRailSection: View {
                     name: item.name,
                     path: item.path,
                     icon: item.icon,
-                    sessions: sessions.filter { $0.projectPath == item.path }
+                    sessions: {
+                        let canonical = item.path.canonicalPath
+                        return sessions.filter { $0.projectPath == canonical || $0.projectPath == item.path }
+                    }()
                 )
                 .onDrag {
                     draggedPath = item.path
@@ -192,7 +195,10 @@ struct RailSection: View {
                     name: item.name,
                     path: item.path,
                     icon: item.icon,
-                    sessions: sessions.filter { $0.projectPath == item.path }
+                    sessions: {
+                        let canonical = item.path.canonicalPath
+                        return sessions.filter { $0.projectPath == canonical || $0.projectPath == item.path }
+                    }()
                 )
             }
         }
