@@ -36,11 +36,16 @@ final class AppViewModel {
     var projects: [RemoteProject] = []
     var allSessions: [RemoteSession] = []
     var api: ShellspaceAPI?
+    var wsManager: WebSocketManager?
     var selectedTab: AppTab = .waiting
     var showSettings = false
     var lastRefreshed: Date?
 
+    /// Set by notification tap — navigates to this session
+    var pendingSessionId: String?
+
     private var refreshTask: Task<Void, Never>?
+    private var wsObserveTask: Task<Void, Never>?
 
     var macHost: String {
         get { UserDefaults.standard.string(forKey: "macHost") ?? "" }
@@ -69,6 +74,13 @@ final class AppViewModel {
             api = newAPI
             connectionState = .connected
             await refresh()
+
+            // Start WebSocket for real-time session updates
+            let manager = WebSocketManager(host: macHost)
+            manager.connectSessions()
+            wsManager = manager
+            startWebSocketObserver()
+
             startAutoRefresh()
         } catch {
             connectionState = .error(error.localizedDescription)
@@ -78,6 +90,10 @@ final class AppViewModel {
     func disconnect() {
         refreshTask?.cancel()
         refreshTask = nil
+        wsObserveTask?.cancel()
+        wsObserveTask = nil
+        wsManager?.disconnectAll()
+        wsManager = nil
         api = nil
         projects = []
         allSessions = []
@@ -91,7 +107,6 @@ final class AppViewModel {
 
         do {
             let fetchedProjects = try await api.projects()
-            // Fetch all sessions across all projects
             var all: [RemoteSession] = []
             for project in fetchedProjects {
                 if let sessions = try? await api.sessions(projectId: project.id) {
@@ -104,7 +119,6 @@ final class AppViewModel {
                 self.lastRefreshed = Date()
             }
         } catch {
-            // Keep stale data, just update connection state if truly disconnected
             if case .connected = connectionState {
                 connectionState = .error("Refresh failed")
             }
@@ -121,13 +135,34 @@ final class AppViewModel {
         }
     }
 
+    // MARK: - WebSocket Observer
+
+    private func startWebSocketObserver() {
+        wsObserveTask?.cancel()
+        wsObserveTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { break }
+                guard let self, let manager = self.wsManager else { continue }
+                let wsSessions = manager.sessions
+                if !wsSessions.isEmpty {
+                    await MainActor.run {
+                        self.allSessions = wsSessions
+                        self.lastRefreshed = Date()
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Auto Refresh
 
     private func startAutoRefresh() {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(5))
+                let interval: Duration = self?.wsManager != nil ? .seconds(30) : .seconds(5)
+                try? await Task.sleep(for: interval)
                 guard !Task.isCancelled else { break }
                 await self?.refresh()
             }

@@ -10,6 +10,7 @@ struct TerminalView: View {
     @State private var isUserScrolledUp = false
     @State private var showSentToast = false
     @State private var pollTask: Task<Void, Never>?
+    @State private var useWebSocket = false
     @FocusState private var inputFocused: Bool
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -120,10 +121,44 @@ struct TerminalView: View {
         }
         .task {
             await loadTerminal()
-            startPolling()
+            connectWebSocket()
         }
         .onDisappear {
             pollTask?.cancel()
+            viewModel.wsManager?.disconnectTerminal()
+        }
+    }
+
+    // MARK: - WebSocket
+
+    private func connectWebSocket() {
+        guard let wsManager = viewModel.wsManager else {
+            startPolling()
+            return
+        }
+
+        wsManager.connectTerminal(sessionId: session.id)
+        useWebSocket = true
+        startWebSocketObserver()
+    }
+
+    private func startWebSocketObserver() {
+        pollTask?.cancel()
+        pollTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(200))
+                guard !Task.isCancelled else { break }
+                guard let wsManager = viewModel.wsManager else { break }
+
+                let wsContent = wsManager.terminalContent
+                if !wsContent.isEmpty {
+                    let stripped = wsContent.replacing(Self.ansiRegex, with: "")
+                    if stripped != terminalContent {
+                        terminalContent = stripped
+                        isRunning = wsManager.terminalIsRunning
+                    }
+                }
+            }
         }
     }
 
@@ -143,8 +178,7 @@ struct TerminalView: View {
                 withAnimation { showSentToast = true }
                 try? await Task.sleep(for: .seconds(1.5))
                 withAnimation { showSentToast = false }
-                // Refresh terminal immediately after sending
-                await loadTerminal()
+                if !useWebSocket { await loadTerminal() }
             }
         }
     }
@@ -158,9 +192,7 @@ struct TerminalView: View {
                 terminalContent = stripped
                 isRunning = response.isRunning
             }
-        } catch {
-            // Keep stale content
-        }
+        } catch {}
     }
 
     private func startPolling() {

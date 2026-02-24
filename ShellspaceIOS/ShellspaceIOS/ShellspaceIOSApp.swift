@@ -1,14 +1,58 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct ShellspaceIOSApp: App {
     @State private var viewModel = AppViewModel()
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environment(viewModel)
+                .onAppear {
+                    appDelegate.viewModel = viewModel
+                    WebSocketManager.requestNotificationPermission()
+                }
         }
+    }
+}
+
+/// Handles notification taps to deep-link into sessions.
+class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    var viewModel: AppViewModel?
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+
+    /// Called when user taps a notification while app is in foreground or background.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        if let sessionId = userInfo["sessionId"] as? String {
+            Task { @MainActor in
+                viewModel?.selectedTab = .waiting
+                viewModel?.pendingSessionId = sessionId
+            }
+        }
+        completionHandler()
+    }
+
+    /// Show notifications even when app is in foreground.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
     }
 }
 

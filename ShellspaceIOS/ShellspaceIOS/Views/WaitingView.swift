@@ -3,9 +3,10 @@ import SwiftUI
 struct WaitingView: View {
     @Environment(AppViewModel.self) private var viewModel
     @State private var sentSessionId: String?
+    @State private var navigationPath = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             Group {
                 if viewModel.waitingSessions.isEmpty {
                     ContentUnavailableView(
@@ -53,6 +54,15 @@ struct WaitingView: View {
                     } label: {
                         Image(systemName: "gearshape")
                     }
+                }
+            }
+            .onChange(of: viewModel.pendingSessionId) { _, sessionId in
+                guard let sessionId else { return }
+                viewModel.pendingSessionId = nil
+                // Find matching session and navigate to it
+                if let session = viewModel.waitingSessions.first(where: { $0.id == sessionId })
+                    ?? viewModel.allSessions.first(where: { $0.id == sessionId }) {
+                    navigationPath.append(session)
                 }
             }
         }

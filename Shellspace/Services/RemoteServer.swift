@@ -1,9 +1,11 @@
 import Foundation
 import Hummingbird
+import HummingbirdWebSocket
 import NIOCore
 import SwiftData
+import WSCore
 
-/// Embedded HTTP server for iOS companion app access over Tailscale.
+/// Embedded HTTP + WebSocket server for iOS companion app access over Tailscale.
 /// Exposes projects, sessions, and terminal I/O on port 8847.
 @MainActor
 final class RemoteServer {
@@ -18,18 +20,19 @@ final class RemoteServer {
         self.appState = appState
         self.modelContainer = modelContainer
 
-        // Capture what we need for the detached task
         let server = self
 
         task = Task.detached {
             do {
                 let router = await server.buildRouter()
+                let wsRouter = await server.buildWebSocketRouter()
                 let app = Application(
                     router: router,
+                    server: .http1WebSocketUpgrade(webSocketRouter: wsRouter),
                     configuration: .init(address: .hostname("0.0.0.0", port: RemoteServer.port))
                 )
                 await MainActor.run {
-                    DebugLog.log("[RemoteServer] Starting on port \(RemoteServer.port)")
+                    DebugLog.log("[RemoteServer] Starting on port \(RemoteServer.port) (HTTP + WebSocket)")
                 }
                 try await app.runService()
             } catch {
@@ -46,42 +49,35 @@ final class RemoteServer {
         DebugLog.log("[RemoteServer] Stopped")
     }
 
-    // MARK: - Router
+    // MARK: - HTTP Router
 
     private func buildRouter() -> Router<BasicRequestContext> {
         let router = Router()
-
         let server = self
 
-        // GET /api/status
         router.get("api/status") { _, _ -> Response in
             await server.handleStatus()
         }
 
-        // GET /api/projects
         router.get("api/projects") { _, _ -> Response in
             await server.handleProjects()
         }
 
-        // GET /api/projects/:id/sessions
         router.get("api/projects/{id}/sessions") { _, context -> Response in
             let id = context.parameters.get("id") ?? ""
             return await server.handleProjectSessions(projectId: id)
         }
 
-        // GET /api/sessions/:id
         router.get("api/sessions/{id}") { _, context -> Response in
             let id = context.parameters.get("id") ?? ""
             return await server.handleSessionDetail(sessionId: id)
         }
 
-        // GET /api/sessions/:id/terminal
         router.get("api/sessions/{id}/terminal") { _, context -> Response in
             let id = context.parameters.get("id") ?? ""
             return await server.handleTerminalContent(sessionId: id)
         }
 
-        // POST /api/sessions/:id/input
         router.post("api/sessions/{id}/input") { request, context -> Response in
             let id = context.parameters.get("id") ?? ""
             let body = try await request.body.collect(upTo: 1024 * 64)
@@ -91,7 +87,191 @@ final class RemoteServer {
         return router
     }
 
-    // MARK: - Handlers
+    // MARK: - WebSocket Router
+
+    private func buildWebSocketRouter() -> Router<BasicWebSocketRequestContext> {
+        let wsRouter = Router(context: BasicWebSocketRequestContext.self)
+        let server = self
+
+        // Terminal content stream for a specific session
+        wsRouter.ws("ws/terminal/{sessionId}") { _, context in
+            guard let sessionId = context.parameters.get("sessionId"),
+                  let _ = UUID(uuidString: sessionId) else {
+                return .dontUpgrade
+            }
+            return .upgrade([:])
+        } onUpgrade: { inbound, outbound, context in
+            let sessionId = context.requestContext.parameters.get("sessionId") ?? ""
+            await server.handleTerminalWebSocket(sessionId: sessionId, inbound: inbound, outbound: outbound)
+        }
+
+        // Session state stream (waiting/running changes)
+        wsRouter.ws("ws/sessions") { _, _ in
+            .upgrade([:])
+        } onUpgrade: { inbound, outbound, _ in
+            await server.handleSessionsWebSocket(inbound: inbound, outbound: outbound)
+        }
+
+        return wsRouter
+    }
+
+    // MARK: - WebSocket Handlers
+
+    private func handleTerminalWebSocket(
+        sessionId: String,
+        inbound: WebSocketInboundStream,
+        outbound: WebSocketOutboundWriter
+    ) async {
+        guard let uuid = UUID(uuidString: sessionId) else { return }
+
+        DebugLog.log("[RemoteServer] WS connected: terminal \(sessionId)")
+
+        var lastContentHash: Int = 0
+        var lastIsRunning = false
+        var lastIsWaiting = false
+
+        // Send initial content immediately
+        do {
+            try await sendTerminalUpdate(
+                uuid: uuid, sessionId: sessionId, outbound: outbound,
+                lastContentHash: &lastContentHash, lastIsRunning: &lastIsRunning,
+                lastIsWaiting: &lastIsWaiting, force: true
+            )
+        } catch { return }
+
+        // Consume inbound messages (keeps connection alive, handles input)
+        let inputTask = Task {
+            for try await frame in inbound {
+                if case .text = frame.opcode,
+                   let text = frame.data.getString(at: frame.data.readerIndex, length: frame.data.readableBytes),
+                   let data = text.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let type = json["type"] as? String, type == "input",
+                   let message = json["message"] as? String {
+                    await MainActor.run {
+                        self.appState?.terminalControllers[uuid]?.sendToTerminal(message + "\n")
+                    }
+                }
+            }
+        }
+
+        // Poll terminal buffer every 500ms, send when content changes
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { break }
+            do {
+                try await sendTerminalUpdate(
+                    uuid: uuid, sessionId: sessionId, outbound: outbound,
+                    lastContentHash: &lastContentHash, lastIsRunning: &lastIsRunning,
+                    lastIsWaiting: &lastIsWaiting, force: false
+                )
+            } catch { break }
+        }
+
+        inputTask.cancel()
+        DebugLog.log("[RemoteServer] WS closed: terminal \(sessionId)")
+    }
+
+    private func sendTerminalUpdate(
+        uuid: UUID, sessionId: String, outbound: WebSocketOutboundWriter,
+        lastContentHash: inout Int, lastIsRunning: inout Bool, lastIsWaiting: inout Bool,
+        force: Bool
+    ) async throws {
+        let content = appState?.terminalControllers[uuid]?.getFullTerminalContent() ?? ""
+        let isRunning = appState?.terminalControllers[uuid]?.terminalView?.process?.running == true
+        let isWaiting = findSession(sessionId)?.isWaitingForInput ?? false
+
+        let contentHash = content.hashValue
+        guard force || contentHash != lastContentHash || isRunning != lastIsRunning || isWaiting != lastIsWaiting else { return }
+
+        lastContentHash = contentHash
+        lastIsRunning = isRunning
+        lastIsWaiting = isWaiting
+
+        let message: [String: Any] = [
+            "type": "terminal_update",
+            "session_id": sessionId,
+            "content": content,
+            "is_running": isRunning,
+            "is_waiting_for_input": isWaiting,
+        ]
+
+        if let data = try? JSONSerialization.data(withJSONObject: message),
+           let jsonString = String(data: data, encoding: .utf8) {
+            try await outbound.write(.text(jsonString))
+        }
+    }
+
+    private func handleSessionsWebSocket(
+        inbound: WebSocketInboundStream,
+        outbound: WebSocketOutboundWriter
+    ) async {
+        DebugLog.log("[RemoteServer] WS connected: sessions stream")
+
+        var lastStates: [String: (isRunning: Bool, isWaiting: Bool)] = [:]
+
+        do {
+            try await sendSessionsSnapshot(outbound: outbound, lastStates: &lastStates, force: true)
+        } catch { return }
+
+        let consumeTask = Task { for try await _ in inbound {} }
+
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { break }
+            do {
+                try await sendSessionsSnapshot(outbound: outbound, lastStates: &lastStates, force: false)
+            } catch { break }
+        }
+
+        consumeTask.cancel()
+        DebugLog.log("[RemoteServer] WS closed: sessions stream")
+    }
+
+    private func sendSessionsSnapshot(
+        outbound: WebSocketOutboundWriter,
+        lastStates: inout [String: (isRunning: Bool, isWaiting: Bool)],
+        force: Bool
+    ) async throws {
+        guard let container = modelContainer else { return }
+
+        let context = ModelContext(container)
+        let descriptor = FetchDescriptor<Session>()
+        guard let allSessions = try? context.fetch(descriptor) else { return }
+        let sessions = allSessions.filter { !$0.isHidden }
+
+        if !force {
+            var changed = lastStates.count != sessions.count
+            if !changed {
+                for session in sessions {
+                    let id = session.id.uuidString
+                    let isRunning = appState?.terminalControllers[session.id]?.terminalView?.process?.running == true
+                    if let old = lastStates[id] {
+                        if old.isRunning != isRunning || old.isWaiting != session.isWaitingForInput {
+                            changed = true; break
+                        }
+                    } else { changed = true; break }
+                }
+            }
+            guard changed else { return }
+        }
+
+        lastStates = [:]
+        for session in sessions {
+            let isRunning = appState?.terminalControllers[session.id]?.terminalView?.process?.running == true
+            lastStates[session.id.uuidString] = (isRunning, session.isWaitingForInput)
+        }
+
+        let sessionDicts = sessions.map { sessionToJSON($0) }
+        let message: [String: Any] = ["type": "sessions_update", "sessions": sessionDicts]
+
+        if let data = try? JSONSerialization.data(withJSONObject: message),
+           let jsonString = String(data: data, encoding: .utf8) {
+            try await outbound.write(.text(jsonString))
+        }
+    }
+
+    // MARK: - REST Handlers
 
     private func handleStatus() -> Response {
         let controllers = appState?.terminalControllers ?? [:]
@@ -159,7 +339,6 @@ final class RemoteServer {
         guard let session = findSession(sessionId) else {
             return jsonResponse(["error": "Session not found"], status: .notFound)
         }
-
         return jsonResponse(sessionToJSON(session))
     }
 
@@ -182,11 +361,9 @@ final class RemoteServer {
         guard let uuid = UUID(uuidString: sessionId) else {
             return jsonResponse(["error": "Invalid session ID"], status: .badRequest)
         }
-
         guard let controller = appState?.terminalControllers[uuid] else {
             return jsonResponse(["error": "No terminal for this session"], status: .notFound)
         }
-
         guard let data = body.getData(at: body.readerIndex, length: body.readableBytes),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let message = json["message"] as? String else {
@@ -194,9 +371,7 @@ final class RemoteServer {
         }
 
         controller.sendToTerminal(message + "\n")
-
         DebugLog.log("[RemoteServer] Sent input to session \(sessionId): \(message.prefix(50))")
-
         return jsonResponse(["status": "sent", "session_id": sessionId])
     }
 
@@ -205,7 +380,6 @@ final class RemoteServer {
     private func findSession(_ sessionId: String) -> Session? {
         guard let container = modelContainer,
               let uuid = UUID(uuidString: sessionId) else { return nil }
-
         let context = ModelContext(container)
         let descriptor = FetchDescriptor<Session>()
         guard let sessions = try? context.fetch(descriptor) else { return nil }
