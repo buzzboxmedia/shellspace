@@ -11,6 +11,7 @@ struct TerminalView: View {
     @State private var showSentToast = false
     @State private var pollTask: Task<Void, Never>?
     @State private var useWebSocket = false
+    @State private var connectionDotColor: Color = .gray
     @FocusState private var inputFocused: Bool
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -24,14 +25,15 @@ struct TerminalView: View {
             // Terminal content
             ScrollViewReader { proxy in
                 ScrollView {
-                    Text(terminalContent)
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(.white)
-                        .textSelection(.enabled)
+                    Text(terminalContent.isEmpty ? " " : terminalContent)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.green.opacity(0.9))
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                         .id("terminalBottom")
                 }
+                .defaultScrollAnchor(.bottom)
                 .background(Color.black)
                 .onChange(of: terminalContent) {
                     if !isUserScrolledUp {
@@ -65,27 +67,34 @@ struct TerminalView: View {
                 }
             }
 
-            Divider()
-
-            // Quick action chips
+            // Quick action chips - dark themed
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    QuickChip(label: "yes") { sendMessage("yes") }
-                    QuickChip(label: "no") { sendMessage("no") }
-                    QuickChip(label: "continue") { sendMessage("continue") }
-                    QuickChip(label: "/clear") { sendMessage("/clear") }
-                    QuickChip(label: "stop") { sendMessage("stop") }
+                    TerminalChip(label: "stop", isDestructive: true) { sendMessage("stop") }
+                    TerminalChip(label: "/clear", isDestructive: true) { sendMessage("/clear") }
+
+                    Divider()
+                        .frame(height: 20)
+                        .overlay(Color.gray.opacity(0.4))
+
+                    TerminalChip(label: "yes") { sendMessage("yes") }
+                    TerminalChip(label: "no") { sendMessage("no") }
+                    TerminalChip(label: "continue") { sendMessage("continue") }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
             }
-            .background(.ultraThinMaterial)
+            .background(Color(white: 0.1))
 
-            // Input bar
+            // Input bar - dark themed
             HStack(spacing: 8) {
                 TextField("Send to terminal...", text: $inputText)
-                    .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(white: 0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                     .focused($inputFocused)
                     .submitLabel(.send)
                     .onSubmit { sendCurrentInput() }
@@ -95,24 +104,34 @@ struct TerminalView: View {
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(inputText.isEmpty ? .gray : .blue)
+                        .foregroundStyle(inputText.isEmpty ? .gray.opacity(0.5) : .blue)
                 }
                 .disabled(inputText.isEmpty)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(.ultraThinMaterial)
+            .background(Color(white: 0.1))
         }
-        .navigationTitle(session.name)
+        .toolbarBackground(Color(white: 0.1), for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .navigationTitle(session.projectName + " / " + session.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(isLandscape ? .hidden : .automatic, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Circle()
+                    .fill(connectionDotColor)
+                    .frame(width: 8, height: 8)
+            }
+        }
         .overlay {
             if showSentToast {
                 VStack {
                     Spacer()
                     SentConfirmation()
                         .padding(12)
-                        .background(.ultraThinMaterial)
+                        .background(Color(white: 0.2))
                         .clipShape(Capsule())
                         .padding(.bottom, 100)
                 }
@@ -120,12 +139,22 @@ struct TerminalView: View {
             }
         }
         .task {
+            connectionDotColor = connectionColor
             await loadTerminal()
             connectWebSocket()
         }
         .onDisappear {
             pollTask?.cancel()
             viewModel.wsManager?.disconnectTerminal()
+        }
+    }
+
+    private var connectionColor: Color {
+        guard let ws = viewModel.wsManager else { return .gray }
+        switch ws.terminalState {
+        case .connected: return .green
+        case .connecting, .reconnecting: return .yellow
+        case .disconnected: return .red
         }
     }
 
@@ -145,17 +174,29 @@ struct TerminalView: View {
     private func startWebSocketObserver() {
         pollTask?.cancel()
         pollTask = Task {
+            var wsEmptyCount = 0
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(200))
+                try? await Task.sleep(for: .milliseconds(500))
                 guard !Task.isCancelled else { break }
                 guard let wsManager = viewModel.wsManager else { break }
 
+                // Update connection color
+                connectionDotColor = connectionColor
+
                 let wsContent = wsManager.terminalContent
                 if !wsContent.isEmpty {
+                    wsEmptyCount = 0
                     let stripped = wsContent.replacing(Self.ansiRegex, with: "")
                     if stripped != terminalContent {
                         terminalContent = stripped
                         isRunning = wsManager.terminalIsRunning
+                    }
+                } else {
+                    wsEmptyCount += 1
+                    // WebSocket not delivering content — fall back to REST polling
+                    if wsEmptyCount >= 10 {
+                        await loadTerminal()
+                        wsEmptyCount = 5 // Poll every ~2.5s going forward
                     }
                 }
             }
@@ -178,7 +219,8 @@ struct TerminalView: View {
                 withAnimation { showSentToast = true }
                 try? await Task.sleep(for: .seconds(1.5))
                 withAnimation { showSentToast = false }
-                if !useWebSocket { await loadTerminal() }
+                // Always refresh via REST after sending
+                await loadTerminal()
             }
         }
     }
@@ -204,5 +246,33 @@ struct TerminalView: View {
                 await loadTerminal()
             }
         }
+    }
+}
+
+// MARK: - Terminal Chip (dark themed)
+
+struct TerminalChip: View {
+    let label: String
+    var isDestructive: Bool = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundStyle(isDestructive ? .red.opacity(0.9) : .white.opacity(0.85))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(isDestructive ? Color.red.opacity(0.15) : Color.white.opacity(0.1))
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule().stroke(
+                        isDestructive ? Color.red.opacity(0.3) : Color.white.opacity(0.2),
+                        lineWidth: 1
+                    )
+                )
+        }
+        .buttonStyle(.plain)
     }
 }

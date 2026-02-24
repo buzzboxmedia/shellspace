@@ -6,6 +6,28 @@ struct ShellspaceIOSApp: App {
     @State private var viewModel = AppViewModel()
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
+    /// Handle shellspace:// deep links
+    /// - shellspace://browse — switch to Browse tab
+    /// - shellspace://waiting — switch to Waiting tab
+    /// - shellspace://session/{id} — open terminal for session
+    private func handleDeepLink(_ url: URL) {
+        guard url.scheme == "shellspace" else { return }
+        let host = url.host ?? ""
+        switch host {
+        case "browse":
+            viewModel.selectedTab = .browse
+        case "waiting":
+            viewModel.selectedTab = .waiting
+        case "session":
+            let sessionId = url.pathComponents.dropFirst().first ?? ""
+            guard !sessionId.isEmpty else { return }
+            viewModel.selectedTab = .browse
+            viewModel.pendingSessionId = sessionId
+        default:
+            break
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -13,6 +35,9 @@ struct ShellspaceIOSApp: App {
                 .onAppear {
                     appDelegate.viewModel = viewModel
                     WebSocketManager.requestNotificationPermission()
+                }
+                .onOpenURL { url in
+                    handleDeepLink(url)
                 }
         }
     }
@@ -90,6 +115,7 @@ struct ContentView: View {
                 }
                 .task {
                     await viewModel.connectAndLoad()
+                    viewModel.handleLaunchArguments()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                     Task { await viewModel.refresh() }

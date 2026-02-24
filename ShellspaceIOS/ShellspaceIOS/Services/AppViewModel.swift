@@ -41,15 +41,53 @@ final class AppViewModel {
     var showSettings = false
     var lastRefreshed: Date?
 
-    /// Set by notification tap — navigates to this session
+    /// Set by notification tap or deep link — navigates to this session
     var pendingSessionId: String?
+
+    /// Set to true to programmatically activate search in BrowseView
+    var activateSearch = false
+
+    /// Check launch arguments and UserDefaults for navigation
+    func handleLaunchArguments() {
+        var targetSessionId: String?
+        var targetTab: String?
+
+        // Check launch arguments
+        let args = ProcessInfo.processInfo.arguments
+        if let idx = args.firstIndex(of: "-session"), idx + 1 < args.count {
+            targetSessionId = args[idx + 1]
+        }
+        if let idx = args.firstIndex(of: "-tab"), idx + 1 < args.count {
+            targetTab = args[idx + 1]
+        }
+
+        // Check UserDefaults deep link (written by simctl for testing)
+        if targetSessionId == nil, let deepLink = UserDefaults.standard.string(forKey: "pendingDeepLink"), !deepLink.isEmpty {
+            targetSessionId = deepLink
+            UserDefaults.standard.removeObject(forKey: "pendingDeepLink")
+        }
+
+        // Apply navigation
+        if let sessionId = targetSessionId {
+            selectedTab = .browse
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(800))
+                self.pendingSessionId = sessionId
+            }
+        } else if let tab = targetTab {
+            switch tab {
+            case "browse": selectedTab = .browse
+            case "waiting": selectedTab = .waiting
+            default: break
+            }
+        }
+    }
 
     private var refreshTask: Task<Void, Never>?
     private var wsObserveTask: Task<Void, Never>?
 
-    var macHost: String {
-        get { UserDefaults.standard.string(forKey: "macHost") ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: "macHost") }
+    var macHost: String = UserDefaults.standard.string(forKey: "macHost") ?? "" {
+        didSet { UserDefaults.standard.set(macHost, forKey: "macHost") }
     }
 
     var waitingSessions: [RemoteSession] {
@@ -113,9 +151,10 @@ final class AppViewModel {
                     all.append(contentsOf: sessions)
                 }
             }
+            let finalSessions = all
             await MainActor.run {
                 self.projects = fetchedProjects
-                self.allSessions = all
+                self.allSessions = finalSessions
                 self.lastRefreshed = Date()
             }
         } catch {

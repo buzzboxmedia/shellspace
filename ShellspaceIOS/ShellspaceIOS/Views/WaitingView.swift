@@ -46,8 +46,17 @@ struct WaitingView: View {
             .navigationTitle("Waiting")
             .navigationDestination(for: RemoteSession.self) { session in
                 TerminalView(session: session)
+                    .environment(viewModel)
             }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        viewModel.activateSearch = true
+                        viewModel.selectedTab = .browse
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         viewModel.showSettings = true
@@ -107,7 +116,7 @@ struct WaitingSessionRow: View {
                     QuickChip(label: "yes") { onQuickReply("yes") }
                     QuickChip(label: "no") { onQuickReply("no") }
                     QuickChip(label: "continue") { onQuickReply("continue") }
-                    QuickChip(label: "stop") { onQuickReply("stop") }
+                    QuickChip(label: "stop", isDestructive: true) { onQuickReply("stop") }
                 }
             } else {
                 SentConfirmation()
@@ -133,6 +142,7 @@ struct PulsingDot: View {
 
 struct QuickChip: View {
     let label: String
+    var isDestructive: Bool = false
     let action: () -> Void
 
     private let navy = Color(red: 0.012, green: 0.169, blue: 0.263)
@@ -142,12 +152,12 @@ struct QuickChip: View {
             Text(label)
                 .font(.caption)
                 .fontWeight(.medium)
-                .foregroundStyle(navy)
+                .foregroundStyle(isDestructive ? .red : navy)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(navy.opacity(0.08))
+                .background(isDestructive ? Color.red.opacity(0.08) : navy.opacity(0.08))
                 .clipShape(Capsule())
-                .overlay(Capsule().stroke(navy.opacity(0.2), lineWidth: 1))
+                .overlay(Capsule().stroke(isDestructive ? Color.red.opacity(0.3) : navy.opacity(0.2), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }

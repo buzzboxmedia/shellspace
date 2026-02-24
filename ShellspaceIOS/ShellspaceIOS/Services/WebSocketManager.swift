@@ -63,8 +63,9 @@ final class WebSocketManager {
                 } catch {
                     guard !Task.isCancelled else { break }
                     attempt += 1
-                    await MainActor.run { self.terminalState = .reconnecting(attempt: attempt) }
-                    let delay = min(15.0, pow(2.0, Double(attempt - 1)))
+                    let currentAttempt = attempt
+                    await MainActor.run { self.terminalState = .reconnecting(attempt: currentAttempt) }
+                    let delay = min(15.0, pow(2.0, Double(currentAttempt - 1)))
                     try? await Task.sleep(for: .seconds(delay))
                 }
             }
@@ -125,8 +126,9 @@ final class WebSocketManager {
                 } catch {
                     guard !Task.isCancelled else { break }
                     attempt += 1
-                    await MainActor.run { self.sessionsState = .reconnecting(attempt: attempt) }
-                    let delay = min(15.0, pow(2.0, Double(attempt - 1)))
+                    let currentAttempt = attempt
+                    await MainActor.run { self.sessionsState = .reconnecting(attempt: currentAttempt) }
+                    let delay = min(15.0, pow(2.0, Double(currentAttempt - 1)))
                     try? await Task.sleep(for: .seconds(delay))
                 }
             }

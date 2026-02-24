@@ -13,13 +13,14 @@
 		443DB03F222120F3673C6E66 /* ShellspaceIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5AC707640ECA9238E1232CF /* ShellspaceIOSApp.swift */; };
 		61A5AE276F4E6AD24BFE2A12 /* SessionsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F229A38FD17FACDC1C7D93F8 /* SessionsListView.swift */; };
 		8E95F0985BA2E7B28848BCA3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B9E985E82415A46F00FF5EE6 /* Assets.xcassets */; };
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* WebSocketManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F2A3 /* WebSocketManager.swift */; };
 		BD407B5A641AFC42E0453068 /* RemoteSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1818BC8CE1A1956E487B95AF /* RemoteSession.swift */; };
+		BB22CC33DD44EE55FF66AA11 /* SearchResultsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF66 /* SearchResultsView.swift */; };
 		C15EDE356770C613D1DA64CC /* RemoteProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25E0FD3D0B5063A4C0F6BEA1 /* RemoteProject.swift */; };
 		D97B5392C8A3DD431C34BCDD /* ProjectsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA35A5EB2C1F5E7B6BBAB1CE /* ProjectsListView.swift */; };
 		ED565BF19AF4A9308528EA87 /* TerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89A6C96842658DD10199FE05 /* TerminalView.swift */; };
 		F10E33C4BEE7FEC06ACAD991 /* WaitingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C05FAF18ABF838997FFB0C1 /* WaitingView.swift */; };
 		F87F942490188DD2D7496053 /* ShellspaceAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2E1976A256D34BD07724A7D /* ShellspaceAPI.swift */; };
-		A1B2C3D4E5F6A7B8C9D0E1F2 /* WebSocketManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F2A3 /* WebSocketManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,13 +31,14 @@
 		4D32A54C5B07AAA5E8F89338 /* ShellspaceIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShellspaceIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5A20C755DCE6145FF6DDD926 /* SettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSheet.swift; sourceTree = "<group>"; };
 		89A6C96842658DD10199FE05 /* TerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalView.swift; sourceTree = "<group>"; };
+		AA11BB22CC33DD44EE55FF66 /* SearchResultsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchResultsView.swift; sourceTree = "<group>"; };
 		AA35A5EB2C1F5E7B6BBAB1CE /* ProjectsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsListView.swift; sourceTree = "<group>"; };
+		B2C3D4E5F6A7B8C9D0E1F2A3 /* WebSocketManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketManager.swift; sourceTree = "<group>"; };
 		B9E985E82415A46F00FF5EE6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D2E1976A256D34BD07724A7D /* ShellspaceAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellspaceAPI.swift; sourceTree = "<group>"; };
 		D5AC707640ECA9238E1232CF /* ShellspaceIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellspaceIOSApp.swift; sourceTree = "<group>"; };
 		E1F184919BF4E348FBE8C15A /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
 		F229A38FD17FACDC1C7D93F8 /* SessionsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsListView.swift; sourceTree = "<group>"; };
-		B2C3D4E5F6A7B8C9D0E1F2A3 /* WebSocketManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -80,6 +82,7 @@
 			children = (
 				1556AE3EFAD0FADFA769DFA1 /* BrowseView.swift */,
 				AA35A5EB2C1F5E7B6BBAB1CE /* ProjectsListView.swift */,
+				AA11BB22CC33DD44EE55FF66 /* SearchResultsView.swift */,
 				F229A38FD17FACDC1C7D93F8 /* SessionsListView.swift */,
 				5A20C755DCE6145FF6DDD926 /* SettingsSheet.swift */,
 				89A6C96842658DD10199FE05 /* TerminalView.swift */,
@@ -128,7 +131,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1600;
+				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					C65EA9A383EFA33DEF89173A = {
 						ProvisioningStyle = Automatic;
@@ -174,6 +177,7 @@
 				D97B5392C8A3DD431C34BCDD /* ProjectsListView.swift in Sources */,
 				C15EDE356770C613D1DA64CC /* RemoteProject.swift in Sources */,
 				BD407B5A641AFC42E0453068 /* RemoteSession.swift in Sources */,
+				BB22CC33DD44EE55FF66AA11 /* SearchResultsView.swift in Sources */,
 				61A5AE276F4E6AD24BFE2A12 /* SessionsListView.swift in Sources */,
 				27E05565A65A447D6270D241 /* SettingsSheet.swift in Sources */,
 				F87F942490188DD2D7496053 /* ShellspaceAPI.swift in Sources */,
@@ -194,14 +198,16 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = VCY2SG8342;
 				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = ShellspaceIOS/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Shellspace;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Shellspace needs local network access to connect to your Mac over Tailscale.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortraitUpsideDown";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -248,8 +254,10 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = VCY2SG8342;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -272,6 +280,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.9;
@@ -314,8 +323,10 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = VCY2SG8342;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -331,6 +342,7 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
@@ -344,14 +356,16 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = VCY2SG8342;
 				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = ShellspaceIOS/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Shellspace;
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Shellspace needs local network access to connect to your Mac over Tailscale.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortraitUpsideDown";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
