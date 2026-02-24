@@ -22,6 +22,7 @@ class WindowState: ObservableObject {
 struct ShellspaceApp: App {
     @StateObject private var appState = AppState()
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    private let remoteServer = RemoteServer()
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -49,6 +50,9 @@ struct ShellspaceApp: App {
             WindowContainer()
                 .environmentObject(appState)
                 .onAppear {
+                    DebugLog.clear()
+                    DebugLog.log("[App] Shellspace launched")
+
                     // Make sure app is active when window appears
                     NSApplication.shared.activate(ignoringOtherApps: true)
                     // Give AppDelegate access to appState for cleanup on quit
@@ -90,6 +94,9 @@ struct ShellspaceApp: App {
 
                     // Export projects (ensures JSON is up to date after migrations)
                     ProjectSyncService.shared.exportProjects(from: sharedModelContainer.mainContext)
+
+                    // Start remote server for iOS companion app
+                    remoteServer.start(appState: appState, modelContainer: sharedModelContainer)
                 }
         }
         .modelContainer(sharedModelContainer)
@@ -367,6 +374,11 @@ struct WindowContent: View {
                 LauncherView()
             }
         }
+        .background {
+            // Clear activeSession when switching between projects (nav rail)
+            // This ensures the new WorkspaceView starts fresh
+            WindowContent.projectSwitchHandler(windowState: windowState)
+        }
         .onAppear {
             // Restore last-used project on launch
             if windowState.selectedProject == nil,
@@ -384,6 +396,21 @@ struct WindowContent: View {
         if let project = allProjects.first(where: { $0.path == path }) {
             windowState.selectedProject = project
         }
+    }
+}
+
+extension WindowContent {
+    /// When switching between projects (not to/from dashboard), clear activeSession
+    /// so the new WorkspaceView starts fresh and restores the correct session.
+    @ViewBuilder
+    static func projectSwitchHandler(windowState: WindowState) -> some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onChange(of: windowState.selectedProject?.path) { oldPath, newPath in
+                guard let oldPath, let newPath, oldPath != newPath else { return }
+                DebugLog.log("[WindowContent] Project switch: \(oldPath) -> \(newPath) — clearing activeSession")
+                windowState.activeSession = nil
+            }
     }
 }
 

@@ -347,49 +347,40 @@ struct RailItem: View {
     }
 
     private func selectProject() {
-        print("[RailItem] selectProject() called for path: \(path)")
-        print("[RailItem]   persistedProject: \(persistedProject?.name ?? "NIL")")
-        print("[RailItem]   windowState.selectedProject: \(windowState.selectedProject?.name ?? "NIL") (\(windowState.selectedProject?.path ?? "NIL"))")
-        print("[RailItem]   windowState.activeSession: \(windowState.activeSession?.name ?? "NIL")")
+        DebugLog.log("[RailItem] selectProject() tapped: \(name) (\(path))")
+
+        guard let project = persistedProject else {
+            DebugLog.log("[RailItem]   GUARD FAILED: persistedProject is nil")
+            return
+        }
+
+        // If already on this project with an active session, no-op
+        if windowState.selectedProject?.path == project.path,
+           windowState.activeSession != nil {
+            DebugLog.log("[RailItem]   Already on this project with active session — no-op")
+            return
+        }
 
         // Save current session for current project before switching
         if let currentProject = windowState.selectedProject,
            let currentSession = windowState.activeSession {
             UserDefaults.standard.set(currentSession.id.uuidString, forKey: "lastSession:\(currentProject.path)")
-            print("[RailItem]   Saved lastSession for \(currentProject.name): \(currentSession.name)")
+            DebugLog.log("[RailItem]   Saved lastSession for \(currentProject.name): \(currentSession.name)")
         }
 
-        guard let project = persistedProject else {
-            print("[RailItem]   GUARD FAILED: persistedProject is nil — tap will do nothing")
-            return
-        }
+        DebugLog.log("[RailItem]   Switching to: \(project.name)")
 
-        // If already on this project with an active session, don't disrupt it
-        if windowState.selectedProject?.path == project.path,
-           windowState.activeSession != nil {
-            print("[RailItem]   Already on this project with active session — returning early")
-            return
-        }
+        // Clear activeSession FIRST so the new WorkspaceView starts clean.
+        windowState.activeSession = nil
 
-        print("[RailItem]   Proceeding with project switch to: \(project.name)")
-
-        // Match dashboard behavior exactly — only set selectedProject, never touch activeSession.
-        // WorkspaceView.restoreLastSession() detects that the current activeSession doesn't
-        // belong to the new project (via currentSessionBelongsToProject check) and auto-restores
-        // the correct session for the new project.
-        // Clearing activeSession here causes a timing race where the old WorkspaceView's
-        // onChange(activeSession) fires, and then the new WorkspaceView may not receive a
-        // session restore trigger if sessions.count was already non-zero at onAppear time.
-        withAnimation(.spring(response: 0.3)) {
-            windowState.selectedProject = project
-        }
+        // No animation — the spring transition was causing the OLD WorkspaceView
+        // to cross-fade on top of the new one, hiding the terminal for ~300ms.
+        windowState.selectedProject = project
 
         UserDefaults.standard.set(path, forKey: "lastSelectedProjectPath")
+        for session in sessions { appState.clearSessionAttention(session.id) }
 
-        for session in sessions {
-            appState.clearSessionAttention(session.id)
-        }
-        print("[RailItem]   selectProject() complete — selectedProject now: \(windowState.selectedProject?.name ?? "NIL"), activeSession unchanged: \(windowState.activeSession?.name ?? "NIL")")
+        DebugLog.log("[RailItem]   selectProject() done — selectedProject=\(project.name), activeSession=NIL")
     }
 }
 

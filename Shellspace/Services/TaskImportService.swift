@@ -311,8 +311,16 @@ class TaskImportService {
             return
         }
 
-        // Get existing group names (slugified for comparison)
-        let existingGroupSlugs = Set(project.taskGroups.map { taskFolderService.slugify($0.name) })
+        // Fetch groups fresh from database to avoid stale relationship faults
+        // (validateFilesystem may have deleted groups earlier in the same import cycle)
+        let projectPath = project.path
+        let groupDescriptor = FetchDescriptor<ProjectGroup>(
+            predicate: #Predicate<ProjectGroup> { group in
+                group.projectPath == projectPath
+            }
+        )
+        let existingGroups = (try? modelContext.fetch(groupDescriptor)) ?? []
+        let existingGroupSlugs = Set(existingGroups.map { taskFolderService.slugify($0.name) })
 
         // Scan for project folders (directories without number prefix that contain task folders or have Type: project)
         guard let contents = try? fileManager.contentsOfDirectory(
@@ -322,7 +330,7 @@ class TaskImportService {
             return
         }
 
-        var maxSortOrder = project.taskGroups.map(\.sortOrder).max() ?? -1
+        var maxSortOrder = existingGroups.map(\.sortOrder).max() ?? -1
 
         for item in contents {
             var isDir: ObjCBool = false
@@ -381,8 +389,16 @@ class TaskImportService {
     /// Ensure each ProjectGroup has a session so it can be opened in terminal
     @MainActor
     func ensureProjectSessions(for project: Project, modelContext: ModelContext) {
+        // Fetch groups fresh from database to avoid stale relationship faults
+        let projectPath = project.path
+        let groupDescriptor = FetchDescriptor<ProjectGroup>(
+            predicate: #Predicate<ProjectGroup> { group in
+                group.projectPath == projectPath
+            }
+        )
+        let groups = (try? modelContext.fetch(groupDescriptor)) ?? []
 
-        for group in project.taskGroups {
+        for group in groups {
             let projectFolderPath = taskFolderService.projectDirectory(
                 projectPath: project.path,
                 projectName: group.name

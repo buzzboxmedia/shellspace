@@ -282,7 +282,7 @@ struct TerminalView: View {
 
     var body: some View {
         let _ = forceRefresh  // Force view to depend on this state
-        let _ = print("[TerminalView] body render: session=\(session.name), isStarted=\(isStarted), terminalAlreadyExists=\(terminalAlreadyExists), showTerminal=\(showTerminal)")
+        let _ = DebugLog.log("[TerminalView] body: session=\(session.name), isStarted=\(isStarted), showTerminal=\(showTerminal)")
         ZStack {
             if isStarted {
                 SwiftTermView(controller: terminalController)
@@ -363,12 +363,12 @@ struct TerminalView: View {
             }
         }
         .onAppear {
-            print("[TerminalView] onAppear for session: \(session.name)")
+            DebugLog.log("[TerminalView] onAppear: \(session.name)")
             ensureClaudeStarted()
         }
         .task(id: session.id) {
             await MainActor.run {
-                print("[TerminalView] .task(id:) fired for session: \(session.name)")
+                DebugLog.log("[TerminalView] .task(id:): \(session.name)")
                 ensureClaudeStarted()
             }
         }
@@ -376,30 +376,20 @@ struct TerminalView: View {
 
     /// Start Claude if not already running — called from both onAppear and .task for reliability
     private func ensureClaudeStarted() {
-        print("[TerminalView] ensureClaudeStarted for session: \(session.name), showTerminal=\(showTerminal), processRunning=\(terminalController.terminalView?.process?.running == true)")
-        viewLogger.info("ensureClaudeStarted for session: \(session.name)")
+        DebugLog.log("[ensureClaude] session=\(session.name), showTerminal=\(showTerminal), processRunning=\(terminalController.terminalView?.process?.running == true)")
 
-        // If session already has a running terminal, just show it
         if terminalController.terminalView?.process?.running == true {
-            print("[TerminalView]   Process already running — setting showTerminal=true immediately")
-            viewLogger.info("Session already running, showing terminal immediately")
+            DebugLog.log("[ensureClaude]   Already running — show immediately")
             showTerminal = true
             return
         }
 
-        // Don't re-start if we already triggered startup for THIS view instance.
-        // Note: with .id(session.id) on TerminalView in WorkspaceView, showTerminal is
-        // always false for a new session. This guard only fires if ensureClaudeStarted
-        // is called twice within the same view lifecycle (onAppear + .task race).
         guard !showTerminal else {
-            print("[TerminalView]   Skipping — showTerminal already true for this view instance")
-            viewLogger.info("Skipping ensureClaudeStarted — already started for this view instance")
+            DebugLog.log("[ensureClaude]   Already started (showTerminal=true) — skip")
             return
         }
 
-        // Start Claude
-        print("[TerminalView]   Calling startClaude in: \(session.projectPath)")
-        viewLogger.info("Starting Claude in: \(session.projectPath)")
+        DebugLog.log("[ensureClaude]   Starting Claude in: \(session.taskFolderPath ?? session.projectPath)")
         terminalController.startClaude(
             in: session.projectPath,
             sessionId: session.id,
@@ -410,7 +400,7 @@ struct TerminalView: View {
         )
         session.hasBeenLaunched = true
         showTerminal = true
-        print("[TerminalView]   startClaude called, showTerminal=true, hasBeenLaunched=true")
+        DebugLog.log("[ensureClaude]   DONE — showTerminal=true")
 
         if session.claudeSessionId == nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
@@ -708,15 +698,18 @@ class TerminalController: ObservableObject {
     }
 
     func startClaude(in directory: String, sessionId: UUID, claudeSessionId: String? = nil, parkerBriefing: String? = nil, taskFolderPath: String? = nil, hasBeenLaunched: Bool = false) {
+        DebugLog.log("[startClaude] directory=\(directory), sessionId=\(sessionId), hasBeenLaunched=\(hasBeenLaunched), taskFolderPath=\(taskFolderPath ?? "nil")")
         logger.info("startClaude called for directory: \(directory), sessionId: \(sessionId)")
 
         // Don't restart if already running for this session (check process is alive)
         if currentSessionId == sessionId && terminalView != nil {
             if terminalView?.process?.running == true {
+                DebugLog.log("[startClaude]   Already running for this session — skipping")
                 logger.info("Claude already running for this session, skipping")
                 return
             }
             // Process is dead - clear terminal so we can restart
+            DebugLog.log("[startClaude]   Process dead — restarting")
             logger.info("Previous Claude process exited, restarting")
             terminalView = nil
         }
@@ -746,6 +739,7 @@ class TerminalController: ObservableObject {
         let shouldContinue = hasExistingSession && hasBeenLaunched
         let claudePath = findClaudePath()
 
+        DebugLog.log("[startClaude]   workingDir=\(workingDir), hasExistingSession=\(hasExistingSession), hasBeenLaunched=\(hasBeenLaunched), shouldContinue=\(shouldContinue)")
         logger.info("Claude at: \(claudePath), workingDir: \(workingDir), continue=\(shouldContinue)")
 
         // Build claude args
@@ -808,14 +802,20 @@ class TerminalController: ObservableObject {
         let claudeProjectPath = resolvedPath.replacingOccurrences(of: "/", with: "-")
         let claudeProjectsDir = "\(NSHomeDirectory())/.claude/projects/\(claudeProjectPath)"
 
+        DebugLog.log("[checkExisting] directory=\(directory)")
+        DebugLog.log("[checkExisting]   resolvedPath=\(resolvedPath)")
+        DebugLog.log("[checkExisting]   claudeProjectsDir=\(claudeProjectsDir)")
+
         // Check if the directory exists and has any .jsonl files
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: claudeProjectsDir),
               let files = try? fileManager.contentsOfDirectory(atPath: claudeProjectsDir) else {
+            DebugLog.log("[checkExisting]   FOLDER NOT FOUND or empty")
             return false
         }
 
         let hasSessionFiles = files.contains { $0.hasSuffix(".jsonl") }
+        DebugLog.log("[checkExisting]   files=\(files.count), hasJsonl=\(hasSessionFiles)")
         logger.info("Checking for existing session in \(claudeProjectsDir): \(hasSessionFiles ? "found" : "none")")
         return hasSessionFiles
     }

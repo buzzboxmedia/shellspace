@@ -80,7 +80,7 @@ struct WorkspaceView: View {
                 .frame(minWidth: 280, idealWidth: 320, maxWidth: 400)
 
             // Terminal pane - shows embedded SwiftTerm when a session is active
-            let _ = print("[WorkspaceView] body: project=\(project.name), activeSession=\(windowState.activeSession?.name ?? "NIL"), hasBeenLaunched=\(windowState.activeSession?.hasBeenLaunched == true)")
+            let _ = DebugLog.log("[WorkspaceView] body: project=\(project.name), activeSession=\(windowState.activeSession?.name ?? "NIL"), hasBeenLaunched=\(windowState.activeSession?.hasBeenLaunched == true)")
             if let activeSession = windowState.activeSession, activeSession.hasBeenLaunched {
                 TerminalView(session: activeSession)
                     .id(activeSession.id)  // Force new view identity per session — prevents @State leaking across session switches
@@ -104,16 +104,12 @@ struct WorkspaceView: View {
                 .ignoresSafeArea()
         }
         .onAppear {
-            print("[WorkspaceView] onAppear for project: \(project.name) (\(project.path))")
-            print("[WorkspaceView]   sessions.count: \(sessions.count)")
-            print("[WorkspaceView]   windowState.activeSession: \(windowState.activeSession?.name ?? "NIL")")
+            DebugLog.log("[WorkspaceView] onAppear: project=\(project.name), sessions=\(sessions.count), activeSession=\(windowState.activeSession?.name ?? "NIL")")
 
             workspaceOpenedAt = Date()
-
-            // Restore launched sessions state from persisted hasBeenLaunched flag
             launchedExternalSessions = Set(sessions.filter { $0.hasBeenLaunched }.map { $0.id })
 
-            // Try to restore last active session first (fast)
+            // Restore last active session
             restoreLastSession()
 
             // Import task folders in background
@@ -123,58 +119,65 @@ struct WorkspaceView: View {
                 }
             }
         }
+        // Backup: .task(id:) fires reliably even when onAppear doesn't (SwiftUI .id() changes)
+        .task(id: project.path) {
+            try? await Task.sleep(nanoseconds: 150_000_000) // 150ms — let onAppear run first
+            await MainActor.run {
+                DebugLog.log("[WorkspaceView] .task(id:) backup: project=\(project.name), activeSession=\(windowState.activeSession?.name ?? "NIL")")
+                if windowState.activeSession == nil {
+                    DebugLog.log("[WorkspaceView]   backup restoring — activeSession is nil")
+                    restoreLastSession()
+                } else {
+                    let belongs = sessions.contains { $0.id == windowState.activeSession?.id }
+                    if !belongs {
+                        DebugLog.log("[WorkspaceView]   backup restoring — activeSession wrong project")
+                        restoreLastSession()
+                    }
+                }
+            }
+        }
         .onChange(of: sessions.count) { oldCount, newCount in
-            print("[WorkspaceView] onChange(sessions.count): \(oldCount) -> \(newCount) for \(project.name), activeSession: \(windowState.activeSession?.name ?? "NIL")")
-            // When sessions become available (query populated), restore last session if we don't have one
             if oldCount == 0 && newCount > 0 && windowState.activeSession == nil {
-                print("[WorkspaceView]   Triggering restoreLastSession from sessions.count change")
+                DebugLog.log("[WorkspaceView] sessions populated (\(newCount)) — restoring")
                 restoreLastSession()
             }
         }
         .onChange(of: windowState.activeSession) { oldSession, newSession in
-            print("[WorkspaceView] onChange(activeSession): '\(oldSession?.name ?? "NIL")' -> '\(newSession?.name ?? "NIL")' for project \(project.name)")
+            DebugLog.log("[WorkspaceView] activeSession changed: '\(oldSession?.name ?? "NIL")' -> '\(newSession?.name ?? "NIL")' (project: \(project.name))")
             if let newSession = newSession {
-                // Save whenever session changes
+                // Only save if this session belongs to THIS project — prevents cross-contamination when switching projects
+                guard sessions.contains(where: { $0.id == newSession.id }) else {
+                    DebugLog.log("[WorkspaceView]   SKIP save — session '\(newSession.name)' doesn't belong to project '\(project.name)'")
+                    return
+                }
                 UserDefaults.standard.set(newSession.id.uuidString, forKey: "lastSession:\(project.path)")
-
-                // Always ensure active session is launched (covers sidebar, group tap, restore, etc.)
                 if !newSession.hasBeenLaunched {
-                    print("[WorkspaceView]   Session not yet launched — calling launchSessionInTerminal")
+                    DebugLog.log("[WorkspaceView]   launching session: \(newSession.name)")
                     launchSessionInTerminal(newSession)
-                } else {
-                    print("[WorkspaceView]   Session already launched (hasBeenLaunched=true) — skipping launchSessionInTerminal")
                 }
                 windowState.userTappedSession = false
             }
-            // NOTE: Do NOT call restoreLastSession() when activeSession goes nil here.
-            // The nav rail no longer clears activeSession on project switch (it only sets
-            // selectedProject, matching dashboard behavior). However, if activeSession is
-            // cleared by other code paths, we still do NOT restore here because this onChange
-            // fires on whatever WorkspaceView is currently in the hierarchy — which during
-            // animation transitions may be the OLD project's view. Restoration is handled by
-            // onAppear, onChange(sessions.count), and onChange(selectedProject?.path) instead.
         }
         .onChange(of: project.path) { oldPath, newPath in
-            print("[WorkspaceView] onChange(project.path): '\(oldPath)' -> '\(newPath)'")
-            // When project switches, restore the correct session for the new project
             if oldPath != newPath {
+                DebugLog.log("[WorkspaceView] project.path changed: \(oldPath) -> \(newPath)")
                 restoreLastSession()
             }
         }
-        // Safety net: when selectedProject changes (e.g. sidebar click during animation),
-        // onAppear may not fire if the view never fully disappeared. This catches that case.
+        // Safety net: when selectedProject changes, ensure we restore if activeSession is nil
         .onChange(of: windowState.selectedProject?.path) { _, newPath in
-            print("[WorkspaceView] onChange(selectedProject.path) -> '\(newPath ?? "NIL")' for project \(project.name), activeSession: \(windowState.activeSession?.name ?? "NIL")")
+            DebugLog.log("[WorkspaceView] selectedProject.path changed to '\(newPath ?? "NIL")' (this view: \(project.name), activeSession: \(windowState.activeSession?.name ?? "NIL"))")
             if newPath == project.path && windowState.activeSession == nil {
-                print("[WorkspaceView]   Safety net firing restoreLastSession")
+                DebugLog.log("[WorkspaceView]   Safety net: restoring for \(project.name)")
                 restoreLastSession()
             }
         }
         .onDisappear {
-            // Remember last active session for next time (both on Project and in UserDefaults)
-            project.lastActiveSessionId = windowState.activeSession?.id
-            if let sessionId = windowState.activeSession?.id {
-                UserDefaults.standard.set(sessionId.uuidString, forKey: "lastSession:\(project.path)")
+            // Remember last active session for next time — but only if it belongs to THIS project
+            if let activeSession = windowState.activeSession,
+               sessions.contains(where: { $0.id == activeSession.id }) {
+                project.lastActiveSessionId = activeSession.id
+                UserDefaults.standard.set(activeSession.id.uuidString, forKey: "lastSession:\(project.path)")
             }
         }
         .alert("Summarize before leaving?", isPresented: $showUnsavedAlert) {
@@ -216,30 +219,24 @@ struct WorkspaceView: View {
 
     /// Restore the last active session from UserDefaults
     private func restoreLastSession() {
-        print("[WorkspaceView] restoreLastSession() for project: \(project.name)")
-        print("[WorkspaceView]   sessions.count: \(sessions.count)")
-        print("[WorkspaceView]   windowState.activeSession: \(windowState.activeSession?.name ?? "NIL")")
+        DebugLog.log("[restore] project=\(project.name), sessions=\(sessions.count), activeSession=\(windowState.activeSession?.name ?? "NIL")")
 
         // Check if current activeSession belongs to this project
         let currentSessionBelongsToProject = windowState.activeSession.map { session in
             sessions.contains { $0.id == session.id }
         } ?? false
 
-        print("[WorkspaceView]   currentSessionBelongsToProject: \(currentSessionBelongsToProject)")
-
-        // Only restore if we don't have a valid session for this project
         guard !currentSessionBelongsToProject else {
-            print("[WorkspaceView]   Guard passed — activeSession already belongs to this project, returning early")
+            DebugLog.log("[restore]   activeSession already belongs — skipping")
             return
         }
 
         // Only consider visible (non-hidden, non-completed) sessions for restore
         let visibleSessions = sessions.filter { !$0.isHidden && !$0.isCompleted }
-        print("[WorkspaceView]   visibleSessions.count: \(visibleSessions.count)")
+        DebugLog.log("[restore]   visibleSessions=\(visibleSessions.count)")
 
         if visibleSessions.isEmpty {
-            print("[WorkspaceView]   No visible sessions — creating root session")
-            // No visible sessions — create a root session for this project
+            DebugLog.log("[restore]   No visible sessions — creating root session")
             let rootSession = Session(
                 name: project.name,
                 projectPath: project.path,
@@ -250,29 +247,30 @@ struct WorkspaceView: View {
 
             launchSessionInTerminal(rootSession)
             windowState.activeSession = rootSession
-            print("[WorkspaceView]   Created root session: \(rootSession.name), set as activeSession")
+            DebugLog.log("[restore]   Created & activated root: \(rootSession.name)")
         } else {
-            // Restore from UserDefaults
-            let lastId = UserDefaults.standard.string(forKey: "lastSession:\(project.path)")
-                .flatMap { UUID(uuidString: $0) }
-            print("[WorkspaceView]   lastSession key: \(UserDefaults.standard.string(forKey: "lastSession:\(project.path)") ?? "NIL")")
+            let savedKey = "lastSession:\(project.path)"
+            let savedString = UserDefaults.standard.string(forKey: savedKey)
+            let lastId = savedString.flatMap { UUID(uuidString: $0) }
+            DebugLog.log("[restore]   savedKey=\(savedKey)")
+            DebugLog.log("[restore]   savedUUID=\(savedString ?? "NIL")")
+            DebugLog.log("[restore]   visibleIDs=\(visibleSessions.map { "\($0.name):\($0.id.uuidString)" }.joined(separator: ", "))")
 
             let restoredSession: Session?
             if let lastId = lastId,
                let lastSession = visibleSessions.first(where: { $0.id == lastId }) {
                 restoredSession = lastSession
-                print("[WorkspaceView]   Restoring from UserDefaults: \(lastSession.name)")
+                DebugLog.log("[restore]   Found saved session: \(lastSession.name)")
             } else {
-                // Fall back to most recent visible session
                 restoredSession = visibleSessions.first
-                print("[WorkspaceView]   No matching lastId, falling back to first visible: \(visibleSessions.first?.name ?? "NIL")")
+                DebugLog.log("[restore]   Fallback to first visible: \(visibleSessions.first?.name ?? "NIL")")
             }
 
             if let session = restoredSession {
-                print("[WorkspaceView]   Calling launchSessionInTerminal for: \(session.name) (hasBeenLaunched=\(session.hasBeenLaunched))")
+                DebugLog.log("[restore]   Launching: \(session.name) (hasBeenLaunched=\(session.hasBeenLaunched))")
                 launchSessionInTerminal(session)
                 windowState.activeSession = session
-                print("[WorkspaceView]   Set windowState.activeSession = \(session.name)")
+                DebugLog.log("[restore]   DONE — activeSession=\(session.name)")
             }
         }
     }
@@ -281,12 +279,10 @@ struct WorkspaceView: View {
 
     /// Launch a session in external Terminal.app with proper flags
     private func launchSessionInTerminal(_ session: Session) {
-        print("[WorkspaceView] launchSessionInTerminal: \(session.name) (id=\(session.id), hasBeenLaunched=\(session.hasBeenLaunched))")
-        // Mark as launched - TerminalView will auto-start Claude via SwiftTerm
+        DebugLog.log("[launch] \(session.name) — hasBeenLaunched was \(session.hasBeenLaunched), setting to true")
         session.hasBeenLaunched = true
         session.lastAccessedAt = Date()
         launchedExternalSessions.insert(session.id)
-        print("[WorkspaceView]   hasBeenLaunched is now true")
     }
 
     // MARK: - Terminal Activation
@@ -443,6 +439,12 @@ struct SessionSidebar: View {
         session.project = targetProject
         session.taskGroup = selectedGroupForNewTask
         session.taskFolderPath = expectedPath.path  // Set BEFORE insert to prevent duplicate imports
+
+        // Create the directory immediately so startClaude() uses it as workingDir
+        // instead of falling back to the project directory (which has old conversations).
+        // The full TASK.md setup happens asynchronously below.
+        try? FileManager.default.createDirectory(at: expectedPath, withIntermediateDirectories: true)
+
         modelContext.insert(session)
         try? modelContext.save()  // Ensure it's persisted before file watcher can trigger
 
@@ -1177,6 +1179,9 @@ struct ProjectGroupSection: View {
             taskName: name
         )
         session.taskFolderPath = expectedPath.path
+
+        // Create the directory immediately so startClaude() uses it as workingDir
+        try? FileManager.default.createDirectory(at: expectedPath, withIntermediateDirectories: true)
 
         modelContext.insert(session)
         try? modelContext.save()  // Ensure it's persisted before file watcher can trigger
