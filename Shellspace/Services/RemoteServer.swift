@@ -443,6 +443,9 @@ final class RemoteServer {
 
         let controller = appState.getOrCreateController(for: session)
 
+        // Snapshot content length before launch to detect NEW content from Claude
+        let preLaunchLength = controller.getFullTerminalContent().count
+
         controller.startClaude(
             in: session.projectPath,
             sessionId: session.id,
@@ -462,20 +465,23 @@ final class RemoteServer {
         session.hasBeenLaunched = true
         try? mainContext.save()
 
-        // Wait for Claude to be ready (poll terminal content for Claude's prompt)
+        // Wait for Claude to be ready by detecting NEW content after launch
         var ready = false
         for _ in 0..<30 { // Up to 15 seconds
             try? await Task.sleep(for: .milliseconds(500))
             let content = await MainActor.run { controller.getFullTerminalContent() }
-            // Claude shows ">" prompt or "waiting for input" when ready
-            if content.contains("❯") || content.contains(">") || content.contains("bypass permissions") || content.contains("autoaccept") {
-                ready = true
-                break
+            // Only check content that appeared AFTER we launched
+            if content.count > preLaunchLength {
+                let newContent = String(content.suffix(content.count - preLaunchLength))
+                if newContent.contains("bypass permissions") || newContent.contains("autoaccept") || newContent.contains("shift+tab") {
+                    ready = true
+                    break
+                }
             }
         }
 
         if !ready {
-            DebugLog.log("[RemoteServer] Claude may not be ready yet for session \(sessionId), sending input anyway")
+            DebugLog.log("[RemoteServer] Claude may not be ready yet for session \(sessionId), sending input anyway after 15s")
         }
 
         controller.sendToTerminal(message + "\r")

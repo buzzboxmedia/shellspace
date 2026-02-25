@@ -20,8 +20,10 @@ struct TerminalView: View {
     private var isLandscape: Bool { verticalSizeClass == .compact }
 
     private static let ansiRegex = try! Regex("\\x1B\\[[0-9;]*[a-zA-Z]")
-    // Strip box-drawing, block elements, braille, and other decorative Unicode
-    private static let decorativeRegex = try! Regex("[\\u2500-\\u257F\\u2580-\\u259F\\u2800-\\u28FF\\u2190-\\u21FF\\u25A0-\\u25FF\\u2700-\\u27BF\\u2E80-\\u2EFF\\u3000-\\u303F]+")
+    // Null bytes from SwiftTerm buffer (appear between characters, collapse spaces)
+    private static let nullRegex = try! Regex("\\x00+")
+    // Box-drawing and block element characters used by Claude's UI
+    private static let decorativeRegex = try! Regex("[\\u2500-\\u259F]+")
 
     var body: some View {
         VStack(spacing: 0) {
@@ -201,7 +203,7 @@ struct TerminalView: View {
                 let wsContent = wsManager.terminalContent
                 if !wsContent.isEmpty {
                     wsEmptyCount = 0
-                    let stripped = wsContent.replacing(Self.ansiRegex, with: "").replacing(Self.decorativeRegex, with: "")
+                    let stripped = wsContent.replacing(Self.nullRegex, with: "").replacing(Self.ansiRegex, with: "").replacing(Self.decorativeRegex, with: "")
                     if stripped != terminalContent {
                         terminalContent = stripped
                         isRunning = wsManager.terminalIsRunning
@@ -244,7 +246,7 @@ struct TerminalView: View {
         guard let api = viewModel.api else { return }
         do {
             let response = try await api.terminalContent(sessionId: session.id)
-            let stripped = response.content.replacing(Self.ansiRegex, with: "").replacing(Self.decorativeRegex, with: "")
+            let stripped = response.content.replacing(Self.nullRegex, with: "").replacing(Self.ansiRegex, with: "").replacing(Self.decorativeRegex, with: "")
             await MainActor.run {
                 terminalContent = stripped
                 isRunning = response.isRunning
