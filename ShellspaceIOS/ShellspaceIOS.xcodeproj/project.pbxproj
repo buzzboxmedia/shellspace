@@ -15,6 +15,7 @@
 		8E95F0985BA2E7B28848BCA3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B9E985E82415A46F00FF5EE6 /* Assets.xcassets */; };
 		A1B2C3D4E5F6A7B8C9D0E1F2 /* WebSocketManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F2A3 /* WebSocketManager.swift */; };
 		BD407B5A641AFC42E0453068 /* RemoteSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1818BC8CE1A1956E487B95AF /* RemoteSession.swift */; };
+		CC11DD22EE33FF44AA55BB66 /* RemoteTaskFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD22EE33FF44AA55BB66CC11 /* RemoteTaskFolder.swift */; };
 		BB22CC33DD44EE55FF66AA11 /* SearchResultsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF66 /* SearchResultsView.swift */; };
 		C15EDE356770C613D1DA64CC /* RemoteProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25E0FD3D0B5063A4C0F6BEA1 /* RemoteProject.swift */; };
 		D97B5392C8A3DD431C34BCDD /* ProjectsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA35A5EB2C1F5E7B6BBAB1CE /* ProjectsListView.swift */; };
@@ -26,6 +27,7 @@
 /* Begin PBXFileReference section */
 		1556AE3EFAD0FADFA769DFA1 /* BrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseView.swift; sourceTree = "<group>"; };
 		1818BC8CE1A1956E487B95AF /* RemoteSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSession.swift; sourceTree = "<group>"; };
+		DD22EE33FF44AA55BB66CC11 /* RemoteTaskFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTaskFolder.swift; sourceTree = "<group>"; };
 		25E0FD3D0B5063A4C0F6BEA1 /* RemoteProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteProject.swift; sourceTree = "<group>"; };
 		4C05FAF18ABF838997FFB0C1 /* WaitingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaitingView.swift; sourceTree = "<group>"; };
 		4D32A54C5B07AAA5E8F89338 /* ShellspaceIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShellspaceIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -47,6 +49,7 @@
 			children = (
 				25E0FD3D0B5063A4C0F6BEA1 /* RemoteProject.swift */,
 				1818BC8CE1A1956E487B95AF /* RemoteSession.swift */,
+				DD22EE33FF44AA55BB66CC11 /* RemoteTaskFolder.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -177,6 +180,7 @@
 				D97B5392C8A3DD431C34BCDD /* ProjectsListView.swift in Sources */,
 				C15EDE356770C613D1DA64CC /* RemoteProject.swift in Sources */,
 				BD407B5A641AFC42E0453068 /* RemoteSession.swift in Sources */,
+				CC11DD22EE33FF44AA55BB66 /* RemoteTaskFolder.swift in Sources */,
 				BB22CC33DD44EE55FF66AA11 /* SearchResultsView.swift in Sources */,
 				61A5AE276F4E6AD24BFE2A12 /* SessionsListView.swift in Sources */,
 				27E05565A65A447D6270D241 /* SettingsSheet.swift in Sources */,

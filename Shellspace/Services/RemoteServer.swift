@@ -68,6 +68,11 @@ final class RemoteServer {
             return await server.handleProjectSessions(projectId: id)
         }
 
+        router.get("api/projects/{id}/tasks") { _, context -> Response in
+            let id = context.parameters.get("id") ?? ""
+            return await server.handleProjectTasks(projectId: id)
+        }
+
         router.get("api/sessions/{id}") { _, context -> Response in
             let id = context.parameters.get("id") ?? ""
             return await server.handleSessionDetail(sessionId: id)
@@ -333,6 +338,32 @@ final class RemoteServer {
             .map { sessionToJSON($0) }
 
         return jsonResponse(["sessions": sessionList])
+    }
+
+    private func handleProjectTasks(projectId: String) -> Response {
+        guard let container = modelContainer,
+              let uuid = UUID(uuidString: projectId) else {
+            return jsonResponse(["error": "Invalid project ID"], status: .badRequest)
+        }
+
+        let context = ModelContext(container)
+        let descriptor = FetchDescriptor<Project>()
+        guard let projects = try? context.fetch(descriptor),
+              let project = projects.first(where: { $0.id == uuid }) else {
+            return jsonResponse(["error": "Project not found"], status: .notFound)
+        }
+
+        let tasks = TaskFolderService.shared.listAllTasks(for: project.path)
+        let taskList: [[String: Any]] = tasks.map { task in
+            var dict: [String: Any] = ["path": task.folderPath]
+            if let title = task.title { dict["title"] = title }
+            if let status = task.status { dict["status"] = status }
+            if let created = task.created { dict["created"] = created }
+            if let description = task.description { dict["description"] = description }
+            return dict
+        }
+
+        return jsonResponse(["tasks": taskList])
     }
 
     private func handleSessionDetail(sessionId: String) -> Response {

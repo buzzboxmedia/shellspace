@@ -51,6 +51,11 @@ final class ShellspaceAPI: Sendable {
         return response.sessions
     }
 
+    func tasks(projectId: String) async throws -> [RemoteTaskFolder] {
+        let response: TasksResponse = try await get("api/projects/\(projectId)/tasks")
+        return response.tasks
+    }
+
     func sessionDetail(id: String) async throws -> RemoteSession {
         try await get("api/sessions/\(id)")
     }
