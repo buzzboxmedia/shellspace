@@ -429,38 +429,46 @@ final class RemoteServer {
             return jsonResponse(["error": "No model container"], status: .internalServerError)
         }
 
-        // Fetch session from mainContext so we can persist hasBeenLaunched
-        let mainContext = container.mainContext
-        let descriptor = FetchDescriptor<Session>()
-        guard let sessions = try? mainContext.fetch(descriptor),
-              let session = sessions.first(where: { $0.id == uuid }) else {
-            return jsonResponse(["error": "Session not found"], status: .notFound)
-        }
-
         guard let appState = appState else {
             return jsonResponse(["error": "App state unavailable"], status: .internalServerError)
         }
 
-        let controller = appState.getOrCreateController(for: session)
+        // All Core Data + UI work must happen on main thread
+        let controller = await MainActor.run {
+            let mainContext = container.mainContext
+            let descriptor = FetchDescriptor<Session>()
+            guard let sessions = try? mainContext.fetch(descriptor),
+                  let session = sessions.first(where: { $0.id == uuid }) else {
+                return nil as TerminalController?
+            }
 
-        controller.startClaude(
-            in: session.projectPath,
-            sessionId: session.id,
-            claudeSessionId: session.claudeSessionId,
-            parkerBriefing: session.parkerBriefing,
-            taskFolderPath: session.taskFolderPath,
-            hasBeenLaunched: session.hasBeenLaunched
-        )
+            let ctrl = appState.getOrCreateController(for: session)
 
-        // Set terminal size AFTER startClaude (which creates the terminal with .zero frame)
-        if let terminal = controller.terminalView {
-            terminal.frame = NSRect(x: 0, y: 0, width: 960, height: 480)
-            terminal.getTerminal().resize(cols: 120, rows: 40)
+            ctrl.startClaude(
+                in: session.projectPath,
+                sessionId: session.id,
+                claudeSessionId: session.claudeSessionId,
+                parkerBriefing: session.parkerBriefing,
+                taskFolderPath: session.taskFolderPath,
+                hasBeenLaunched: session.hasBeenLaunched
+            )
+
+            // Set terminal size AFTER startClaude (which creates the terminal with .zero frame)
+            if let terminal = ctrl.terminalView {
+                terminal.frame = NSRect(x: 0, y: 0, width: 960, height: 480)
+                terminal.getTerminal().resize(cols: 120, rows: 40)
+            }
+
+            // Mark as launched and persist
+            session.hasBeenLaunched = true
+            try? mainContext.save()
+
+            return ctrl
         }
 
-        // Mark as launched and persist
-        session.hasBeenLaunched = true
-        try? mainContext.save()
+        guard let controller else {
+            return jsonResponse(["error": "Session not found"], status: .notFound)
+        }
 
         // Wait for old --continue buffer to finish loading (content stabilizes)
         var lastLength = 0
