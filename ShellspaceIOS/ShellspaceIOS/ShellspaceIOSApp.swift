@@ -85,13 +85,20 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
 
 struct ContentView: View {
     @Environment(AppViewModel.self) private var viewModel
+    @State private var hasStartedDiscovery = false
 
     var body: some View {
         @Bindable var vm = viewModel
 
         Group {
-            if viewModel.macHost.isEmpty {
+            if viewModel.needsSetup && !hasStartedDiscovery {
+                // No manual host and no Bonjour results yet -- show setup
                 SettingsSheet(isPresented: .constant(true), isInitialSetup: true)
+                    .task {
+                        // Start Bonjour browsing even on the setup screen
+                        hasStartedDiscovery = true
+                        await viewModel.startDiscoveryAndConnect()
+                    }
             } else {
                 TabView(selection: $vm.selectedTab) {
                     WaitingView()
@@ -122,7 +129,10 @@ struct ContentView: View {
                     SettingsSheet(isPresented: $vm.showSettings)
                 }
                 .task {
-                    await viewModel.connectAndLoad()
+                    if !hasStartedDiscovery {
+                        hasStartedDiscovery = true
+                        await viewModel.startDiscoveryAndConnect()
+                    }
                     viewModel.handleLaunchArguments()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in

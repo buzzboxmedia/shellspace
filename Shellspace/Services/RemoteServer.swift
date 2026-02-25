@@ -5,14 +5,20 @@ import NIOCore
 import SwiftData
 import WSCore
 
-/// Embedded HTTP + WebSocket server for iOS companion app access over Tailscale.
+/// Embedded HTTP + WebSocket server for iOS companion app access over Tailscale or local network.
 /// Exposes projects, sessions, and terminal I/O on port 8847.
+/// Advertises via Bonjour (_shellspace._tcp) for auto-discovery by the iOS companion app.
 @MainActor
 final class RemoteServer {
     static let port = 8847
     private var task: Task<Void, Never>?
     private weak var appState: AppState?
     private var modelContainer: ModelContainer?
+
+    // Bonjour advertisement (NetService is deprecated but is the only way to advertise
+    // a service on a port already bound by another server without port conflicts)
+    @available(macOS, deprecated: 13.0)
+    private var bonjourService: NetService?
 
     init() {}
 
@@ -33,6 +39,7 @@ final class RemoteServer {
                 )
                 await MainActor.run {
                     DebugLog.log("[RemoteServer] Starting on port \(RemoteServer.port) (HTTP + WebSocket)")
+                    server.startBonjourAdvertising()
                 }
                 try await app.runService()
             } catch {
@@ -44,9 +51,31 @@ final class RemoteServer {
     }
 
     func stop() {
+        stopBonjourAdvertising()
         task?.cancel()
         task = nil
         DebugLog.log("[RemoteServer] Stopped")
+    }
+
+    // MARK: - Bonjour Advertising
+
+    private func startBonjourAdvertising() {
+        let name = Host.current().localizedName ?? "Shellspace"
+        let service = NetService(
+            domain: "",
+            type: "_shellspace._tcp.",
+            name: name,
+            port: Int32(RemoteServer.port)
+        )
+        service.publish()
+        bonjourService = service
+        DebugLog.log("[RemoteServer] Bonjour: advertising '\(name)' as _shellspace._tcp on port \(RemoteServer.port)")
+    }
+
+    private func stopBonjourAdvertising() {
+        bonjourService?.stop()
+        bonjourService = nil
+        DebugLog.log("[RemoteServer] Bonjour: stopped advertising")
     }
 
     // MARK: - HTTP Router

@@ -18,5 +18,11 @@
 			<string>com.buzzbox.shellspace-ios</string>
 		</dict>
 	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Shellspace uses your local network to automatically discover and connect to your Mac running Shellspace.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_shellspace._tcp</string>
+	</array>
 </dict>
 </plist>

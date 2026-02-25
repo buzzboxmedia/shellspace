@@ -29,4 +29,4 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ENABLE_PREVIEWS: YES
-        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Shellspace needs local network access to connect to your Mac over Tailscale."
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Shellspace uses your local network to automatically discover and connect to your Mac running Shellspace."

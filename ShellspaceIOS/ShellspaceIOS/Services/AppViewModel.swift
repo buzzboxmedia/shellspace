@@ -30,9 +30,17 @@ enum ConnectionState {
     }
 }
 
+/// How the connection to the Mac was established.
+enum ConnectionMode: Equatable {
+    case none
+    case bonjour(hostName: String)   // Auto-discovered on local network
+    case manual                       // User-entered IP / hostname
+}
+
 @Observable
 final class AppViewModel {
     var connectionState: ConnectionState = .disconnected
+    var connectionMode: ConnectionMode = .none
     var projects: [RemoteProject] = []
     var allSessions: [RemoteSession] = []
     var api: ShellspaceAPI?
@@ -41,11 +49,18 @@ final class AppViewModel {
     var showSettings = false
     var lastRefreshed: Date?
 
-    /// Set by notification tap or deep link — navigates to this session
+    /// Set by notification tap or deep link -- navigates to this session
     var pendingSessionId: String?
 
     /// Set to true to programmatically activate search in BrowseView
     var activateSearch = false
+
+    // MARK: - Bonjour Discovery
+
+    let bonjourBrowser = BonjourBrowser()
+
+    /// Whether Bonjour auto-connect has been attempted this session
+    private var bonjourAutoConnected = false
 
     /// Check launch arguments and UserDefaults for navigation
     func handleLaunchArguments() {
@@ -86,10 +101,15 @@ final class AppViewModel {
 
     private var refreshTask: Task<Void, Never>?
     private var wsObserveTask: Task<Void, Never>?
+    private var bonjourWatchTask: Task<Void, Never>?
 
+    /// Persisted manual host (empty means no manual override -- use Bonjour)
     var macHost: String = UserDefaults.standard.string(forKey: "macHost") ?? "" {
         didSet { UserDefaults.standard.set(macHost, forKey: "macHost") }
     }
+
+    /// The host currently being used for the active connection (may differ from macHost if Bonjour)
+    var activeHost: String = ""
 
     var waitingSessions: [RemoteSession] {
         allSessions
@@ -103,14 +123,40 @@ final class AppViewModel {
             .sorted { $0.lastAccessedAt > $1.lastAccessedAt }
     }
 
+    /// Whether the app should show the initial setup screen.
+    /// Now returns false if Bonjour is actively searching or has found hosts.
+    var needsSetup: Bool {
+        macHost.isEmpty && !connectionState.isConnected && bonjourBrowser.discoveredHosts.isEmpty && !bonjourBrowser.isSearching
+    }
+
     // MARK: - Connection
 
-    func connectAndLoad() async {
-        guard !macHost.isEmpty else { return }
+    /// Start Bonjour browsing and attempt connection.
+    /// If a manual host is set, connects directly. Otherwise waits for Bonjour discovery.
+    func startDiscoveryAndConnect() async {
+        // Always start Bonjour browsing in the background
+        bonjourBrowser.startBrowsing()
+
+        if !macHost.isEmpty {
+            // Manual host is set -- connect directly
+            activeHost = macHost
+            connectionMode = .manual
+            await connectToHost(macHost)
+        } else {
+            // No manual host -- wait for Bonjour to find something
+            connectionState = .connecting
+            startBonjourWatcher()
+        }
+    }
+
+    /// Connect to a specific host (IP or hostname).
+    func connectToHost(_ host: String) async {
+        guard !host.isEmpty else { return }
+        activeHost = host
         connectionState = .connecting
 
         do {
-            let newAPI = try ShellspaceAPI(host: macHost)
+            let newAPI = try ShellspaceAPI(host: host)
             let status = try await newAPI.status()
             guard status.status == "online" else {
                 connectionState = .error("Server not online")
@@ -121,7 +167,7 @@ final class AppViewModel {
             await refresh()
 
             // Start WebSocket for real-time session updates
-            let manager = WebSocketManager(host: macHost)
+            let manager = WebSocketManager(host: host)
             manager.connectSessions()
             wsManager = manager
             startWebSocketObserver()
@@ -132,17 +178,83 @@ final class AppViewModel {
         }
     }
 
+    /// Legacy connect method -- now delegates to startDiscoveryAndConnect
+    func connectAndLoad() async {
+        await startDiscoveryAndConnect()
+    }
+
+    /// Connect to a discovered Bonjour host
+    func connectToDiscoveredHost(_ host: DiscoveredHost) async {
+        disconnect()
+        connectionMode = .bonjour(hostName: host.name)
+        await connectToHost(host.host)
+    }
+
+    /// Set a manual host, save it, and connect
+    func setManualHost(_ host: String) {
+        macHost = host
+        disconnect()
+        connectionMode = .manual
+        activeHost = host
+        Task {
+            await connectToHost(host)
+        }
+    }
+
+    /// Clear the manual host (revert to Bonjour-only)
+    func clearManualHost() {
+        macHost = ""
+        disconnect()
+        bonjourAutoConnected = false
+        Task {
+            await startDiscoveryAndConnect()
+        }
+    }
+
     func disconnect() {
         refreshTask?.cancel()
         refreshTask = nil
         wsObserveTask?.cancel()
         wsObserveTask = nil
+        bonjourWatchTask?.cancel()
+        bonjourWatchTask = nil
         wsManager?.disconnectAll()
         wsManager = nil
         api = nil
         projects = []
         allSessions = []
         connectionState = .disconnected
+        connectionMode = .none
+        activeHost = ""
+    }
+
+    // MARK: - Bonjour Watcher
+
+    /// Watches for Bonjour discovery results and auto-connects to the first host found.
+    private func startBonjourWatcher() {
+        bonjourWatchTask?.cancel()
+        bonjourWatchTask = Task { [weak self] in
+            // Poll for discovered hosts (BonjourBrowser updates are @Observable)
+            for _ in 0..<60 {  // Try for up to 30 seconds
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+
+                if let first = self.bonjourBrowser.discoveredHosts.first, !self.bonjourAutoConnected {
+                    self.bonjourAutoConnected = true
+                    self.connectionMode = .bonjour(hostName: first.name)
+                    await self.connectToHost(first.host)
+                    return
+                }
+            }
+
+            // Timed out -- no Bonjour hosts found
+            await MainActor.run {
+                if case .connecting = self?.connectionState {
+                    self?.connectionState = .disconnected
+                }
+            }
+        }
     }
 
     // MARK: - Data Loading
