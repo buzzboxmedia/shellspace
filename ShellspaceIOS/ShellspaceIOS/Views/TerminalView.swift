@@ -20,6 +20,8 @@ struct TerminalView: View {
     private var isLandscape: Bool { verticalSizeClass == .compact }
 
     private static let ansiRegex = try! Regex("\\x1B\\[[0-9;]*[a-zA-Z]")
+    // Box-drawing characters used by Claude's UI for borders/rules
+    private static let boxDrawingRegex = try! Regex("[\\u2500-\\u257F]+")
 
     var body: some View {
         VStack(spacing: 0) {
@@ -89,13 +91,14 @@ struct TerminalView: View {
 
             // Input bar - dark themed
             HStack(spacing: 8) {
-                TextField("Send to terminal...", text: $inputText)
+                TextField("Send to terminal...", text: $inputText, axis: .vertical)
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(.white)
+                    .lineLimit(1...4)
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 12)
                     .background(Color(white: 0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                     .focused($inputFocused)
                     .submitLabel(.send)
                     .onSubmit { sendCurrentInput() }
@@ -197,7 +200,7 @@ struct TerminalView: View {
                 let wsContent = wsManager.terminalContent
                 if !wsContent.isEmpty {
                     wsEmptyCount = 0
-                    let stripped = wsContent.replacing(Self.ansiRegex, with: "")
+                    let stripped = wsContent.replacing(Self.ansiRegex, with: "").replacing(Self.boxDrawingRegex, with: "")
                     if stripped != terminalContent {
                         terminalContent = stripped
                         isRunning = wsManager.terminalIsRunning
@@ -240,7 +243,7 @@ struct TerminalView: View {
         guard let api = viewModel.api else { return }
         do {
             let response = try await api.terminalContent(sessionId: session.id)
-            let stripped = response.content.replacing(Self.ansiRegex, with: "")
+            let stripped = response.content.replacing(Self.ansiRegex, with: "").replacing(Self.boxDrawingRegex, with: "")
             await MainActor.run {
                 terminalContent = stripped
                 isRunning = response.isRunning
