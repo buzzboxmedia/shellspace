@@ -51,3 +51,7 @@ struct InputResponse: Codable {
     let status: String
     let sessionId: String
 }
+
+struct CreateSessionResponse: Codable {
+    let session: RemoteSession
+}

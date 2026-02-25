@@ -7,6 +7,7 @@ struct SessionsListView: View {
     @State private var taskFolders: [RemoteTaskFolder] = []
     @State private var searchText = ""
     @State private var isLoading = true
+    @State private var showCreateSheet = false
 
     private var projectSessions: [RemoteSession] {
         viewModel.allSessions
@@ -14,115 +15,77 @@ struct SessionsListView: View {
             .sorted { $0.lastAccessedAt > $1.lastAccessedAt }
     }
 
-    // Map task folder paths to linked sessions
     private func sessionForTask(_ task: RemoteTaskFolder) -> RemoteSession? {
         projectSessions.first { $0.taskFolderPath == task.path }
     }
 
-    // Root session (no task folder path)
-    private var rootSession: RemoteSession? {
-        projectSessions.first { $0.taskFolderPath == nil }
-    }
-
-    // Sessions not linked to any task folder (excluding root)
-    private var unlinkedSessions: [RemoteSession] {
+    // Sessions not linked to any known task folder
+    private var orphanSessions: [RemoteSession] {
         let taskPaths = Set(taskFolders.map(\.path))
         return projectSessions.filter { session in
-            guard session.taskFolderPath != nil else { return false }
-            return !taskPaths.contains(session.taskFolderPath!)
+            guard let tfp = session.taskFolderPath else { return true }
+            return !taskPaths.contains(tfp)
         }
     }
 
-    // Filtered results
+    // Combined filtered items
     private var filteredTasks: [RemoteTaskFolder] {
-        guard !searchText.isEmpty else { return taskFolders }
+        guard !searchText.isEmpty else { return taskFolders.filter { !$0.isCompleted } }
         let query = searchText.lowercased()
-        return taskFolders.filter {
+        return taskFolders.filter { !$0.isCompleted }.filter {
             $0.displayName.lowercased().contains(query) ||
             ($0.description?.lowercased().contains(query) ?? false)
         }
     }
 
-    private var filteredUnlinkedSessions: [RemoteSession] {
-        guard !searchText.isEmpty else { return unlinkedSessions }
+    private var completedTasks: [RemoteTaskFolder] {
+        let completed = taskFolders.filter { $0.isCompleted }
+        guard !searchText.isEmpty else { return completed }
         let query = searchText.lowercased()
-        return unlinkedSessions.filter {
+        return completed.filter {
+            $0.displayName.lowercased().contains(query) ||
+            ($0.description?.lowercased().contains(query) ?? false)
+        }
+    }
+
+    private var filteredOrphanSessions: [RemoteSession] {
+        guard !searchText.isEmpty else { return orphanSessions }
+        let query = searchText.lowercased()
+        return orphanSessions.filter {
             $0.name.lowercased().contains(query) ||
             ($0.summary?.lowercased().contains(query) ?? false)
         }
     }
 
-    private var activeTasks: [RemoteTaskFolder] {
-        filteredTasks.filter { !$0.isCompleted }
-    }
-
-    private var completedTasks: [RemoteTaskFolder] {
-        filteredTasks.filter { $0.isCompleted }
-    }
-
     private var hasContent: Bool {
-        rootSession != nil || !activeTasks.isEmpty || !completedTasks.isEmpty || !filteredUnlinkedSessions.isEmpty
+        !filteredTasks.isEmpty || !completedTasks.isEmpty || !filteredOrphanSessions.isEmpty
     }
 
     var body: some View {
         Group {
             if isLoading {
-                ProgressView("Loading tasks...")
+                ProgressView("Loading...")
             } else if !hasContent && searchText.isEmpty {
                 ContentUnavailableView(
                     "No Tasks or Sessions",
                     systemImage: "folder",
-                    description: Text("No tasks or sessions for \(project.name)")
+                    description: Text("Tap + to create a new task")
                 )
             } else if !hasContent && !searchText.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             } else {
                 List {
-                    // Root session
-                    if let root = rootSession {
-                        Section {
-                            NavigationLink(value: root) {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "terminal.fill")
-                                        .font(.subheadline)
-                                        .foregroundStyle(root.isWaitingForInput ? .orange : root.isRunning ? .green : .blue)
-                                        .frame(width: 22)
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(project.name)
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                        if let summary = root.summary {
-                                            Text(summary)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(2)
-                                        }
-                                    }
-                                    Spacer()
-                                    if root.isWaitingForInput {
-                                        Image(systemName: "bell.badge.fill")
-                                            .font(.caption)
-                                            .foregroundStyle(.orange)
-                                    }
-                                }
-                                .padding(.vertical, 4)
-                            }
+                    // Tasks (active)
+                    if !filteredTasks.isEmpty {
+                        ForEach(filteredTasks) { task in
+                            taskRow(task)
                         }
                     }
 
-                    // Active tasks
-                    if !activeTasks.isEmpty {
-                        Section("Active") {
-                            ForEach(activeTasks) { task in
-                                taskRow(task)
-                            }
-                        }
-                    }
-
-                    // Unlinked sessions
-                    if !filteredUnlinkedSessions.isEmpty {
+                    // Orphan sessions (no task folder match)
+                    if !filteredOrphanSessions.isEmpty {
                         Section("Sessions") {
-                            ForEach(filteredUnlinkedSessions) { session in
+                            ForEach(filteredOrphanSessions) { session in
                                 NavigationLink(value: session) {
                                     SessionRow(session: session)
                                 }
@@ -149,8 +112,25 @@ struct SessionsListView: View {
         .searchable(
             text: $searchText,
             placement: .navigationBarDrawer(displayMode: .always),
-            prompt: "What are you working on?"
+            prompt: "Search tasks..."
         )
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showCreateSheet = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }
+        .sheet(isPresented: $showCreateSheet) {
+            CreateSessionSheet(project: project) { newSession in
+                // Reload tasks after creation
+                Task {
+                    await loadTasks()
+                }
+            }
+        }
         .task {
             await loadTasks()
         }

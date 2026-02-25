@@ -52,7 +52,7 @@ struct WaitingView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
                         viewModel.activateSearch = true
-                        viewModel.selectedTab = .browse
+                        viewModel.selectedTab = .sessions
                     } label: {
                         Image(systemName: "magnifyingglass")
                     }

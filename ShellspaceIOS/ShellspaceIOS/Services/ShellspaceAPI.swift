@@ -64,6 +64,18 @@ final class ShellspaceAPI: Sendable {
         try await get("api/sessions/\(sessionId)/terminal")
     }
 
+    func createSession(projectId: String, name: String, description: String?) async throws -> RemoteSession {
+        var body: [String: Any] = [
+            "projectId": projectId,
+            "name": name,
+        ]
+        if let description, !description.isEmpty {
+            body["description"] = description
+        }
+        let response: CreateSessionResponse = try await post("api/sessions", body: body)
+        return response.session
+    }
+
     func sendInput(sessionId: String, message: String) async throws {
         let url = baseURL.appending(path: "api/sessions/\(sessionId)/input")
         var request = URLRequest(url: url)
@@ -81,6 +93,19 @@ final class ShellspaceAPI: Sendable {
     private func get<T: Codable>(_ path: String) async throws -> T {
         let url = baseURL.appending(path: path)
         let (data, response) = try await session.data(from: url)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.serverError("Server returned error")
+        }
+        return try Self.sharedDecoder.decode(T.self, from: data)
+    }
+
+    private func post<T: Codable>(_ path: String, body: [String: Any]) async throws -> T {
+        let url = baseURL.appending(path: path)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
             throw APIError.serverError("Server returned error")
         }

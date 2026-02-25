@@ -37,7 +37,7 @@ final class AppViewModel {
     var allSessions: [RemoteSession] = []
     var api: ShellspaceAPI?
     var wsManager: WebSocketManager?
-    var selectedTab: AppTab = .waiting
+    var selectedTab: AppTab = .inbox
     var showSettings = false
     var lastRefreshed: Date?
 
@@ -69,15 +69,16 @@ final class AppViewModel {
 
         // Apply navigation
         if let sessionId = targetSessionId {
-            selectedTab = .browse
+            selectedTab = .sessions
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(800))
                 self.pendingSessionId = sessionId
             }
         } else if let tab = targetTab {
             switch tab {
-            case "browse": selectedTab = .browse
-            case "waiting": selectedTab = .waiting
+            case "browse", "projects": selectedTab = .projects
+            case "waiting", "inbox": selectedTab = .inbox
+            case "sessions": selectedTab = .sessions
             default: break
             }
         }
@@ -93,6 +94,12 @@ final class AppViewModel {
     var waitingSessions: [RemoteSession] {
         allSessions
             .filter { $0.isWaitingForInput && !$0.isCompleted && !$0.isHidden }
+            .sorted { $0.lastAccessedAt > $1.lastAccessedAt }
+    }
+
+    var allActiveSessions: [RemoteSession] {
+        allSessions
+            .filter { !$0.isCompleted && !$0.isHidden }
             .sorted { $0.lastAccessedAt > $1.lastAccessedAt }
     }
 
@@ -161,6 +168,17 @@ final class AppViewModel {
             if case .connected = connectionState {
                 connectionState = .error("Refresh failed")
             }
+        }
+    }
+
+    func createSession(projectId: String, name: String, description: String?) async -> RemoteSession? {
+        guard let api else { return nil }
+        do {
+            let session = try await api.createSession(projectId: projectId, name: name, description: description)
+            await refresh()
+            return session
+        } catch {
+            return nil
         }
     }
 

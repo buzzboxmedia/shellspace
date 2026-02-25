@@ -14,14 +14,16 @@ struct ShellspaceIOSApp: App {
         guard url.scheme == "shellspace" else { return }
         let host = url.host ?? ""
         switch host {
-        case "browse":
-            viewModel.selectedTab = .browse
-        case "waiting":
-            viewModel.selectedTab = .waiting
+        case "browse", "projects":
+            viewModel.selectedTab = .projects
+        case "waiting", "inbox":
+            viewModel.selectedTab = .inbox
+        case "sessions":
+            viewModel.selectedTab = .sessions
         case "session":
             let sessionId = url.pathComponents.dropFirst().first ?? ""
             guard !sessionId.isEmpty else { return }
-            viewModel.selectedTab = .browse
+            viewModel.selectedTab = .sessions
             viewModel.pendingSessionId = sessionId
         default:
             break
@@ -64,7 +66,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         let userInfo = response.notification.request.content.userInfo
         if let sessionId = userInfo["sessionId"] as? String {
             Task { @MainActor in
-                viewModel?.selectedTab = .waiting
+                viewModel?.selectedTab = .inbox
                 viewModel?.pendingSessionId = sessionId
             }
         }
@@ -94,16 +96,22 @@ struct ContentView: View {
                 TabView(selection: $vm.selectedTab) {
                     WaitingView()
                         .tabItem {
-                            Label("Waiting", systemImage: "bell.badge")
+                            Label("Inbox", systemImage: "bell.badge")
                         }
                         .badge(viewModel.waitingSessions.count)
-                        .tag(AppTab.waiting)
+                        .tag(AppTab.inbox)
+
+                    AllSessionsView()
+                        .tabItem {
+                            Label("Sessions", systemImage: "text.bubble")
+                        }
+                        .tag(AppTab.sessions)
 
                     BrowseView()
                         .tabItem {
-                            Label("Browse", systemImage: "folder")
+                            Label("Projects", systemImage: "folder")
                         }
-                        .tag(AppTab.browse)
+                        .tag(AppTab.projects)
                 }
                 .overlay(alignment: .topTrailing) {
                     ConnectionDot()
@@ -126,8 +134,9 @@ struct ContentView: View {
 }
 
 enum AppTab: Hashable {
-    case waiting
-    case browse
+    case inbox
+    case sessions
+    case projects
 }
 
 struct ConnectionDot: View {

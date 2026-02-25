@@ -89,6 +89,11 @@ final class RemoteServer {
             return await server.handleTerminalInput(sessionId: id, body: body)
         }
 
+        router.post("api/sessions") { request, _ -> Response in
+            let body = try await request.body.collect(upTo: 1024 * 64)
+            return await server.handleCreateSession(body: body)
+        }
+
         return router
     }
 
@@ -402,6 +407,80 @@ final class RemoteServer {
             "content": content,
             "is_running": isRunning,
         ])
+    }
+
+    private func handleCreateSession(body: ByteBuffer) async -> Response {
+        guard let container = modelContainer else {
+            return jsonResponse(["error": "No model container"], status: .internalServerError)
+        }
+
+        guard let data = body.getData(at: body.readerIndex, length: body.readableBytes),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let projectId = json["projectId"] as? String,
+              let name = json["name"] as? String, !name.isEmpty else {
+            return jsonResponse(["error": "Missing projectId or name"], status: .badRequest)
+        }
+
+        let description = json["description"] as? String
+
+        guard let projectUUID = UUID(uuidString: projectId) else {
+            return jsonResponse(["error": "Invalid project ID"], status: .badRequest)
+        }
+
+        // All SwiftData + TaskFolder work on main thread
+        let result: [String: Any]? = await MainActor.run {
+            let mainContext = container.mainContext
+            let descriptor = FetchDescriptor<Project>()
+            guard let projects = try? mainContext.fetch(descriptor),
+                  let project = projects.first(where: { $0.id == projectUUID }) else {
+                return nil
+            }
+
+            // Create task folder via TaskFolderService
+            guard let taskFolderURL = try? TaskFolderService.shared.createTask(
+                projectPath: project.path,
+                projectName: project.name,
+                subProjectName: nil,
+                taskName: name,
+                description: description
+            ) else {
+                return nil
+            }
+
+            // Create a new session linked to the task folder
+            let session = Session(
+                name: name,
+                projectPath: project.path,
+                createdAt: Date(),
+                userNamed: true,
+                activeProjectName: project.name,
+                parkerBriefing: nil
+            )
+            session.taskFolderPath = taskFolderURL.path
+            project.sessions.append(session)
+            try? mainContext.save()
+
+            return [
+                "id": session.id.uuidString,
+                "name": session.name,
+                "project_path": session.projectPath,
+                "created_at": ISO8601DateFormatter().string(from: session.createdAt),
+                "last_accessed_at": ISO8601DateFormatter().string(from: session.lastAccessedAt),
+                "is_completed": false,
+                "is_hidden": false,
+                "is_waiting_for_input": false,
+                "has_been_launched": false,
+                "is_running": false,
+                "task_folder_path": taskFolderURL.path,
+            ] as [String: Any]
+        }
+
+        guard let result else {
+            return jsonResponse(["error": "Failed to create session"], status: .internalServerError)
+        }
+
+        DebugLog.log("[RemoteServer] Created session: \(result["id"] ?? "") for task: \(name)")
+        return jsonResponse(["session": result])
     }
 
     private func handleTerminalInput(sessionId: String, body: ByteBuffer) async -> Response {

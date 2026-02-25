@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A1A2A3A4A5A6A7A8A9A0A1A2 /* AllSessionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1B2B3B4B5B6B7B8B9B0B1B2 /* AllSessionsView.swift */; };
+		C1C2C3C4C5C6C7C8C9C0C1C2 /* CreateSessionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D2D3D4D5D6D7D8D9D0D1D2 /* CreateSessionSheet.swift */; };
 		038ABB2D2112EC4BBD3EC738 /* BrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1556AE3EFAD0FADFA769DFA1 /* BrowseView.swift */; };
 		27E05565A65A447D6270D241 /* SettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A20C755DCE6145FF6DDD926 /* SettingsSheet.swift */; };
 		3131A57CB5B0725677C1AE90 /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F184919BF4E348FBE8C15A /* AppViewModel.swift */; };
@@ -25,6 +27,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		B1B2B3B4B5B6B7B8B9B0B1B2 /* AllSessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllSessionsView.swift; sourceTree = "<group>"; };
+		D1D2D3D4D5D6D7D8D9D0D1D2 /* CreateSessionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateSessionSheet.swift; sourceTree = "<group>"; };
 		1556AE3EFAD0FADFA769DFA1 /* BrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseView.swift; sourceTree = "<group>"; };
 		1818BC8CE1A1956E487B95AF /* RemoteSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSession.swift; sourceTree = "<group>"; };
 		DD22EE33FF44AA55BB66CC11 /* RemoteTaskFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTaskFolder.swift; sourceTree = "<group>"; };
@@ -83,7 +87,9 @@
 		6B8BAD6A0707C0DD21FD29FF /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				B1B2B3B4B5B6B7B8B9B0B1B2 /* AllSessionsView.swift */,
 				1556AE3EFAD0FADFA769DFA1 /* BrowseView.swift */,
+				D1D2D3D4D5D6D7D8D9D0D1D2 /* CreateSessionSheet.swift */,
 				AA35A5EB2C1F5E7B6BBAB1CE /* ProjectsListView.swift */,
 				AA11BB22CC33DD44EE55FF66 /* SearchResultsView.swift */,
 				F229A38FD17FACDC1C7D93F8 /* SessionsListView.swift */,
@@ -175,8 +181,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1A2A3A4A5A6A7A8A9A0A1A2 /* AllSessionsView.swift in Sources */,
 				3131A57CB5B0725677C1AE90 /* AppViewModel.swift in Sources */,
 				038ABB2D2112EC4BBD3EC738 /* BrowseView.swift in Sources */,
+				C1C2C3C4C5C6C7C8C9C0C1C2 /* CreateSessionSheet.swift in Sources */,
 				D97B5392C8A3DD431C34BCDD /* ProjectsListView.swift in Sources */,
 				C15EDE356770C613D1DA64CC /* RemoteProject.swift in Sources */,
 				BD407B5A641AFC42E0453068 /* RemoteSession.swift in Sources */,
