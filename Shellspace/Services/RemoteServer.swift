@@ -443,9 +443,6 @@ final class RemoteServer {
 
         let controller = appState.getOrCreateController(for: session)
 
-        // Snapshot content length before launch to detect NEW content from Claude
-        let preLaunchLength = controller.getFullTerminalContent().count
-
         controller.startClaude(
             in: session.projectPath,
             sessionId: session.id,
@@ -465,14 +462,19 @@ final class RemoteServer {
         session.hasBeenLaunched = true
         try? mainContext.save()
 
-        // Wait for Claude to be ready by detecting NEW content after launch
+        // Snapshot AFTER startClaude so old --continue buffer is already loaded
+        try? await Task.sleep(for: .seconds(1))
+        let postLaunchLength = await MainActor.run { controller.getFullTerminalContent().count }
+        DebugLog.log("[RemoteServer] Post-launch snapshot: \(postLaunchLength) chars for session \(sessionId)")
+
+        // Wait for Claude to be ready by detecting NEW content after the old buffer loaded
         var ready = false
-        for _ in 0..<30 { // Up to 15 seconds
+        for _ in 0..<40 { // Up to 20 seconds
             try? await Task.sleep(for: .milliseconds(500))
             let content = await MainActor.run { controller.getFullTerminalContent() }
-            // Only check content that appeared AFTER we launched
-            if content.count > preLaunchLength {
-                let newContent = String(content.suffix(content.count - preLaunchLength))
+            if content.count > postLaunchLength {
+                let newContent = String(content.suffix(content.count - postLaunchLength))
+                DebugLog.log("[RemoteServer] New content (\(newContent.count) chars): \(newContent.prefix(100))")
                 if newContent.contains("bypass permissions") || newContent.contains("autoaccept") || newContent.contains("shift+tab") {
                     ready = true
                     break
