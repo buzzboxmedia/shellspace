@@ -25,6 +25,20 @@ struct TerminalView: View {
     // Box-drawing and block element characters used by Claude's UI
     private static let decorativeRegex = try! Regex("[\\u2500-\\u259F]+")
 
+    /// Strip ANSI/null/decorative chars and trim trailing blank lines
+    private static func cleanContent(_ raw: String) -> String {
+        let stripped = raw
+            .replacing(nullRegex, with: "")
+            .replacing(ansiRegex, with: "")
+            .replacing(decorativeRegex, with: "")
+        // Trim trailing blank lines from terminal buffer
+        var lines = stripped.split(separator: "\n", omittingEmptySubsequences: false)
+        while let last = lines.last, last.allSatisfy({ $0.isWhitespace }) {
+            lines.removeLast()
+        }
+        return lines.joined(separator: "\n")
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Terminal content
@@ -203,7 +217,7 @@ struct TerminalView: View {
                 let wsContent = wsManager.terminalContent
                 if !wsContent.isEmpty {
                     wsEmptyCount = 0
-                    let stripped = wsContent.replacing(Self.nullRegex, with: "").replacing(Self.ansiRegex, with: "").replacing(Self.decorativeRegex, with: "")
+                    let stripped = Self.cleanContent(wsContent)
                     if stripped != terminalContent {
                         terminalContent = stripped
                         isRunning = wsManager.terminalIsRunning
@@ -246,7 +260,7 @@ struct TerminalView: View {
         guard let api = viewModel.api else { return }
         do {
             let response = try await api.terminalContent(sessionId: session.id)
-            let stripped = response.content.replacing(Self.nullRegex, with: "").replacing(Self.ansiRegex, with: "").replacing(Self.decorativeRegex, with: "")
+            let stripped = Self.cleanContent(response.content)
             await MainActor.run {
                 terminalContent = stripped
                 isRunning = response.isRunning
