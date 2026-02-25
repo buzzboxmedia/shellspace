@@ -443,12 +443,6 @@ final class RemoteServer {
 
         let controller = appState.getOrCreateController(for: session)
 
-        // Set a default terminal size for headless launch (80 cols x 24 rows)
-        if let terminal = controller.terminalView {
-            terminal.frame = NSRect(x: 0, y: 0, width: 800, height: 480)
-            terminal.getTerminal().resize(cols: 120, rows: 40)
-        }
-
         controller.startClaude(
             in: session.projectPath,
             sessionId: session.id,
@@ -457,6 +451,12 @@ final class RemoteServer {
             taskFolderPath: session.taskFolderPath,
             hasBeenLaunched: session.hasBeenLaunched
         )
+
+        // Set terminal size AFTER startClaude (which creates the terminal with .zero frame)
+        if let terminal = controller.terminalView {
+            terminal.frame = NSRect(x: 0, y: 0, width: 960, height: 480)
+            terminal.getTerminal().resize(cols: 120, rows: 40)
+        }
 
         // Mark as launched and persist
         session.hasBeenLaunched = true

@@ -20,8 +20,8 @@ struct TerminalView: View {
     private var isLandscape: Bool { verticalSizeClass == .compact }
 
     private static let ansiRegex = try! Regex("\\x1B\\[[0-9;]*[a-zA-Z]")
-    // Box-drawing characters used by Claude's UI for borders/rules
-    private static let boxDrawingRegex = try! Regex("[\\u2500-\\u257F]+")
+    // Strip box-drawing, block elements, braille, and other decorative Unicode
+    private static let decorativeRegex = try! Regex("[\\u2500-\\u257F\\u2580-\\u259F\\u2800-\\u28FF\\u2190-\\u21FF\\u25A0-\\u25FF\\u2700-\\u27BF\\u2E80-\\u2EFF\\u3000-\\u303F]+")
 
     var body: some View {
         VStack(spacing: 0) {
@@ -92,11 +92,12 @@ struct TerminalView: View {
             // Input bar - dark themed
             HStack(spacing: 8) {
                 TextField("Send to terminal...", text: $inputText, axis: .vertical)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(size: 16, design: .monospaced))
                     .foregroundStyle(.white)
-                    .lineLimit(1...4)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 12)
+                    .lineLimit(2...6)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 14)
+                    .frame(minHeight: 52)
                     .background(Color(white: 0.15))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .focused($inputFocused)
@@ -200,7 +201,7 @@ struct TerminalView: View {
                 let wsContent = wsManager.terminalContent
                 if !wsContent.isEmpty {
                     wsEmptyCount = 0
-                    let stripped = wsContent.replacing(Self.ansiRegex, with: "").replacing(Self.boxDrawingRegex, with: "")
+                    let stripped = wsContent.replacing(Self.ansiRegex, with: "").replacing(Self.decorativeRegex, with: "")
                     if stripped != terminalContent {
                         terminalContent = stripped
                         isRunning = wsManager.terminalIsRunning
@@ -243,7 +244,7 @@ struct TerminalView: View {
         guard let api = viewModel.api else { return }
         do {
             let response = try await api.terminalContent(sessionId: session.id)
-            let stripped = response.content.replacing(Self.ansiRegex, with: "").replacing(Self.boxDrawingRegex, with: "")
+            let stripped = response.content.replacing(Self.ansiRegex, with: "").replacing(Self.decorativeRegex, with: "")
             await MainActor.run {
                 terminalContent = stripped
                 isRunning = response.isRunning
