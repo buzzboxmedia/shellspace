@@ -462,8 +462,21 @@ final class RemoteServer {
         session.hasBeenLaunched = true
         try? mainContext.save()
 
-        // Wait for terminal to initialize before sending input
-        try? await Task.sleep(for: .seconds(3))
+        // Wait for Claude to be ready (poll terminal content for Claude's prompt)
+        var ready = false
+        for _ in 0..<30 { // Up to 15 seconds
+            try? await Task.sleep(for: .milliseconds(500))
+            let content = await MainActor.run { controller.getFullTerminalContent() }
+            // Claude shows ">" prompt or "waiting for input" when ready
+            if content.contains("❯") || content.contains(">") || content.contains("bypass permissions") || content.contains("autoaccept") {
+                ready = true
+                break
+            }
+        }
+
+        if !ready {
+            DebugLog.log("[RemoteServer] Claude may not be ready yet for session \(sessionId), sending input anyway")
+        }
 
         controller.sendToTerminal(message + "\r")
         DebugLog.log("[RemoteServer] Auto-launched and sent input to session \(sessionId): \(message.prefix(50))")
