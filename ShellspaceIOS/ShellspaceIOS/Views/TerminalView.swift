@@ -12,6 +12,7 @@ struct TerminalView: View {
     @State private var pollTask: Task<Void, Never>?
     @State private var useWebSocket = false
     @State private var connectionDotColor: Color = .gray
+    @AppStorage("terminalFontSize") private var fontSize: Double = 14
     @FocusState private var inputFocused: Bool
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -26,7 +27,7 @@ struct TerminalView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     Text(terminalContent.isEmpty ? " " : terminalContent)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.system(size: fontSize, design: .monospaced))
                         .foregroundStyle(.green.opacity(0.9))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
@@ -120,9 +121,19 @@ struct TerminalView: View {
         .toolbar(isLandscape ? .hidden : .automatic, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Circle()
-                    .fill(connectionDotColor)
-                    .frame(width: 8, height: 8)
+                HStack(spacing: 12) {
+                    Button { fontSize = max(8, fontSize - 2) } label: {
+                        Image(systemName: "textformat.size.smaller")
+                            .font(.caption)
+                    }
+                    Button { fontSize = min(24, fontSize + 2) } label: {
+                        Image(systemName: "textformat.size.larger")
+                            .font(.caption)
+                    }
+                    Circle()
+                        .fill(connectionDotColor)
+                        .frame(width: 8, height: 8)
+                }
             }
         }
         .overlay {

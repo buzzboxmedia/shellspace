@@ -154,7 +154,7 @@ final class RemoteServer {
                    let type = json["type"] as? String, type == "input",
                    let message = json["message"] as? String {
                     await MainActor.run {
-                        self.appState?.terminalControllers[uuid]?.sendToTerminal(message + "\n")
+                        self.appState?.terminalControllers[uuid]?.sendToTerminal(message + "\r")
                     }
                 }
             }
@@ -401,7 +401,7 @@ final class RemoteServer {
             return jsonResponse(["error": "Missing 'message' in body"], status: .badRequest)
         }
 
-        controller.sendToTerminal(message + "\n")
+        controller.sendToTerminal(message + "\r")
         DebugLog.log("[RemoteServer] Sent input to session \(sessionId): \(message.prefix(50))")
         return jsonResponse(["status": "sent", "session_id": sessionId])
     }
