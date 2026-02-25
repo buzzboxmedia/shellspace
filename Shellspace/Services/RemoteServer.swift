@@ -182,9 +182,17 @@ final class RemoteServer {
         lastContentHash: inout Int, lastIsRunning: inout Bool, lastIsWaiting: inout Bool,
         force: Bool
     ) async throws {
-        let content = appState?.terminalControllers[uuid]?.getFullTerminalContent() ?? ""
+        var content = appState?.terminalControllers[uuid]?.getFullTerminalContent() ?? ""
         let isRunning = appState?.terminalControllers[uuid]?.terminalView?.process?.running == true
         let isWaiting = findSession(sessionId)?.isWaitingForInput ?? false
+
+        // Fall back to log file when live buffer is empty
+        if content.isEmpty {
+            let logPath = Session.centralLogsDir.appendingPathComponent("\(sessionId).log")
+            if let logContent = try? String(contentsOf: logPath, encoding: .utf8) {
+                content = logContent
+            }
+        }
 
         let contentHash = content.hashValue
         guard force || contentHash != lastContentHash || isRunning != lastIsRunning || isWaiting != lastIsWaiting else { return }
@@ -378,8 +386,16 @@ final class RemoteServer {
             return jsonResponse(["error": "Invalid session ID"], status: .badRequest)
         }
 
-        let content = appState?.terminalControllers[uuid]?.getFullTerminalContent() ?? ""
+        var content = appState?.terminalControllers[uuid]?.getFullTerminalContent() ?? ""
         let isRunning = appState?.terminalControllers[uuid]?.terminalView?.process?.running == true
+
+        // Fall back to log file when live buffer is empty
+        if content.isEmpty {
+            let logPath = Session.centralLogsDir.appendingPathComponent("\(sessionId).log")
+            if let logContent = try? String(contentsOf: logPath, encoding: .utf8) {
+                content = logContent
+            }
+        }
 
         return jsonResponse([
             "session_id": sessionId,
