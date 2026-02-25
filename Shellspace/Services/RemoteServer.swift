@@ -154,7 +154,7 @@ final class RemoteServer {
                    let type = json["type"] as? String, type == "input",
                    let message = json["message"] as? String {
                     await MainActor.run {
-                        self.appState?.terminalControllers[uuid]?.sendToTerminal(message + "\r")
+                        self.appState?.terminalControllers[uuid]?.sendToTerminal(message + "\r\r")
                     }
                 }
             }
@@ -419,7 +419,7 @@ final class RemoteServer {
         // Fast path: controller exists and process is running
         if let controller = appState?.terminalControllers[uuid],
            controller.terminalView?.process?.running == true {
-            controller.sendToTerminal(message + "\r")
+            controller.sendToTerminal(message + "\r\r")
             DebugLog.log("[RemoteServer] Sent input to session \(sessionId): \(message.prefix(50))")
             return jsonResponse(["status": "sent", "session_id": sessionId])
         }
@@ -498,7 +498,7 @@ final class RemoteServer {
             DebugLog.log("[RemoteServer] Claude may not be ready yet for session \(sessionId), sending input anyway after timeout")
         }
 
-        controller.sendToTerminal(message + "\r")
+        controller.sendToTerminal(message + "\r\r")
         DebugLog.log("[RemoteServer] Auto-launched and sent input to session \(sessionId): \(message.prefix(50))")
         return jsonResponse(["status": "launched_and_sent", "session_id": sessionId])
     }
