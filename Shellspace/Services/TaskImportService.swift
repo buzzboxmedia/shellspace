@@ -26,6 +26,8 @@ class TaskImportService {
         var sessionsToDelete: [Session] = []
         var groupsToDelete: [ProjectGroup] = []
 
+        let projectPath = project.path
+
         // Grace period: don't delete recently created items (folder creation is async)
         let gracePeriod: TimeInterval = 30
 
@@ -45,8 +47,16 @@ class TaskImportService {
             }
         }
 
+        // Fetch sessions via descriptor to avoid stale relationship faults
+        let sessionDescriptor = FetchDescriptor<Session>(
+            predicate: #Predicate<Session> { session in
+                session.projectPath == projectPath
+            }
+        )
+        let allSessions = (try? modelContext.fetch(sessionDescriptor)) ?? []
+
         // Validate all sessions
-        for session in project.sessions ?? [] {
+        for session in allSessions {
             // Skip already completed sessions
             if session.isCompleted { continue }
 
@@ -124,8 +134,16 @@ class TaskImportService {
             }
         }
 
+        // Fetch groups via descriptor to avoid stale relationship faults
+        let groupDescriptor = FetchDescriptor<ProjectGroup>(
+            predicate: #Predicate<ProjectGroup> { group in
+                group.projectPath == projectPath
+            }
+        )
+        let allGroups = (try? modelContext.fetch(groupDescriptor)) ?? []
+
         // Validate project groups - they should be directories without TASK.md
-        for group in project.taskGroups ?? [] {
+        for group in allGroups {
             let groupSlug = taskFolderService.slugify(group.name)
             let groupPath = tasksDir.appendingPathComponent(groupSlug)
 
