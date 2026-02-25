@@ -404,22 +404,63 @@ final class RemoteServer {
         ])
     }
 
-    private func handleTerminalInput(sessionId: String, body: ByteBuffer) -> Response {
+    private func handleTerminalInput(sessionId: String, body: ByteBuffer) async -> Response {
         guard let uuid = UUID(uuidString: sessionId) else {
             return jsonResponse(["error": "Invalid session ID"], status: .badRequest)
         }
-        guard let controller = appState?.terminalControllers[uuid] else {
-            return jsonResponse(["error": "No terminal for this session"], status: .notFound)
-        }
+
+        // Parse body first (fail fast)
         guard let data = body.getData(at: body.readerIndex, length: body.readableBytes),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let message = json["message"] as? String else {
             return jsonResponse(["error": "Missing 'message' in body"], status: .badRequest)
         }
 
+        // Fast path: controller exists and process is running
+        if let controller = appState?.terminalControllers[uuid],
+           controller.terminalView?.process?.running == true {
+            controller.sendToTerminal(message + "\r")
+            DebugLog.log("[RemoteServer] Sent input to session \(sessionId): \(message.prefix(50))")
+            return jsonResponse(["status": "sent", "session_id": sessionId])
+        }
+
+        // Auto-launch: no controller or process not running
+        guard let container = modelContainer else {
+            return jsonResponse(["error": "No model container"], status: .internalServerError)
+        }
+
+        // Fetch session from mainContext so we can persist hasBeenLaunched
+        let mainContext = container.mainContext
+        let descriptor = FetchDescriptor<Session>()
+        guard let sessions = try? mainContext.fetch(descriptor),
+              let session = sessions.first(where: { $0.id == uuid }) else {
+            return jsonResponse(["error": "Session not found"], status: .notFound)
+        }
+
+        guard let appState = appState else {
+            return jsonResponse(["error": "App state unavailable"], status: .internalServerError)
+        }
+
+        let controller = appState.getOrCreateController(for: session)
+        controller.startClaude(
+            in: session.projectPath,
+            sessionId: session.id,
+            claudeSessionId: session.claudeSessionId,
+            parkerBriefing: session.parkerBriefing,
+            taskFolderPath: session.taskFolderPath,
+            hasBeenLaunched: session.hasBeenLaunched
+        )
+
+        // Mark as launched and persist
+        session.hasBeenLaunched = true
+        try? mainContext.save()
+
+        // Wait for terminal to initialize before sending input
+        try? await Task.sleep(for: .seconds(3))
+
         controller.sendToTerminal(message + "\r")
-        DebugLog.log("[RemoteServer] Sent input to session \(sessionId): \(message.prefix(50))")
-        return jsonResponse(["status": "sent", "session_id": sessionId])
+        DebugLog.log("[RemoteServer] Auto-launched and sent input to session \(sessionId): \(message.prefix(50))")
+        return jsonResponse(["status": "launched_and_sent", "session_id": sessionId])
     }
 
     // MARK: - Helpers
