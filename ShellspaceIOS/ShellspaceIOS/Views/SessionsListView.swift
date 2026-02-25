@@ -19,11 +19,17 @@ struct SessionsListView: View {
         projectSessions.first { $0.taskFolderPath == task.path }
     }
 
-    // Sessions not linked to any task folder
+    // Root session (no task folder path)
+    private var rootSession: RemoteSession? {
+        projectSessions.first { $0.taskFolderPath == nil }
+    }
+
+    // Sessions not linked to any task folder (excluding root)
     private var unlinkedSessions: [RemoteSession] {
         let taskPaths = Set(taskFolders.map(\.path))
         return projectSessions.filter { session in
-            session.taskFolderPath == nil || !taskPaths.contains(session.taskFolderPath!)
+            guard session.taskFolderPath != nil else { return false }
+            return !taskPaths.contains(session.taskFolderPath!)
         }
     }
 
@@ -55,7 +61,7 @@ struct SessionsListView: View {
     }
 
     private var hasContent: Bool {
-        !activeTasks.isEmpty || !completedTasks.isEmpty || !filteredUnlinkedSessions.isEmpty
+        rootSession != nil || !activeTasks.isEmpty || !completedTasks.isEmpty || !filteredUnlinkedSessions.isEmpty
     }
 
     var body: some View {
@@ -72,6 +78,38 @@ struct SessionsListView: View {
                 ContentUnavailableView.search(text: searchText)
             } else {
                 List {
+                    // Root session
+                    if let root = rootSession {
+                        Section {
+                            NavigationLink(value: root) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "terminal.fill")
+                                        .font(.subheadline)
+                                        .foregroundStyle(root.isWaitingForInput ? .orange : root.isRunning ? .green : .blue)
+                                        .frame(width: 22)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(project.name)
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                        if let summary = root.summary {
+                                            Text(summary)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(2)
+                                        }
+                                    }
+                                    Spacer()
+                                    if root.isWaitingForInput {
+                                        Image(systemName: "bell.badge.fill")
+                                            .font(.caption)
+                                            .foregroundStyle(.orange)
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                    }
+
                     // Active tasks
                     if !activeTasks.isEmpty {
                         Section("Active") {
