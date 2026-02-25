@@ -462,19 +462,31 @@ final class RemoteServer {
         session.hasBeenLaunched = true
         try? mainContext.save()
 
-        // Snapshot AFTER startClaude so old --continue buffer is already loaded
-        try? await Task.sleep(for: .seconds(1))
-        let postLaunchLength = await MainActor.run { controller.getFullTerminalContent().count }
-        DebugLog.log("[RemoteServer] Post-launch snapshot: \(postLaunchLength) chars for session \(sessionId)")
+        // Wait for old --continue buffer to finish loading (content stabilizes)
+        var lastLength = 0
+        var stableCount = 0
+        for _ in 0..<20 { // Up to 10 seconds for buffer to load
+            try? await Task.sleep(for: .milliseconds(500))
+            let currentLength = await MainActor.run { controller.getFullTerminalContent().count }
+            if currentLength == lastLength && currentLength > 0 {
+                stableCount += 1
+                if stableCount >= 3 { break } // Stable for 1.5s
+            } else {
+                stableCount = 0
+            }
+            lastLength = currentLength
+        }
+        let stableLength = lastLength
+        DebugLog.log("[RemoteServer] Buffer stabilized at \(stableLength) chars for session \(sessionId)")
 
-        // Wait for Claude to be ready by detecting NEW content after the old buffer loaded
+        // Now wait for FRESH content from Claude startup (bypass permissions prompt)
         var ready = false
         for _ in 0..<40 { // Up to 20 seconds
             try? await Task.sleep(for: .milliseconds(500))
             let content = await MainActor.run { controller.getFullTerminalContent() }
-            if content.count > postLaunchLength {
-                let newContent = String(content.suffix(content.count - postLaunchLength))
-                DebugLog.log("[RemoteServer] New content (\(newContent.count) chars): \(newContent.prefix(100))")
+            if content.count > stableLength + 10 { // Need meaningful new content
+                let newContent = String(content.suffix(content.count - stableLength))
+                DebugLog.log("[RemoteServer] Fresh content (\(newContent.count) chars): \(newContent.suffix(150))")
                 if newContent.contains("bypass permissions") || newContent.contains("autoaccept") || newContent.contains("shift+tab") {
                     ready = true
                     break
@@ -483,7 +495,7 @@ final class RemoteServer {
         }
 
         if !ready {
-            DebugLog.log("[RemoteServer] Claude may not be ready yet for session \(sessionId), sending input anyway after 15s")
+            DebugLog.log("[RemoteServer] Claude may not be ready yet for session \(sessionId), sending input anyway after timeout")
         }
 
         controller.sendToTerminal(message + "\r")
