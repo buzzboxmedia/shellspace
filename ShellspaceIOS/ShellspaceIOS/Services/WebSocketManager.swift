@@ -79,18 +79,32 @@ final class WebSocketManager {
         terminalState = .disconnected
     }
 
+    /// Send input to the terminal via the active WebSocket connection.
+    func sendTerminalInput(_ message: String) -> Bool {
+        guard let ws = activeTerminalSocket else { return false }
+        let payload: [String: Any] = ["type": "input", "message": message]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let text = String(data: data, encoding: .utf8) else { return false }
+        ws.send(.string(text)) { _ in }
+        return true
+    }
+
+    private var activeTerminalSocket: URLSessionWebSocketTask?
+
     private func runTerminalSocket(sessionId: String) async throws {
         guard let url = URL(string: "ws://\(host):8847/ws/terminal/\(sessionId)") else {
             throw APIError.invalidURL
         }
         let wsTask = URLSession.shared.webSocketTask(with: url)
         wsTask.resume()
+        activeTerminalSocket = wsTask
         await MainActor.run { self.terminalState = .connected }
 
         while !Task.isCancelled {
             let message = try await wsTask.receive()
             if case .string(let text) = message { parseTerminalMessage(text) }
         }
+        activeTerminalSocket = nil
         wsTask.cancel(with: .goingAway, reason: nil)
     }
 

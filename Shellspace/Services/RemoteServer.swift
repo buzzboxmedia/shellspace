@@ -8,8 +8,7 @@ import WSCore
 /// Embedded HTTP + WebSocket server for iOS companion app access over Tailscale or local network.
 /// Exposes projects, sessions, and terminal I/O on port 8847.
 /// Advertises via Bonjour (_shellspace._tcp) for auto-discovery by the iOS companion app.
-@MainActor
-final class RemoteServer {
+final class RemoteServer: @unchecked Sendable {
     static let port = 8847
     private var task: Task<Void, Never>?
     private weak var appState: AppState?
@@ -22,6 +21,7 @@ final class RemoteServer {
 
     init() {}
 
+    @MainActor
     func start(appState: AppState, modelContainer: ModelContainer) {
         self.appState = appState
         self.modelContainer = modelContainer
@@ -30,8 +30,8 @@ final class RemoteServer {
 
         task = Task.detached {
             do {
-                let router = await server.buildRouter()
-                let wsRouter = await server.buildWebSocketRouter()
+                let router = server.buildRouter()
+                let wsRouter = server.buildWebSocketRouter()
                 let app = Application(
                     router: router,
                     server: .http1WebSocketUpgrade(webSocketRouter: wsRouter),
@@ -50,6 +50,7 @@ final class RemoteServer {
         }
     }
 
+    @MainActor
     func stop() {
         stopBonjourAdvertising()
         task?.cancel()
@@ -59,6 +60,7 @@ final class RemoteServer {
 
     // MARK: - Bonjour Advertising
 
+    @MainActor
     private func startBonjourAdvertising() {
         let name = Host.current().localizedName ?? "Shellspace"
         let service = NetService(
@@ -72,6 +74,7 @@ final class RemoteServer {
         DebugLog.log("[RemoteServer] Bonjour: advertising '\(name)' as _shellspace._tcp on port \(RemoteServer.port)")
     }
 
+    @MainActor
     private func stopBonjourAdvertising() {
         bonjourService?.stop()
         bonjourService = nil
@@ -99,7 +102,7 @@ final class RemoteServer {
 
         router.get("api/projects/{id}/tasks") { _, context -> Response in
             let id = context.parameters.get("id") ?? ""
-            return await server.handleProjectTasks(projectId: id)
+            return server.handleProjectTasks(projectId: id)
         }
 
         router.get("api/sessions/{id}") { _, context -> Response in
@@ -163,7 +166,7 @@ final class RemoteServer {
     ) async {
         guard let uuid = UUID(uuidString: sessionId) else { return }
 
-        DebugLog.log("[RemoteServer] WS connected: terminal \(sessionId)")
+        await MainActor.run { DebugLog.log("[RemoteServer] WS connected: terminal \(sessionId)") }
 
         var lastContentHash: Int = 0
         var lastIsRunning = false
@@ -188,6 +191,7 @@ final class RemoteServer {
                    let type = json["type"] as? String, type == "input",
                    let message = json["message"] as? String {
                     await MainActor.run {
+                        DebugLog.log("[RemoteServer] WS input received: \(message.prefix(50))")
                         self.appState?.terminalControllers[uuid]?.sendToTerminal(message + "\r\r")
                     }
                 }
@@ -208,7 +212,7 @@ final class RemoteServer {
         }
 
         inputTask.cancel()
-        DebugLog.log("[RemoteServer] WS closed: terminal \(sessionId)")
+        await MainActor.run { DebugLog.log("[RemoteServer] WS closed: terminal \(sessionId)") }
     }
 
     private func sendTerminalUpdate(
@@ -216,16 +220,20 @@ final class RemoteServer {
         lastContentHash: inout Int, lastIsRunning: inout Bool, lastIsWaiting: inout Bool,
         force: Bool
     ) async throws {
-        var content = appState?.terminalControllers[uuid]?.getFullTerminalContent() ?? ""
-        let isRunning = appState?.terminalControllers[uuid]?.terminalView?.process?.running == true
-        let isWaiting = findSession(sessionId)?.isWaitingForInput ?? false
+        let (content, isRunning, isWaiting) = await MainActor.run {
+            var c = appState?.terminalControllers[uuid]?.getFullTerminalContent() ?? ""
+            let running = appState?.terminalControllers[uuid]?.terminalView?.process?.running == true
+            let waiting = findSession(sessionId)?.isWaitingForInput ?? false
 
-        // Fall back to log file when live buffer is empty
-        if content.isEmpty {
-            let logPath = Session.centralLogsDir.appendingPathComponent("\(sessionId).log")
-            if let logContent = try? String(contentsOf: logPath, encoding: .utf8) {
-                content = logContent
+            // Fall back to log file when live buffer is empty
+            if c.isEmpty {
+                let logPath = Session.centralLogsDir.appendingPathComponent("\(sessionId).log")
+                if let logContent = try? String(contentsOf: logPath, encoding: .utf8) {
+                    c = logContent
+                }
             }
+
+            return (c, running, waiting)
         }
 
         let contentHash = content.hashValue
@@ -253,7 +261,7 @@ final class RemoteServer {
         inbound: WebSocketInboundStream,
         outbound: WebSocketOutboundWriter
     ) async {
-        DebugLog.log("[RemoteServer] WS connected: sessions stream")
+        await MainActor.run { DebugLog.log("[RemoteServer] WS connected: sessions stream") }
 
         var lastStates: [String: (isRunning: Bool, isWaiting: Bool)] = [:]
 
@@ -272,7 +280,7 @@ final class RemoteServer {
         }
 
         consumeTask.cancel()
-        DebugLog.log("[RemoteServer] WS closed: sessions stream")
+        await MainActor.run { DebugLog.log("[RemoteServer] WS closed: sessions stream") }
     }
 
     private func sendSessionsSnapshot(
@@ -280,36 +288,41 @@ final class RemoteServer {
         lastStates: inout [String: (isRunning: Bool, isWaiting: Bool)],
         force: Bool
     ) async throws {
-        guard let container = modelContainer else { return }
+        let sessionDicts: [[String: Any]]? = await MainActor.run {
+            guard let container = modelContainer else { return nil }
 
-        let context = ModelContext(container)
-        let descriptor = FetchDescriptor<Session>()
-        guard let allSessions = try? context.fetch(descriptor) else { return }
-        let sessions = allSessions.filter { !$0.isHidden }
+            let context = ModelContext(container)
+            let descriptor = FetchDescriptor<Session>()
+            guard let allSessions = try? context.fetch(descriptor) else { return nil }
+            let sessions = allSessions.filter { !$0.isHidden }
 
-        if !force {
-            var changed = lastStates.count != sessions.count
-            if !changed {
-                for session in sessions {
-                    let id = session.id.uuidString
-                    let isRunning = appState?.terminalControllers[session.id]?.terminalView?.process?.running == true
-                    if let old = lastStates[id] {
-                        if old.isRunning != isRunning || old.isWaiting != session.isWaitingForInput {
-                            changed = true; break
-                        }
-                    } else { changed = true; break }
+            if !force {
+                var changed = lastStates.count != sessions.count
+                if !changed {
+                    for session in sessions {
+                        let id = session.id.uuidString
+                        let isRunning = appState?.terminalControllers[session.id]?.terminalView?.process?.running == true
+                        if let old = lastStates[id] {
+                            if old.isRunning != isRunning || old.isWaiting != session.isWaitingForInput {
+                                changed = true; break
+                            }
+                        } else { changed = true; break }
+                    }
                 }
+                guard changed else { return nil }
             }
-            guard changed else { return }
+
+            lastStates = [:]
+            for session in sessions {
+                let isRunning = appState?.terminalControllers[session.id]?.terminalView?.process?.running == true
+                lastStates[session.id.uuidString] = (isRunning, session.isWaitingForInput)
+            }
+
+            return sessions.map { sessionToJSON($0) }
         }
 
-        lastStates = [:]
-        for session in sessions {
-            let isRunning = appState?.terminalControllers[session.id]?.terminalView?.process?.running == true
-            lastStates[session.id.uuidString] = (isRunning, session.isWaitingForInput)
-        }
+        guard let sessionDicts else { return }
 
-        let sessionDicts = sessions.map { sessionToJSON($0) }
         let message: [String: Any] = ["type": "sessions_update", "sessions": sessionDicts]
 
         if let data = try? JSONSerialization.data(withJSONObject: message),
@@ -320,65 +333,70 @@ final class RemoteServer {
 
     // MARK: - REST Handlers
 
-    private func handleStatus() -> Response {
-        let controllers = appState?.terminalControllers ?? [:]
-        let activeCount = controllers.values.filter { $0.terminalView?.process?.running == true }.count
+    private func handleStatus() async -> Response {
+        let (activeCount, totalCount) = await MainActor.run {
+            let controllers = appState?.terminalControllers ?? [:]
+            let active = controllers.values.filter { $0.terminalView?.process?.running == true }.count
+            return (active, controllers.count)
+        }
 
         return jsonResponse([
             "status": "online",
             "version": "1.0.0",
             "app": "Shellspace",
             "active_sessions": activeCount,
-            "total_controllers": controllers.count,
+            "total_controllers": totalCount,
         ])
     }
 
-    private func handleProjects() -> Response {
-        guard let container = modelContainer else {
-            return jsonResponse(["error": "No model container"], status: .internalServerError)
+    private func handleProjects() async -> Response {
+        let projectList: [[String: Any]]? = await MainActor.run {
+            guard let container = modelContainer else { return nil }
+
+            let context = ModelContext(container)
+            let descriptor = FetchDescriptor<Project>(sortBy: [SortDescriptor(\.name)])
+            guard let projects = try? context.fetch(descriptor) else { return nil }
+
+            return projects.map { project in
+                let activeSessions = project.sessions.filter { !$0.isCompleted && !$0.isHidden }
+                let waitingSessions = activeSessions.filter { $0.isWaitingForInput }
+                return [
+                    "id": project.id.uuidString,
+                    "name": project.name,
+                    "path": project.path,
+                    "icon": project.icon,
+                    "category": project.category.rawValue,
+                    "active_sessions": activeSessions.count,
+                    "waiting_sessions": waitingSessions.count,
+                ] as [String: Any]
+            }
         }
 
-        let context = ModelContext(container)
-        let descriptor = FetchDescriptor<Project>(sortBy: [SortDescriptor(\.name)])
-        guard let projects = try? context.fetch(descriptor) else {
+        guard let projectList else {
             return jsonResponse(["error": "Failed to fetch projects"], status: .internalServerError)
         }
-
-        let projectList: [[String: Any]] = projects.map { project in
-            let activeSessions = project.sessions.filter { !$0.isCompleted && !$0.isHidden }
-            let waitingSessions = activeSessions.filter { $0.isWaitingForInput }
-            return [
-                "id": project.id.uuidString,
-                "name": project.name,
-                "path": project.path,
-                "icon": project.icon,
-                "category": project.category.rawValue,
-                "active_sessions": activeSessions.count,
-                "waiting_sessions": waitingSessions.count,
-            ]
-        }
-
         return jsonResponse(["projects": projectList])
     }
 
-    private func handleProjectSessions(projectId: String) -> Response {
-        guard let container = modelContainer,
-              let uuid = UUID(uuidString: projectId) else {
-            return jsonResponse(["error": "Invalid project ID"], status: .badRequest)
+    private func handleProjectSessions(projectId: String) async -> Response {
+        let sessionList: [[String: Any]]? = await MainActor.run {
+            guard let container = modelContainer,
+                  let uuid = UUID(uuidString: projectId) else { return nil }
+
+            let context = ModelContext(container)
+            let descriptor = FetchDescriptor<Project>()
+            guard let projects = try? context.fetch(descriptor),
+                  let project = projects.first(where: { $0.id == uuid }) else { return nil }
+
+            return project.sessions
+                .filter { !$0.isHidden }
+                .sorted { $0.lastAccessedAt > $1.lastAccessedAt }
+                .map { sessionToJSON($0) }
         }
 
-        let context = ModelContext(container)
-        let descriptor = FetchDescriptor<Project>()
-        guard let projects = try? context.fetch(descriptor),
-              let project = projects.first(where: { $0.id == uuid }) else {
+        guard let sessionList else {
             return jsonResponse(["error": "Project not found"], status: .notFound)
         }
-
-        let sessionList: [[String: Any]] = project.sessions
-            .filter { !$0.isHidden }
-            .sorted { $0.lastAccessedAt > $1.lastAccessedAt }
-            .map { sessionToJSON($0) }
-
         return jsonResponse(["sessions": sessionList])
     }
 
@@ -408,27 +426,36 @@ final class RemoteServer {
         return jsonResponse(["tasks": taskList])
     }
 
-    private func handleSessionDetail(sessionId: String) -> Response {
-        guard let session = findSession(sessionId) else {
+    private func handleSessionDetail(sessionId: String) async -> Response {
+        let json: [String: Any]? = await MainActor.run {
+            guard let session = findSession(sessionId) else { return nil }
+            return sessionToJSON(session)
+        }
+
+        guard let json else {
             return jsonResponse(["error": "Session not found"], status: .notFound)
         }
-        return jsonResponse(sessionToJSON(session))
+        return jsonResponse(json)
     }
 
-    private func handleTerminalContent(sessionId: String) -> Response {
+    private func handleTerminalContent(sessionId: String) async -> Response {
         guard let uuid = UUID(uuidString: sessionId) else {
             return jsonResponse(["error": "Invalid session ID"], status: .badRequest)
         }
 
-        var content = appState?.terminalControllers[uuid]?.getFullTerminalContent() ?? ""
-        let isRunning = appState?.terminalControllers[uuid]?.terminalView?.process?.running == true
+        let (content, isRunning) = await MainActor.run {
+            var c = appState?.terminalControllers[uuid]?.getFullTerminalContent() ?? ""
+            let running = appState?.terminalControllers[uuid]?.terminalView?.process?.running == true
 
-        // Fall back to log file when live buffer is empty
-        if content.isEmpty {
-            let logPath = Session.centralLogsDir.appendingPathComponent("\(sessionId).log")
-            if let logContent = try? String(contentsOf: logPath, encoding: .utf8) {
-                content = logContent
+            // Fall back to log file when live buffer is empty
+            if c.isEmpty {
+                let logPath = Session.centralLogsDir.appendingPathComponent("\(sessionId).log")
+                if let logContent = try? String(contentsOf: logPath, encoding: .utf8) {
+                    c = logContent
+                }
             }
+
+            return (c, running)
         }
 
         return jsonResponse([
@@ -508,7 +535,7 @@ final class RemoteServer {
             return jsonResponse(["error": "Failed to create session"], status: .internalServerError)
         }
 
-        DebugLog.log("[RemoteServer] Created session: \(result["id"] ?? "") for task: \(name)")
+        await MainActor.run { DebugLog.log("[RemoteServer] Created session: \(result["id"] ?? "") for task: \(name)") }
         return jsonResponse(["session": result])
     }
 
@@ -525,10 +552,17 @@ final class RemoteServer {
         }
 
         // Fast path: controller exists and process is running
-        if let controller = appState?.terminalControllers[uuid],
-           controller.terminalView?.process?.running == true {
-            controller.sendToTerminal(message + "\r\r")
-            DebugLog.log("[RemoteServer] Sent input to session \(sessionId): \(message.prefix(50))")
+        let sent = await MainActor.run {
+            if let controller = appState?.terminalControllers[uuid],
+               controller.terminalView?.process?.running == true {
+                controller.sendToTerminal(message + "\r\r")
+                DebugLog.log("[RemoteServer] Sent input to session \(sessionId): \(message.prefix(50))")
+                return true
+            }
+            return false
+        }
+
+        if sent {
             return jsonResponse(["status": "sent", "session_id": sessionId])
         }
 
@@ -593,7 +627,7 @@ final class RemoteServer {
             lastLength = currentLength
         }
         let stableLength = lastLength
-        DebugLog.log("[RemoteServer] Buffer stabilized at \(stableLength) chars for session \(sessionId)")
+        await MainActor.run { DebugLog.log("[RemoteServer] Buffer stabilized at \(stableLength) chars for session \(sessionId)") }
 
         // Now wait for FRESH content from Claude startup (bypass permissions prompt)
         var ready = false
@@ -602,7 +636,7 @@ final class RemoteServer {
             let content = await MainActor.run { controller.getFullTerminalContent() }
             if content.count > stableLength + 10 { // Need meaningful new content
                 let newContent = String(content.suffix(content.count - stableLength))
-                DebugLog.log("[RemoteServer] Fresh content (\(newContent.count) chars): \(newContent.suffix(150))")
+                await MainActor.run { DebugLog.log("[RemoteServer] Fresh content (\(newContent.count) chars): \(newContent.suffix(150))") }
                 if newContent.contains("bypass permissions") || newContent.contains("autoaccept") || newContent.contains("shift+tab") {
                     ready = true
                     break
@@ -611,11 +645,11 @@ final class RemoteServer {
         }
 
         if !ready {
-            DebugLog.log("[RemoteServer] Claude may not be ready yet for session \(sessionId), sending input anyway after timeout")
+            await MainActor.run { DebugLog.log("[RemoteServer] Claude may not be ready yet for session \(sessionId), sending input anyway after timeout") }
         }
 
-        controller.sendToTerminal(message + "\r\r")
-        DebugLog.log("[RemoteServer] Auto-launched and sent input to session \(sessionId): \(message.prefix(50))")
+        await MainActor.run { controller.sendToTerminal(message + "\r\r") }
+        await MainActor.run { DebugLog.log("[RemoteServer] Auto-launched and sent input to session \(sessionId): \(message.prefix(50))") }
         return jsonResponse(["status": "launched_and_sent", "session_id": sessionId])
     }
 
@@ -630,6 +664,7 @@ final class RemoteServer {
         return sessions.first { $0.id == uuid }
     }
 
+    @MainActor
     private func sessionToJSON(_ session: Session) -> [String: Any] {
         let isRunning = appState?.terminalControllers[session.id]?.terminalView?.process?.running == true
         var json: [String: Any] = [

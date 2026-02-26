@@ -294,12 +294,26 @@ final class AppViewModel {
         }
     }
 
+    var lastSendError: String = ""
+
     func sendQuickReply(sessionId: String, message: String) async -> Bool {
-        guard let api else { return false }
+        // Try WebSocket first (already connected, avoids new HTTP connection)
+        if let ws = wsManager, ws.sendTerminalInput(message) {
+            lastSendError = ""
+            return true
+        }
+
+        // Fall back to REST POST
+        guard let api else {
+            lastSendError = "No API connection"
+            return false
+        }
         do {
             try await api.sendInput(sessionId: sessionId, message: message)
+            lastSendError = ""
             return true
         } catch {
+            lastSendError = "\(error)"
             return false
         }
     }

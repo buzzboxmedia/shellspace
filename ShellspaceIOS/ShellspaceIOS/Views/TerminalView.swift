@@ -9,6 +9,7 @@ struct TerminalView: View {
     @State private var inputText = ""
     @State private var isUserScrolledUp = false
     @State private var showSentToast = false
+    @State private var sendError = ""
     @State private var pollTask: Task<Void, Never>?
     @State private var useWebSocket = false
     @State private var connectionDotColor: Color = .gray
@@ -28,7 +29,7 @@ struct TerminalView: View {
     /// Strip ANSI/null/decorative chars and trim trailing blank lines
     private static func cleanContent(_ raw: String) -> String {
         let stripped = raw
-            .replacing(nullRegex, with: "")
+            .replacing(nullRegex, with: " ")
             .replacing(ansiRegex, with: "")
             .replacing(decorativeRegex, with: "")
         // Trim trailing blank lines from terminal buffer
@@ -46,14 +47,14 @@ struct TerminalView: View {
                 ScrollView {
                     Text(terminalContent.isEmpty ? " " : terminalContent)
                         .font(.system(size: fontSize, design: .monospaced))
-                        .foregroundStyle(.green.opacity(0.9))
+                        .foregroundStyle(.white)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .id("terminalBottom")
                 }
                 .defaultScrollAnchor(.bottom)
-                .background(Color.black)
+                .background(Color(red: 0.1, green: 0.1, blue: 0.11))
                 .onChange(of: terminalContent) {
                     if !isUserScrolledUp {
                         withAnimation(.easeOut(duration: 0.15)) {
@@ -107,10 +108,9 @@ struct TerminalView: View {
 
             // Input bar - dark themed
             HStack(spacing: 8) {
-                TextField("Send to terminal...", text: $inputText, axis: .vertical)
+                TextField("Send to terminal...", text: $inputText)
                     .font(.system(size: 16, design: .monospaced))
                     .foregroundStyle(.white)
-                    .lineLimit(2...6)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 14)
                     .frame(minHeight: 52)
@@ -124,10 +124,11 @@ struct TerminalView: View {
                     sendCurrentInput()
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
+                        .font(.system(size: 32))
                         .foregroundStyle(inputText.isEmpty ? .gray.opacity(0.5) : .blue)
                 }
                 .disabled(inputText.isEmpty)
+                .frame(width: 44, height: 44)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -167,6 +168,18 @@ struct TerminalView: View {
                         .padding(.bottom, 100)
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            if !sendError.isEmpty {
+                VStack {
+                    Text(sendError)
+                        .font(.caption)
+                        .foregroundStyle(.white)
+                        .padding(10)
+                        .background(Color.red.opacity(0.85))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .padding(.top, 8)
+                    Spacer()
+                }
             }
         }
         .task {
@@ -238,7 +251,10 @@ struct TerminalView: View {
 
     private func sendCurrentInput() {
         let text = inputText.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty else {
+            sendError = "Input empty (raw: '\(inputText)')"
+            return
+        }
         inputText = ""
         sendMessage(text)
     }
@@ -247,11 +263,13 @@ struct TerminalView: View {
         Task {
             let success = await viewModel.sendQuickReply(sessionId: session.id, message: message)
             if success {
+                sendError = ""
                 withAnimation { showSentToast = true }
                 try? await Task.sleep(for: .seconds(1.5))
                 withAnimation { showSentToast = false }
-                // Always refresh via REST after sending
                 await loadTerminal()
+            } else {
+                sendError = "Error: \(viewModel.lastSendError)"
             }
         }
     }
