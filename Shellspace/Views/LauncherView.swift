@@ -740,11 +740,18 @@ struct InboxRow: View {
     private func sendReply(_ text: String) {
         if let controller = appState.terminalControllers[session.id],
            controller.terminalView?.process?.running == true {
-            controller.sendToTerminal(text)
+            if text == "stop" {
+                // Stop ends the process entirely
+                appState.removeController(for: session)
+                session.isWaitingForInput = false
+            } else {
+                controller.sendToTerminal(text)
+                // Push idle counter negative so it takes longer to re-trigger (30s cooldown)
+                controller.idleTickCount = -25
+            }
             withAnimation {
                 sentText = "Sent \u{2713}"
             }
-            // Remove confirmation after 1.5s
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 withAnimation {
                     sentText = nil

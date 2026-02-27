@@ -580,7 +580,7 @@ class TerminalController: ObservableObject {
     weak var session: Session?
     private var idleTimer: Timer?
     private var lastContentHash: Int = 0
-    private var idleTickCount: Int = 0
+    var idleTickCount: Int = 0
     private let idleThresholdTicks: Int = 5  // 5 seconds (1 tick per second)
 
     // MARK: - Pop-Out to Terminal.app
