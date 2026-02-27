@@ -90,12 +90,6 @@ struct ShellspaceApp: App {
                     // Enable session sync
                     SessionSyncService.shared.isEnabled = true
 
-                    // Import sessions from Dropbox (if sync is enabled)
-                    SessionSyncService.shared.importAllSessions(modelContext: sharedModelContainer.mainContext)
-
-                    // Export projects (ensures JSON is up to date after migrations)
-                    ProjectSyncService.shared.exportProjects(from: sharedModelContainer.mainContext)
-
                     // Start remote access for iOS companion app
                     if RelayAuth.shared.isRelayMode && RelayAuth.shared.isAuthenticated {
                         relayClient.connect(appState: appState, modelContainer: sharedModelContainer)
@@ -103,6 +97,16 @@ struct ShellspaceApp: App {
                     } else {
                         remoteServer.start(appState: appState, modelContainer: sharedModelContainer)
                         DebugLog.log("[App] Started local server (Hummingbird on port 8847)")
+                    }
+
+                    // Heavy sync operations - run async so the window appears immediately
+                    let container = sharedModelContainer
+                    Task { @MainActor in
+                        SessionSyncService.shared.importAllSessions(modelContext: container.mainContext)
+                        DebugLog.log("[App] Session import done")
+
+                        ProjectSyncService.shared.exportProjects(from: container.mainContext)
+                        DebugLog.log("[App] Startup complete")
                     }
                 }
         }
