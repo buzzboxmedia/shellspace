@@ -638,7 +638,7 @@ struct InboxRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Top row: dot + icon + name + time
+            // Top row: dot + icon + name + time (tappable to navigate)
             HStack(spacing: 12) {
                 InboxPulsingDot()
 
@@ -680,6 +680,10 @@ struct InboxRow: View {
                     .font(.system(size: 11))
                     .foregroundStyle(Color(red: 0.50, green: 0.52, blue: 0.58))
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                navigateToSession()
+            }
 
             // Terminal snippet — single line with left rule
             let snippet = terminalSnippet
@@ -697,9 +701,12 @@ struct InboxRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 44)
+                .onTapGesture {
+                    navigateToSession()
+                }
             }
 
-            // Quick-reply icons
+            // Quick-reply icons (no parent tap gesture — buttons handle their own clicks)
             HStack(spacing: 8) {
                 Spacer()
                     .frame(width: 38)
@@ -723,10 +730,6 @@ struct InboxRow: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(isHovered ? Color.white.opacity(0.05) : .clear)
         )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            navigateToSession()
-        }
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
