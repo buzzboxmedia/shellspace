@@ -74,7 +74,7 @@ struct NavigationRailView: View {
                 }
             }
             .buttonStyle(.plain)
-            .help(inboxCount > 0 ? "Home (\(inboxCount) waiting)" : "Home")
+            .help(inboxCount > 0 ? "Home (\(inboxCount) waiting on you)" : "Home")
             .padding(.vertical, 12)
 
             RailDivider()

@@ -361,7 +361,7 @@ struct ActiveSessionsSection: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.blue)
 
-                Text("Open Processes")
+                Text("In Progress")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Color(red: 0.92, green: 0.93, blue: 0.95))
 
@@ -381,7 +381,7 @@ struct ActiveSessionsSection: View {
                             session.isWaitingForInput = false
                         }
                     } label: {
-                        Text("End All")
+                        Text("Pause All")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 8)
@@ -472,7 +472,7 @@ struct ActiveSessionRow: View {
                 appState.removeController(for: session)
                 session.isWaitingForInput = false
             } label: {
-                Text("End")
+                Text("Pause")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
@@ -524,7 +524,7 @@ struct InboxSection: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.orange)
 
-                Text("Waiting for Input")
+                Text("Waiting on You")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Color(red: 0.92, green: 0.93, blue: 0.95))
 
