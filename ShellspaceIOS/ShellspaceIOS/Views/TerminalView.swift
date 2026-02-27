@@ -219,6 +219,7 @@ struct TerminalView: View {
         pollTask?.cancel()
         pollTask = Task {
             var wsEmptyCount = 0
+            var cyclesSinceRESTFetch = 0
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(500))
                 guard !Task.isCancelled else { break }
@@ -226,6 +227,7 @@ struct TerminalView: View {
 
                 // Update connection color
                 connectionDotColor = connectionColor
+                cyclesSinceRESTFetch += 1
 
                 let wsContent = wsManager.terminalContent
                 if !wsContent.isEmpty {
@@ -234,14 +236,17 @@ struct TerminalView: View {
                     if stripped != terminalContent {
                         terminalContent = stripped
                         isRunning = wsManager.terminalIsRunning
+                        cyclesSinceRESTFetch = 0
                     }
                 } else {
                     wsEmptyCount += 1
-                    // WebSocket not delivering content — fall back to REST polling
-                    if wsEmptyCount >= 10 {
-                        await loadTerminal()
-                        wsEmptyCount = 5 // Poll every ~2.5s going forward
-                    }
+                }
+
+                // REST safety net: fetch every 5s if WS isn't delivering new content
+                if wsEmptyCount >= 10 || cyclesSinceRESTFetch >= 10 {
+                    await loadTerminal()
+                    wsEmptyCount = 0
+                    cyclesSinceRESTFetch = 0
                 }
             }
         }
@@ -265,9 +270,13 @@ struct TerminalView: View {
             if success {
                 sendError = ""
                 withAnimation { showSentToast = true }
-                try? await Task.sleep(for: .seconds(1.5))
+                try? await Task.sleep(for: .seconds(1))
                 withAnimation { showSentToast = false }
-                await loadTerminal()
+                // Poll REST to catch Claude's response (typically 2-10s)
+                for _ in 0..<8 {
+                    await loadTerminal()
+                    try? await Task.sleep(for: .seconds(2))
+                }
             } else {
                 sendError = "Error: \(viewModel.lastSendError)"
             }
