@@ -340,6 +340,8 @@ class SessionSyncService {
 
     /// Merge remote session with local (last-write-wins)
     private func mergeSession(local: Session, remote: SessionMetadata, modelContext: ModelContext) -> ImportResult {
+        // Always force-clear runtime state — background context may have stale value from persistent store
+        local.isWaitingForInput = false
         if remote.lastAccessedAt > local.lastAccessedAt {
             local.updateFromMetadata(remote)
             resolveRelationships(for: local, projectId: remote.projectId, taskGroupId: remote.taskGroupId, modelContext: modelContext)
@@ -375,7 +377,7 @@ class SessionSyncService {
         session.isCompleted = metadata.isCompleted
         session.completedAt = metadata.completedAt
         session.isHidden = metadata.isHidden
-        session.isWaitingForInput = metadata.isWaitingForInput
+        // Don't sync isWaitingForInput — it's runtime state only valid on the machine with the running process
         session.hasBeenLaunched = metadata.hasBeenLaunched
 
         // Resolve relationships (projects should exist now since we imported them first)

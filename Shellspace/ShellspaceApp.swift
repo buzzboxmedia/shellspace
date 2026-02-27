@@ -84,19 +84,6 @@ struct ShellspaceApp: App {
                         UserDefaults.standard.set(true, forKey: "deduplicatedProjectsByPath")
                     }
 
-                    // Clear stale waiting-for-input flags from sessions that have no running process
-                    // (e.g. after a crash, isWaitingForInput stays true in SwiftData but the process is gone)
-                    let waitingDescriptor = FetchDescriptor<Session>(predicate: #Predicate { $0.isWaitingForInput == true })
-                    if let staleSessions = try? sharedModelContainer.mainContext.fetch(waitingDescriptor) {
-                        for session in staleSessions {
-                            session.isWaitingForInput = false
-                        }
-                        if !staleSessions.isEmpty {
-                            try? sharedModelContainer.mainContext.save()
-                            DebugLog.log("[App] Cleared \(staleSessions.count) stale waiting-for-input flags")
-                        }
-                    }
-
                     // Import projects from Dropbox (before session sync)
                     ProjectSyncService.shared.importProjects(into: sharedModelContainer.mainContext)
 
@@ -119,8 +106,20 @@ struct ShellspaceApp: App {
                         SessionSyncService.shared.importAllSessions(modelContext: backgroundContext)
                         try? backgroundContext.save()
 
+                        // Clear stale waiting-for-input flags AFTER import completes
+                        // (import background context may have written stale true values back)
                         await MainActor.run {
                             DebugLog.log("[App] Session import done")
+                            let waitingDescriptor = FetchDescriptor<Session>(predicate: #Predicate { $0.isWaitingForInput == true })
+                            if let staleSessions = try? container.mainContext.fetch(waitingDescriptor) {
+                                for session in staleSessions {
+                                    session.isWaitingForInput = false
+                                }
+                                if !staleSessions.isEmpty {
+                                    try? container.mainContext.save()
+                                    DebugLog.log("[App] Cleared \(staleSessions.count) stale waiting-for-input flags (post-import)")
+                                }
+                            }
                             ProjectSyncService.shared.exportProjects(from: container.mainContext)
                             DebugLog.log("[App] Startup complete")
                         }
@@ -273,7 +272,9 @@ class AppState: ObservableObject {
     }
 
     func removeController(for session: Session) {
-        terminalControllers.removeValue(forKey: session.id)
+        if let controller = terminalControllers.removeValue(forKey: session.id) {
+            controller.stopIdleDetection()
+        }
     }
 
     // MARK: - Session Launch Tracking

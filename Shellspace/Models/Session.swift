@@ -182,7 +182,7 @@ extension Session {
             isCompleted: isCompleted,
             completedAt: completedAt,
             isHidden: isHidden,
-            isWaitingForInput: isWaitingForInput,
+            isWaitingForInput: false,  // Never export runtime state — only valid on the machine with the running process
             hasBeenLaunched: hasBeenLaunched,
             projectId: project?.id,
             taskGroupId: taskGroup?.id
@@ -211,7 +211,7 @@ extension Session {
         if !self.isHidden {
             self.isHidden = metadata.isHidden
         }
-        self.isWaitingForInput = metadata.isWaitingForInput
+        // Don't sync isWaitingForInput — it's runtime state only valid on the machine with the running process
         self.hasBeenLaunched = metadata.hasBeenLaunched
 
         // Note: Project and TaskGroup relationships are resolved separately

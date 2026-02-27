@@ -581,7 +581,7 @@ class TerminalController: ObservableObject {
     private var idleTimer: Timer?
     private var lastContentHash: Int = 0
     var idleTickCount: Int = 0
-    private let idleThresholdTicks: Int = 5  // 5 seconds (1 tick per second)
+    private let idleThresholdTicks: Int = 10  // 10 seconds (1 tick per second)
 
     // MARK: - Pop-Out to Terminal.app
 
@@ -617,10 +617,80 @@ class TerminalController: ObservableObject {
     func stopIdleDetection() {
         idleTimer?.invalidate()
         idleTimer = nil
-        // Clear waiting state when stopping detection (process exited)
         if session?.isWaitingForInput == true {
             session?.isWaitingForInput = false
         }
+    }
+
+    /// Check if the terminal's last meaningful line looks like it's asking for user input
+    /// (a question, permission prompt, or interactive choice) vs just sitting at an idle prompt.
+    private func terminalIsAskingForInput(_ data: Data) -> Bool {
+        guard let text = String(data: data, encoding: .utf8) else { return false }
+
+        // Get the last few non-empty lines
+        let lines = text.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard let lastLine = lines.last else { return false }
+        let lower = lastLine.lowercased()
+
+        // Skip if it's just a shell/Claude prompt sitting idle
+        let promptPatterns = ["$", "%", ">", "❯", "→", "claude>", "bash-", "zsh"]
+        if lastLine.count < 40 {
+            for pattern in promptPatterns {
+                if lower == pattern || lower.hasSuffix(pattern) || lower.hasSuffix(pattern + " ") {
+                    return false
+                }
+            }
+            // Matches "projectname > " style Claude Code prompts (e.g., "buzzbox > cdw")
+            if lower.range(of: #"^\S+\s*>\s*\S*$"#, options: .regularExpression) != nil {
+                return false
+            }
+        }
+
+        // Skip status bar lines
+        if lower.contains("bypass permissions") || lower.contains("shift+tab") {
+            return false
+        }
+
+        // Positive signals: looks like it's asking for something
+        let questionPatterns = [
+            "?",                    // Questions
+            "[y/n]", "(y/n)",      // Yes/No prompts
+            "allow", "deny",       // Permission prompts
+            "approve", "reject",
+            "do you want",
+            "would you like",
+            "shall i",
+            "should i",
+            "press enter",
+            "continue?",
+            "proceed?",
+            "overwrite",
+            "replace",
+            "confirm",
+            "select",
+            "choose",
+            "(yes/no)",
+            "enter to",
+        ]
+        for pattern in questionPatterns {
+            if lower.contains(pattern) {
+                return true
+            }
+        }
+
+        // Check second-to-last line too (question might be on line above input cursor)
+        if lines.count >= 2 {
+            let prevLine = lines[lines.count - 2].lowercased()
+            for pattern in questionPatterns {
+                if prevLine.contains(pattern) {
+                    return true
+                }
+            }
+        }
+
+        return false
     }
 
     private func checkIdle() {
@@ -637,9 +707,11 @@ class TerminalController: ObservableObject {
         if currentHash == lastContentHash {
             idleTickCount += 1
             if idleTickCount >= idleThresholdTicks && session?.isWaitingForInput != true {
-                logger.info("Session idle for \(self.idleTickCount)s — marking as waiting for input")
-                DispatchQueue.main.async { [weak self] in
-                    self?.session?.isWaitingForInput = true
+                // Only mark as waiting if the terminal actually looks like it's asking a question
+                if terminalIsAskingForInput(content) {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.session?.isWaitingForInput = true
+                    }
                 }
             }
         } else {
