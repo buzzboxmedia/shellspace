@@ -700,8 +700,27 @@ class TerminalController: ObservableObject {
     }
 
     /// Send text to the terminal (for the Update button)
+    /// Send text to the terminal and submit with Enter.
     func sendToTerminal(_ text: String) {
-        terminalView?.send(txt: text)
+        guard let tv = terminalView else {
+            DebugLog.log("[sendToTerminal] No terminalView")
+            return
+        }
+        let message = text.trimmingCharacters(in: .newlines)
+        guard !message.isEmpty else { return }
+
+        let terminal = tv.getTerminal()
+        let bpm = terminal.bracketedPasteMode
+        DebugLog.log("[sendToTerminal] bracketedPasteMode=\(bpm), message=\(message.prefix(50))")
+
+        // Send the text
+        tv.send(txt: message)
+
+        // Send Enter after a brief delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            DebugLog.log("[sendToTerminal] Sending Enter (0x0D)")
+            tv.send(data: [0x0d][...])
+        }
     }
 
     func startClaude(in directory: String, sessionId: UUID, claudeSessionId: String? = nil, parkerBriefing: String? = nil, taskFolderPath: String? = nil, hasBeenLaunched: Bool = false) {

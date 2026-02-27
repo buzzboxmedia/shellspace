@@ -192,7 +192,7 @@ final class RemoteServer: @unchecked Sendable {
                    let message = json["message"] as? String {
                     await MainActor.run {
                         DebugLog.log("[RemoteServer] WS input received: \(message.prefix(50))")
-                        self.appState?.terminalControllers[uuid]?.sendToTerminal(message + "\r\r")
+                        self.appState?.terminalControllers[uuid]?.sendToTerminal(message)
                     }
                 }
             }
@@ -555,7 +555,7 @@ final class RemoteServer: @unchecked Sendable {
         let sent = await MainActor.run {
             if let controller = appState?.terminalControllers[uuid],
                controller.terminalView?.process?.running == true {
-                controller.sendToTerminal(message + "\r\r")
+                controller.sendToTerminal(message)
                 DebugLog.log("[RemoteServer] Sent input to session \(sessionId): \(message.prefix(50))")
                 return true
             }
@@ -648,7 +648,7 @@ final class RemoteServer: @unchecked Sendable {
             await MainActor.run { DebugLog.log("[RemoteServer] Claude may not be ready yet for session \(sessionId), sending input anyway after timeout") }
         }
 
-        await MainActor.run { controller.sendToTerminal(message + "\r\r") }
+        await MainActor.run { controller.sendToTerminal(message) }
         await MainActor.run { DebugLog.log("[RemoteServer] Auto-launched and sent input to session \(sessionId): \(message.prefix(50))") }
         return jsonResponse(["status": "launched_and_sent", "session_id": sessionId])
     }
