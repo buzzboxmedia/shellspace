@@ -363,7 +363,7 @@ struct ActiveSessionsSection: View {
 
                 Text("Running")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color(red: 0.92, green: 0.93, blue: 0.95))
 
                 Text("\(sessions.count)")
                     .font(.system(size: 13, weight: .bold))
@@ -383,10 +383,10 @@ struct ActiveSessionsSection: View {
         .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(Color(red: 0.13, green: 0.14, blue: 0.16))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(.blue.opacity(0.2), lineWidth: 1)
+                        .stroke(.blue.opacity(0.25), lineWidth: 1)
                 )
         )
     }
@@ -432,17 +432,17 @@ struct ActiveSessionRow: View {
 
             Image(systemName: projectIcon)
                 .font(.system(size: 16))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color(red: 0.65, green: 0.67, blue: 0.72))
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(projectName)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color(red: 0.88, green: 0.89, blue: 0.92))
 
                 Text(session.name)
                     .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color(red: 0.65, green: 0.67, blue: 0.72))
                     .lineLimit(1)
             }
 
@@ -450,18 +450,18 @@ struct ActiveSessionRow: View {
 
             Text("Working...")
                 .font(.system(size: 12))
-                .foregroundStyle(.blue.opacity(0.8))
+                .foregroundStyle(Color(red: 0.45, green: 0.72, blue: 0.95))
 
             Text(relativeTime)
                 .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color(red: 0.50, green: 0.52, blue: 0.58))
                 .frame(width: 50, alignment: .trailing)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isHovered ? Color.primary.opacity(0.05) : .clear)
+                .fill(isHovered ? Color.white.opacity(0.05) : .clear)
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -497,7 +497,7 @@ struct InboxSection: View {
 
                 Text("Waiting for Input")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color(red: 0.92, green: 0.93, blue: 0.95))
 
                 Text("\(sessions.count)")
                     .font(.system(size: 13, weight: .bold))
@@ -517,10 +517,10 @@ struct InboxSection: View {
         .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(Color(red: 0.13, green: 0.14, blue: 0.16))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(.orange.opacity(0.3), lineWidth: 1)
+                        .stroke(.orange.opacity(0.35), lineWidth: 1)
                 )
         )
     }
@@ -581,17 +581,17 @@ struct InboxRow: View {
 
                 Image(systemName: projectIcon)
                     .font(.system(size: 16))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color(red: 0.65, green: 0.67, blue: 0.72))
                     .frame(width: 24)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(projectName)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color(red: 0.88, green: 0.89, blue: 0.92))
 
                     Text(session.name)
                         .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color(red: 0.65, green: 0.67, blue: 0.72))
                         .lineLimit(1)
                 }
 
@@ -599,7 +599,7 @@ struct InboxRow: View {
 
                 Text(relativeTime)
                     .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color(red: 0.50, green: 0.52, blue: 0.58))
             }
 
             // Terminal snippet — what Claude is saying/asking
@@ -640,7 +640,7 @@ struct InboxRow: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isHovered ? Color.primary.opacity(0.05) : .clear)
+                .fill(isHovered ? Color.white.opacity(0.05) : .clear)
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -689,16 +689,22 @@ struct InboxChip: View {
 
     @State private var isHovered = false
 
+    private var isDestructive: Bool { label == "stop" }
+
+    private var accentColor: Color {
+        isDestructive ? Color(red: 0.80, green: 0.22, blue: 0.22) : .orange
+    }
+
     var body: some View {
         Button(action: action) {
             Text(label)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(isHovered ? .white : .orange)
+                .foregroundStyle(.white)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(
                     Capsule()
-                        .fill(isHovered ? .orange : .orange.opacity(0.15))
+                        .fill(isHovered ? accentColor : accentColor.opacity(0.25))
                 )
         }
         .buttonStyle(.plain)
