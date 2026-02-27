@@ -11,9 +11,12 @@
 		27E05565A65A447D6270D241 /* SettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A20C755DCE6145FF6DDD926 /* SettingsSheet.swift */; };
 		3131A57CB5B0725677C1AE90 /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F184919BF4E348FBE8C15A /* AppViewModel.swift */; };
 		443DB03F222120F3673C6E66 /* ShellspaceIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5AC707640ECA9238E1232CF /* ShellspaceIOSApp.swift */; };
+		52CDD87F6B606ACD71E6994A /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C341E74798CB336D46D6FEB9 /* LoginView.swift */; };
 		59184241CB74ED26272DED70 /* RemoteTaskFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74C719194A79BD03F22A0A09 /* RemoteTaskFolder.swift */; };
+		6030FF7D7EE83E6CFE062E84 /* DevicePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A55DA7E2BFD079446F5736 /* DevicePickerView.swift */; };
 		61A5AE276F4E6AD24BFE2A12 /* SessionsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F229A38FD17FACDC1C7D93F8 /* SessionsListView.swift */; };
 		649155D12D429C81AF44FED8 /* WebSocketManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B3ACA9E191B5DA47B0E6DAE /* WebSocketManager.swift */; };
+		81EB2A4B80CE571B22F1B3B3 /* RelayAuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0F3FC3A84C494C8F8E02BDE /* RelayAuthManager.swift */; };
 		8E95F0985BA2E7B28848BCA3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B9E985E82415A46F00FF5EE6 /* Assets.xcassets */; };
 		BD407B5A641AFC42E0453068 /* RemoteSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1818BC8CE1A1956E487B95AF /* RemoteSession.swift */; };
 		C15EDE356770C613D1DA64CC /* RemoteProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25E0FD3D0B5063A4C0F6BEA1 /* RemoteProject.swift */; };
@@ -25,9 +28,6 @@
 		F87F942490188DD2D7496053 /* ShellspaceAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2E1976A256D34BD07724A7D /* ShellspaceAPI.swift */; };
 		FC62FBCDD899972427DB8CAC /* BonjourBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBA57F7AFFFEDCE73FF31D46 /* BonjourBrowser.swift */; };
 		FDE5F4C94862E8659E3351FE /* AllSessionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9773FC04C143B884991810C /* AllSessionsView.swift */; };
-		A1B2C3D4E5F60718901A2B3C /* RelayAuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718901A2B30 /* RelayAuthManager.swift */; };
-		A1B2C3D4E5F60718901A2B3D /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718901A2B31 /* LoginView.swift */; };
-		A1B2C3D4E5F60718901A2B3E /* DevicePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718901A2B32 /* DevicePickerView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,15 +45,15 @@
 		89A6C96842658DD10199FE05 /* TerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalView.swift; sourceTree = "<group>"; };
 		AA35A5EB2C1F5E7B6BBAB1CE /* ProjectsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsListView.swift; sourceTree = "<group>"; };
 		B9E985E82415A46F00FF5EE6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C341E74798CB336D46D6FEB9 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		CBA57F7AFFFEDCE73FF31D46 /* BonjourBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BonjourBrowser.swift; sourceTree = "<group>"; };
+		D0F3FC3A84C494C8F8E02BDE /* RelayAuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayAuthManager.swift; sourceTree = "<group>"; };
+		D1A55DA7E2BFD079446F5736 /* DevicePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePickerView.swift; sourceTree = "<group>"; };
 		D2E1976A256D34BD07724A7D /* ShellspaceAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellspaceAPI.swift; sourceTree = "<group>"; };
 		D5AC707640ECA9238E1232CF /* ShellspaceIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellspaceIOSApp.swift; sourceTree = "<group>"; };
 		E1F184919BF4E348FBE8C15A /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
 		F229A38FD17FACDC1C7D93F8 /* SessionsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsListView.swift; sourceTree = "<group>"; };
 		F9773FC04C143B884991810C /* AllSessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllSessionsView.swift; sourceTree = "<group>"; };
-		A1B2C3D4E5F60718901A2B30 /* RelayAuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayAuthManager.swift; sourceTree = "<group>"; };
-		A1B2C3D4E5F60718901A2B31 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
-		A1B2C3D4E5F60718901A2B32 /* DevicePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePickerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -88,7 +88,7 @@
 			children = (
 				E1F184919BF4E348FBE8C15A /* AppViewModel.swift */,
 				CBA57F7AFFFEDCE73FF31D46 /* BonjourBrowser.swift */,
-				A1B2C3D4E5F60718901A2B30 /* RelayAuthManager.swift */,
+				D0F3FC3A84C494C8F8E02BDE /* RelayAuthManager.swift */,
 				D2E1976A256D34BD07724A7D /* ShellspaceAPI.swift */,
 				5B3ACA9E191B5DA47B0E6DAE /* WebSocketManager.swift */,
 			);
@@ -101,8 +101,8 @@
 				F9773FC04C143B884991810C /* AllSessionsView.swift */,
 				1556AE3EFAD0FADFA769DFA1 /* BrowseView.swift */,
 				27F5776474772993ABFECF39 /* CreateSessionSheet.swift */,
-				A1B2C3D4E5F60718901A2B32 /* DevicePickerView.swift */,
-				A1B2C3D4E5F60718901A2B31 /* LoginView.swift */,
+				D1A55DA7E2BFD079446F5736 /* DevicePickerView.swift */,
+				C341E74798CB336D46D6FEB9 /* LoginView.swift */,
 				AA35A5EB2C1F5E7B6BBAB1CE /* ProjectsListView.swift */,
 				1B946C3E7CAFE84C5CBB1441 /* SearchResultsView.swift */,
 				F229A38FD17FACDC1C7D93F8 /* SessionsListView.swift */,
@@ -157,7 +157,7 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					C65EA9A383EFA33DEF89173A = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = VCY2SG8342;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -202,7 +202,10 @@
 				FC62FBCDD899972427DB8CAC /* BonjourBrowser.swift in Sources */,
 				038ABB2D2112EC4BBD3EC738 /* BrowseView.swift in Sources */,
 				D8B19A098B0955B16DF215BE /* CreateSessionSheet.swift in Sources */,
+				6030FF7D7EE83E6CFE062E84 /* DevicePickerView.swift in Sources */,
+				52CDD87F6B606ACD71E6994A /* LoginView.swift in Sources */,
 				D97B5392C8A3DD431C34BCDD /* ProjectsListView.swift in Sources */,
+				81EB2A4B80CE571B22F1B3B3 /* RelayAuthManager.swift in Sources */,
 				C15EDE356770C613D1DA64CC /* RemoteProject.swift in Sources */,
 				BD407B5A641AFC42E0453068 /* RemoteSession.swift in Sources */,
 				59184241CB74ED26272DED70 /* RemoteTaskFolder.swift in Sources */,
@@ -214,9 +217,6 @@
 				ED565BF19AF4A9308528EA87 /* TerminalView.swift in Sources */,
 				F10E33C4BEE7FEC06ACAD991 /* WaitingView.swift in Sources */,
 				649155D12D429C81AF44FED8 /* WebSocketManager.swift in Sources */,
-				A1B2C3D4E5F60718901A2B3C /* RelayAuthManager.swift in Sources */,
-				A1B2C3D4E5F60718901A2B3D /* LoginView.swift in Sources */,
-				A1B2C3D4E5F60718901A2B3E /* DevicePickerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -230,7 +230,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = VCY2SG8342;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = ShellspaceIOS/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Shellspace;
@@ -238,6 +238,7 @@
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -381,7 +382,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = VCY2SG8342;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = ShellspaceIOS/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Shellspace;
@@ -389,6 +390,7 @@
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

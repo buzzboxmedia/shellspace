@@ -96,6 +96,24 @@ final class RelayAuthManager {
         applyAuthResponse(response)
     }
 
+    func deleteAccount() async throws {
+        let token = try await validAccessToken()
+        guard let url = URL(string: "\(Self.relayBaseURL)/api/auth/account") else {
+            throw AuthError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            let message = parseErrorMessage(data) ?? "Failed to delete account"
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw AuthError.serverError(code, message)
+        }
+        await MainActor.run { logout() }
+    }
+
     func logout() {
         accessToken = nil
         refreshTokenValue = nil
