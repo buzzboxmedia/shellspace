@@ -643,12 +643,14 @@ class TerminalController: ObservableObject {
                 }
             }
         } else {
-            // Content changed — reset
+            // Content changed — reset (but preserve negative cooldown from inbox replies)
             lastContentHash = currentHash
             if idleTickCount >= idleThresholdTicks {
                 logger.info("Session became active again")
             }
-            idleTickCount = 0
+            if idleTickCount >= 0 {
+                idleTickCount = 0
+            }
             if session?.isWaitingForInput == true {
                 DispatchQueue.main.async { [weak self] in
                     self?.session?.isWaitingForInput = false
