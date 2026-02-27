@@ -150,14 +150,14 @@ struct SessionsListView: View {
     }
 
     private func loadTasks() async {
-        guard let api = viewModel.api else {
-            isLoading = false
-            return
-        }
-        do {
-            taskFolders = try await api.tasks(projectId: project.id)
-        } catch {
-            // Silently fall back to showing sessions only
+        // Request tasks through the tunnel
+        if let ws = viewModel.wsManager {
+            _ = ws.send([
+                "type": "request_tasks",
+                "projectId": project.id
+            ])
+            // Give the Mac a moment to respond through the tunnel
+            try? await Task.sleep(for: .seconds(1))
         }
         isLoading = false
     }

@@ -129,6 +129,12 @@ final class RemoteServer: @unchecked Sendable {
             return await server.handleCreateSession(body: body)
         }
 
+        router.post("api/sessions/{id}/image") { request, context -> Response in
+            let id = context.parameters.get("id") ?? ""
+            let body = try await request.body.collect(upTo: 1024 * 1024 * 10) // 10MB limit
+            return await server.handleImageUpload(sessionId: id, body: body)
+        }
+
         return router
     }
 
@@ -597,6 +603,75 @@ final class RemoteServer: @unchecked Sendable {
         // Auto-launch: no controller or process not running
         await autoLaunchAndSend(uuid: uuid, sessionId: sessionId, message: message)
         return jsonResponse(["status": "launched_and_sent", "session_id": sessionId])
+    }
+
+    private func handleImageUpload(sessionId: String, body: ByteBuffer) async -> Response {
+        guard let uuid = UUID(uuidString: sessionId) else {
+            return jsonResponse(["error": "Invalid session ID"], status: .badRequest)
+        }
+
+        // Parse base64 JSON body
+        guard let data = body.getData(at: body.readerIndex, length: body.readableBytes),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let base64String = json["image"] as? String,
+              let imageData = Data(base64Encoded: base64String) else {
+            return jsonResponse(["error": "Missing or invalid 'image' base64 data"], status: .badRequest)
+        }
+
+        let filename = (json["filename"] as? String) ?? "photo.jpg"
+
+        // Get project path from session
+        let projectPath: String? = await MainActor.run {
+            findSession(sessionId)?.projectPath
+        }
+
+        // Save image to .shellspace-screenshots/
+        let fileManager = FileManager.default
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+        let ext = (filename as NSString).pathExtension.isEmpty ? "jpg" : (filename as NSString).pathExtension
+        let savedFileName = "screenshot-\(timestamp).\(ext)"
+
+        var saveDir = fileManager.temporaryDirectory
+        if let projectPath {
+            let screenshotsDir = URL(fileURLWithPath: projectPath)
+                .appendingPathComponent(".shellspace-screenshots")
+            do {
+                try fileManager.createDirectory(at: screenshotsDir, withIntermediateDirectories: true)
+                saveDir = screenshotsDir
+            } catch {
+                await MainActor.run { DebugLog.log("[RemoteServer] Failed to create screenshots dir: \(error)") }
+            }
+        }
+
+        let filePath = saveDir.appendingPathComponent(savedFileName)
+
+        do {
+            try imageData.write(to: filePath)
+        } catch {
+            await MainActor.run { DebugLog.log("[RemoteServer] Failed to save image: \(error)") }
+            return jsonResponse(["error": "Failed to save image"], status: .internalServerError)
+        }
+
+        await MainActor.run { DebugLog.log("[RemoteServer] Saved image to: \(filePath.path)") }
+
+        // Send file path to terminal (same as Mac clipboard paste)
+        let sent = await MainActor.run {
+            if let controller = appState?.terminalControllers[uuid],
+               controller.terminalView?.process?.running == true {
+                controller.sendToTerminal(filePath.path)
+                DebugLog.log("[RemoteServer] Sent image path to session \(sessionId)")
+                return true
+            }
+            return false
+        }
+
+        if !sent {
+            // Auto-launch and send
+            await autoLaunchAndSend(uuid: uuid, sessionId: sessionId, message: filePath.path)
+        }
+
+        return jsonResponse(["status": "sent", "path": filePath.path])
     }
 
     // MARK: - Auto-launch

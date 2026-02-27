@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct TerminalView: View {
     @Environment(AppViewModel.self) private var viewModel
@@ -11,8 +12,12 @@ struct TerminalView: View {
     @State private var showSentToast = false
     @State private var sendError = ""
     @State private var pollTask: Task<Void, Never>?
-    @State private var useWebSocket = false
     @State private var connectionDotColor: Color = .gray
+    @State private var showImageSourcePicker = false
+    @State private var showPhotoPicker = false
+    @State private var showCamera = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var isUploadingImage = false
     @AppStorage("terminalFontSize") private var fontSize: Double = 14
     @FocusState private var inputFocused: Bool
 
@@ -21,9 +26,7 @@ struct TerminalView: View {
     private var isLandscape: Bool { verticalSizeClass == .compact }
 
     private static let ansiRegex = try! Regex("\\x1B\\[[0-9;]*[a-zA-Z]")
-    // Null bytes from SwiftTerm buffer (appear between characters, collapse spaces)
     private static let nullRegex = try! Regex("\\x00+")
-    // Box-drawing and block element characters used by Claude's UI
     private static let decorativeRegex = try! Regex("[\\u2500-\\u259F]+")
 
     /// Strip ANSI/null/decorative chars and trim trailing blank lines
@@ -32,7 +35,6 @@ struct TerminalView: View {
             .replacing(nullRegex, with: " ")
             .replacing(ansiRegex, with: "")
             .replacing(decorativeRegex, with: "")
-        // Trim trailing blank lines from terminal buffer
         var lines = stripped.split(separator: "\n", omittingEmptySubsequences: false)
         while let last = lines.last, last.allSatisfy({ $0.isWhitespace }) {
             lines.removeLast()
@@ -87,7 +89,7 @@ struct TerminalView: View {
                 }
             }
 
-            // Quick action chips - dark themed
+            // Quick action chips
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     TerminalChip(label: "stop", isDestructive: true) { sendMessage("stop") }
@@ -106,8 +108,24 @@ struct TerminalView: View {
             }
             .background(Color(white: 0.1))
 
-            // Input bar - dark themed
+            // Input bar
             HStack(spacing: 8) {
+                Button {
+                    showImageSourcePicker = true
+                } label: {
+                    if isUploadingImage {
+                        ProgressView()
+                            .tint(.gray)
+                            .frame(width: 32, height: 32)
+                    } else {
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.gray.opacity(0.8))
+                            .frame(width: 32, height: 32)
+                    }
+                }
+                .disabled(isUploadingImage)
+
                 TextField("Send to terminal...", text: $inputText)
                     .font(.system(size: 16, design: .monospaced))
                     .foregroundStyle(.white)
@@ -133,6 +151,25 @@ struct TerminalView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(Color(white: 0.1))
+        }
+        .confirmationDialog("Send Image", isPresented: $showImageSourcePicker) {
+            Button("Take Photo") { showCamera = true }
+            Button("Choose from Library") { showPhotoPicker = true }
+            Button("Cancel", role: .cancel) {}
+        }
+        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotoItem, matching: .images)
+        .onChange(of: selectedPhotoItem) { _, newItem in
+            guard let newItem else { return }
+            Task { await handleSelectedPhoto(newItem) }
+            selectedPhotoItem = nil
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraView { image in
+                showCamera = false
+                guard let image else { return }
+                Task { await uploadImage(image) }
+            }
+            .ignoresSafeArea()
         }
         .toolbarBackground(Color(white: 0.1), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -180,70 +217,43 @@ struct TerminalView: View {
             }
         }
         .task {
-            connectionDotColor = connectionColor
-            await loadTerminal()
-            connectWebSocket()
+            subscribeToTerminal()
+            startTerminalObserver()
         }
         .onDisappear {
             pollTask?.cancel()
-            viewModel.wsManager?.disconnectTerminal()
+            viewModel.wsManager?.unsubscribeTerminal()
         }
     }
 
-    private var connectionColor: Color {
-        guard let ws = viewModel.wsManager else { return .gray }
-        switch ws.terminalState {
-        case .connected: return .green
-        case .connecting, .reconnecting: return .yellow
-        case .disconnected: return .red
-        }
+    // MARK: - Terminal Subscription
+
+    private func subscribeToTerminal() {
+        viewModel.wsManager?.subscribeTerminal(sessionId: session.id)
     }
 
-    // MARK: - WebSocket
-
-    private func connectWebSocket() {
-        guard let wsManager = viewModel.wsManager else {
-            startPolling()
-            return
-        }
-
-        wsManager.connectTerminal(sessionId: session.id)
-        useWebSocket = true
-        startWebSocketObserver()
-    }
-
-    private func startWebSocketObserver() {
+    private func startTerminalObserver() {
         pollTask?.cancel()
         pollTask = Task {
-            var wsEmptyCount = 0
-            var cyclesSinceRESTFetch = 0
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(500))
                 guard !Task.isCancelled else { break }
                 guard let wsManager = viewModel.wsManager else { break }
 
-                // Update connection color
-                connectionDotColor = connectionColor
-                cyclesSinceRESTFetch += 1
-
                 let wsContent = wsManager.terminalContent
                 if !wsContent.isEmpty {
-                    wsEmptyCount = 0
                     let stripped = Self.cleanContent(wsContent)
                     if stripped != terminalContent {
                         terminalContent = stripped
                         isRunning = wsManager.terminalIsRunning
-                        cyclesSinceRESTFetch = 0
                     }
-                } else {
-                    wsEmptyCount += 1
                 }
 
-                // REST safety net: fetch every 5s if WS isn't delivering new content
-                if wsEmptyCount >= 10 || cyclesSinceRESTFetch >= 10 {
-                    await loadTerminal()
-                    wsEmptyCount = 0
-                    cyclesSinceRESTFetch = 0
+                // Update connection color
+                switch wsManager.tunnelState {
+                case .connected: connectionDotColor = .green
+                case .connecting, .reconnecting: connectionDotColor = .yellow
+                case .disconnected: connectionDotColor = .red
                 }
             }
         }
@@ -269,37 +279,79 @@ struct TerminalView: View {
                 withAnimation { showSentToast = true }
                 try? await Task.sleep(for: .seconds(1))
                 withAnimation { showSentToast = false }
-                // Poll REST to catch Claude's response (typically 2-10s)
-                for _ in 0..<8 {
-                    await loadTerminal()
-                    try? await Task.sleep(for: .seconds(2))
-                }
             } else {
                 sendError = "Error: \(viewModel.lastSendError)"
             }
         }
     }
 
-    private func loadTerminal() async {
-        guard let api = viewModel.api else { return }
-        do {
-            let response = try await api.terminalContent(sessionId: session.id)
-            let stripped = Self.cleanContent(response.content)
-            await MainActor.run {
-                terminalContent = stripped
-                isRunning = response.isRunning
-            }
-        } catch {}
+    // MARK: - Image Upload
+
+    private func handleSelectedPhoto(_ item: PhotosPickerItem) async {
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let image = UIImage(data: data) else {
+            sendError = "Failed to load selected photo"
+            return
+        }
+        await uploadImage(image)
     }
 
-    private func startPolling() {
-        pollTask?.cancel()
-        pollTask = Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
-                guard !Task.isCancelled else { break }
-                await loadTerminal()
-            }
+    private func uploadImage(_ image: UIImage) async {
+        guard let jpegData = image.jpegData(compressionQuality: 0.7) else {
+            sendError = "Failed to compress image"
+            return
+        }
+
+        isUploadingImage = true
+        defer { isUploadingImage = false }
+
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+        let filename = "photo-\(timestamp).jpg"
+
+        let success = await viewModel.sendImage(
+            sessionId: session.id,
+            imageData: jpegData,
+            filename: filename
+        )
+
+        if success {
+            sendError = ""
+            withAnimation { showSentToast = true }
+            try? await Task.sleep(for: .seconds(1))
+            withAnimation { showSentToast = false }
+        } else {
+            sendError = "Image upload failed"
+        }
+    }
+}
+
+// MARK: - Camera View (UIImagePickerController wrapper)
+
+struct CameraView: UIViewControllerRepresentable {
+    let onCapture: (UIImage?) -> Void
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(onCapture: onCapture) }
+
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let onCapture: (UIImage?) -> Void
+        init(onCapture: @escaping (UIImage?) -> Void) { self.onCapture = onCapture }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            onCapture(info[.originalImage] as? UIImage)
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            onCapture(nil)
         }
     }
 }

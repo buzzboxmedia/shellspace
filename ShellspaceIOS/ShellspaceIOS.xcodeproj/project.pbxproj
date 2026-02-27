@@ -25,6 +25,9 @@
 		F87F942490188DD2D7496053 /* ShellspaceAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2E1976A256D34BD07724A7D /* ShellspaceAPI.swift */; };
 		FC62FBCDD899972427DB8CAC /* BonjourBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBA57F7AFFFEDCE73FF31D46 /* BonjourBrowser.swift */; };
 		FDE5F4C94862E8659E3351FE /* AllSessionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9773FC04C143B884991810C /* AllSessionsView.swift */; };
+		A1B2C3D4E5F60718901A2B3C /* RelayAuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718901A2B30 /* RelayAuthManager.swift */; };
+		A1B2C3D4E5F60718901A2B3D /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718901A2B31 /* LoginView.swift */; };
+		A1B2C3D4E5F60718901A2B3E /* DevicePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718901A2B32 /* DevicePickerView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -48,6 +51,9 @@
 		E1F184919BF4E348FBE8C15A /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
 		F229A38FD17FACDC1C7D93F8 /* SessionsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsListView.swift; sourceTree = "<group>"; };
 		F9773FC04C143B884991810C /* AllSessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllSessionsView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718901A2B30 /* RelayAuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayAuthManager.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718901A2B31 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718901A2B32 /* DevicePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePickerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -82,6 +88,7 @@
 			children = (
 				E1F184919BF4E348FBE8C15A /* AppViewModel.swift */,
 				CBA57F7AFFFEDCE73FF31D46 /* BonjourBrowser.swift */,
+				A1B2C3D4E5F60718901A2B30 /* RelayAuthManager.swift */,
 				D2E1976A256D34BD07724A7D /* ShellspaceAPI.swift */,
 				5B3ACA9E191B5DA47B0E6DAE /* WebSocketManager.swift */,
 			);
@@ -94,6 +101,8 @@
 				F9773FC04C143B884991810C /* AllSessionsView.swift */,
 				1556AE3EFAD0FADFA769DFA1 /* BrowseView.swift */,
 				27F5776474772993ABFECF39 /* CreateSessionSheet.swift */,
+				A1B2C3D4E5F60718901A2B32 /* DevicePickerView.swift */,
+				A1B2C3D4E5F60718901A2B31 /* LoginView.swift */,
 				AA35A5EB2C1F5E7B6BBAB1CE /* ProjectsListView.swift */,
 				1B946C3E7CAFE84C5CBB1441 /* SearchResultsView.swift */,
 				F229A38FD17FACDC1C7D93F8 /* SessionsListView.swift */,
@@ -205,6 +214,9 @@
 				ED565BF19AF4A9308528EA87 /* TerminalView.swift in Sources */,
 				F10E33C4BEE7FEC06ACAD991 /* WaitingView.swift in Sources */,
 				649155D12D429C81AF44FED8 /* WebSocketManager.swift in Sources */,
+				A1B2C3D4E5F60718901A2B3C /* RelayAuthManager.swift in Sources */,
+				A1B2C3D4E5F60718901A2B3D /* LoginView.swift in Sources */,
+				A1B2C3D4E5F60718901A2B3E /* DevicePickerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -218,7 +230,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = VCY2SG8342;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = ShellspaceIOS/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Shellspace;
@@ -369,7 +381,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = VCY2SG8342;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = ShellspaceIOS/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Shellspace;

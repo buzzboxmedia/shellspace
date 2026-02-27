@@ -23,6 +23,7 @@ struct ShellspaceApp: App {
     @StateObject private var appState = AppState()
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     private let remoteServer = RemoteServer()
+    private let relayClient = RelayClient()
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -95,8 +96,14 @@ struct ShellspaceApp: App {
                     // Export projects (ensures JSON is up to date after migrations)
                     ProjectSyncService.shared.exportProjects(from: sharedModelContainer.mainContext)
 
-                    // Start remote server for iOS companion app
-                    remoteServer.start(appState: appState, modelContainer: sharedModelContainer)
+                    // Start remote access for iOS companion app
+                    if RelayAuth.shared.isRelayMode && RelayAuth.shared.isAuthenticated {
+                        relayClient.connect(appState: appState, modelContainer: sharedModelContainer)
+                        DebugLog.log("[App] Started relay client (outbound WebSocket)")
+                    } else {
+                        remoteServer.start(appState: appState, modelContainer: sharedModelContainer)
+                        DebugLog.log("[App] Started local server (Hummingbird on port 8847)")
+                    }
                 }
         }
         .modelContainer(sharedModelContainer)
@@ -210,6 +217,9 @@ class AppState: ObservableObject {
 
     /// Sessions that need attention (Claude finished outputting while not viewing)
     @Published var sessionsNeedingAttention: Set<UUID> = []
+
+    /// Relay connection status (for UI indicator)
+    @Published var relayConnectionState: RelayClient.ConnectionState = .disconnected
 
     /// Per-window states keyed by window ID
     private var windowStates: [UUID: WindowState] = [:]

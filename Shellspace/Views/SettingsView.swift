@@ -86,6 +86,12 @@ struct SettingsView: View {
                 }
             }
 
+            Divider()
+                .padding(.vertical, 8)
+
+            // Relay Connection Section
+            RelaySettingsSection()
+
             Spacer()
 
             Divider()
@@ -138,7 +144,7 @@ struct SettingsView: View {
             }
             .padding(12)
         }
-        .frame(width: 350, height: 480)
+        .frame(width: 350, height: 580)
         .background(.ultraThinMaterial)
     }
 
@@ -247,6 +253,163 @@ struct ProjectRow: View {
             return ".../" + lastTwo
         }
         return path
+    }
+}
+
+// MARK: - Relay Settings
+
+struct RelaySettingsSection: View {
+    @EnvironmentObject var appState: AppState
+    @State private var connectionMode: RelayAuth.ConnectionMode = RelayAuth.shared.connectionMode
+    @State private var email = ""
+    @State private var password = ""
+    @State private var isLoggingIn = false
+    @State private var loginError: String?
+    @State private var showSignup = false
+
+    private var isAuthenticated: Bool {
+        RelayAuth.shared.isAuthenticated
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("REMOTE ACCESS")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+
+                // Connection status indicator
+                if connectionMode == .relay {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(statusColor)
+                            .frame(width: 8, height: 8)
+                        Text(statusText)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+
+            // Mode toggle
+            Picker("Mode", selection: $connectionMode) {
+                Text("Local (LAN/Tailscale)").tag(RelayAuth.ConnectionMode.local)
+                Text("Relay (Internet)").tag(RelayAuth.ConnectionMode.relay)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .onChange(of: connectionMode) { _, newValue in
+                RelayAuth.shared.connectionMode = newValue
+            }
+
+            if connectionMode == .relay {
+                if isAuthenticated {
+                    // Logged in state
+                    HStack {
+                        Image(systemName: "person.circle.fill")
+                            .foregroundStyle(.green)
+                        Text(RelayAuth.shared.email ?? "Connected")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Logout") {
+                            RelayAuth.shared.logout()
+                            email = ""
+                            password = ""
+                        }
+                        .font(.system(size: 12))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.red)
+                    }
+                    .padding(.horizontal, 16)
+                } else {
+                    // Login form
+                    VStack(spacing: 6) {
+                        TextField("Email", text: $email)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 13))
+                            .textContentType(.emailAddress)
+
+                        SecureField("Password", text: $password)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 13))
+                            .onSubmit { performLogin() }
+
+                        if let error = loginError {
+                            Text(error)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.red)
+                                .lineLimit(2)
+                        }
+
+                        HStack {
+                            Button(showSignup ? "Sign Up" : "Login") {
+                                performLogin()
+                            }
+                            .disabled(email.isEmpty || password.isEmpty || isLoggingIn)
+                            .font(.system(size: 13, weight: .medium))
+
+                            Spacer()
+
+                            Button(showSignup ? "Have an account? Login" : "Create Account") {
+                                showSignup.toggle()
+                                loginError = nil
+                            }
+                            .font(.system(size: 11))
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.blue)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+            }
+        }
+    }
+
+    private var statusColor: Color {
+        switch appState.relayConnectionState {
+        case .connected, .authenticated: return .green
+        case .connecting: return .orange
+        case .disconnected: return .red
+        }
+    }
+
+    private var statusText: String {
+        switch appState.relayConnectionState {
+        case .connected: return "Connected"
+        case .authenticated: return "Authenticated"
+        case .connecting: return "Connecting..."
+        case .disconnected: return "Disconnected"
+        }
+    }
+
+    private func performLogin() {
+        guard !email.isEmpty, !password.isEmpty else { return }
+        isLoggingIn = true
+        loginError = nil
+
+        Task {
+            do {
+                if showSignup {
+                    try await RelayAuth.shared.signup(email: email, password: password)
+                } else {
+                    try await RelayAuth.shared.login(email: email, password: password)
+                }
+                await MainActor.run {
+                    isLoggingIn = false
+                    loginError = nil
+                    password = ""
+                }
+            } catch {
+                await MainActor.run {
+                    isLoggingIn = false
+                    loginError = error.localizedDescription
+                }
+            }
+        }
     }
 }
 

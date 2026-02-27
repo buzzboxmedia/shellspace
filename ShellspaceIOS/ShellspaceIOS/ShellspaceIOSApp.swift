@@ -7,9 +7,9 @@ struct ShellspaceIOSApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     /// Handle shellspace:// deep links
-    /// - shellspace://browse — switch to Browse tab
-    /// - shellspace://waiting — switch to Waiting tab
-    /// - shellspace://session/{id} — open terminal for session
+    /// - shellspace://browse -- switch to Browse tab
+    /// - shellspace://waiting -- switch to Waiting tab
+    /// - shellspace://session/{id} -- open terminal for session
     private func handleDeepLink(_ url: URL) {
         guard url.scheme == "shellspace" else { return }
         let host = url.host ?? ""
@@ -32,7 +32,7 @@ struct ShellspaceIOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
                 .environment(viewModel)
                 .onAppear {
                     appDelegate.viewModel = viewModel
@@ -57,7 +57,6 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         return true
     }
 
-    /// Called when user taps a notification while app is in foreground or background.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
@@ -73,7 +72,6 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         completionHandler()
     }
 
-    /// Show notifications even when app is in foreground.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
@@ -83,56 +81,68 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     }
 }
 
+// MARK: - Root View (auth routing)
+
+struct RootView: View {
+    @Environment(AppViewModel.self) private var viewModel
+
+    var body: some View {
+        switch viewModel.currentScreen {
+        case .login:
+            LoginView()
+                .environment(viewModel)
+        case .devicePicker:
+            DevicePickerView()
+                .environment(viewModel)
+        case .main:
+            ContentView()
+                .environment(viewModel)
+        }
+    }
+}
+
+// MARK: - Main Content (tabs)
+
 struct ContentView: View {
     @Environment(AppViewModel.self) private var viewModel
-    @State private var hasStartedDiscovery = false
 
     var body: some View {
         @Bindable var vm = viewModel
 
-        Group {
-            if viewModel.needsSetup && !hasStartedDiscovery {
-                // No manual host and no Bonjour results yet -- show setup
-                SettingsSheet(isPresented: .constant(true), isInitialSetup: true)
-                    .task {
-                        // Start Bonjour browsing even on the setup screen
-                        hasStartedDiscovery = true
-                        await viewModel.startDiscoveryAndConnect()
-                    }
-            } else {
-                TabView(selection: $vm.selectedTab) {
-                    WaitingView()
-                        .tabItem {
-                            Label("Inbox", systemImage: "bell.badge")
-                        }
-                        .badge(viewModel.waitingSessions.count)
-                        .tag(AppTab.inbox)
+        TabView(selection: $vm.selectedTab) {
+            WaitingView()
+                .tabItem {
+                    Label("Inbox", systemImage: "bell.badge")
+                }
+                .badge(viewModel.waitingSessions.count)
+                .tag(AppTab.inbox)
 
-                    AllSessionsView()
-                        .tabItem {
-                            Label("Sessions", systemImage: "text.bubble")
-                        }
-                        .tag(AppTab.sessions)
+            AllSessionsView()
+                .tabItem {
+                    Label("Sessions", systemImage: "text.bubble")
+                }
+                .tag(AppTab.sessions)
 
-                    BrowseView()
-                        .tabItem {
-                            Label("Projects", systemImage: "folder")
-                        }
-                        .tag(AppTab.projects)
+            BrowseView()
+                .tabItem {
+                    Label("Projects", systemImage: "folder")
                 }
-                .sheet(isPresented: $vm.showSettings) {
-                    SettingsSheet(isPresented: $vm.showSettings)
-                }
-                .task {
-                    if !hasStartedDiscovery {
-                        hasStartedDiscovery = true
-                        await viewModel.startDiscoveryAndConnect()
-                    }
-                    viewModel.handleLaunchArguments()
-                }
-                .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-                    Task { await viewModel.refresh() }
-                }
+                .tag(AppTab.projects)
+        }
+        .sheet(isPresented: $vm.showSettings) {
+            SettingsSheet(isPresented: $vm.showSettings)
+        }
+        .task {
+            // Auto-connect to relay if we have a selected device
+            if viewModel.selectedDeviceId != nil && !viewModel.connectionState.isConnected {
+                viewModel.connectToRelay()
+            }
+            viewModel.handleLaunchArguments()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            // Reconnect if needed when coming back to foreground
+            if viewModel.selectedDeviceId != nil && !viewModel.connectionState.isConnected {
+                viewModel.connectToRelay()
             }
         }
     }

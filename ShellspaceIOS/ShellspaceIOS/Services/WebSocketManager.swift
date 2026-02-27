@@ -1,9 +1,9 @@
 import Foundation
 import UserNotifications
 
-/// Manages WebSocket connections to the Shellspace Mac server.
-/// Streams terminal content and session state with auto-reconnect.
-/// Fires local notifications when sessions start waiting for input.
+/// Manages the WebSocket tunnel connection to a Mac through the relay server.
+/// All communication (state updates, terminal content, input) is multiplexed
+/// through a single tunnel WebSocket.
 @Observable
 final class WebSocketManager {
     enum State: Equatable {
@@ -13,27 +13,31 @@ final class WebSocketManager {
         case reconnecting(attempt: Int)
     }
 
-    // MARK: - Terminal stream
+    // MARK: - Connection state
 
-    var terminalState: State = .disconnected
+    var tunnelState: State = .disconnected
+
+    // MARK: - State received from Mac via tunnel
+
+    var sessions: [RemoteSession] = []
+    var projects: [RemoteProject] = []
+
+    // MARK: - Terminal stream (for active terminal view)
+
     var terminalContent: String = ""
     var terminalIsRunning: Bool = false
     var terminalIsWaiting: Bool = false
-
-    // MARK: - Sessions stream
-
-    var sessionsState: State = .disconnected
-    var sessions: [RemoteSession] = []
+    var activeTerminalSessionId: String?
 
     // MARK: - Private
 
-    private let host: String
-    private var terminalTask: Task<Void, Never>?
-    private var sessionsTask: Task<Void, Never>?
+    private let deviceId: String
+    private let authManager: RelayAuthManager
+    private var tunnelTask: Task<Void, Never>?
+    private var activeSocket: URLSessionWebSocketTask?
 
     /// Tracks which sessions were waiting last time, so we only notify on transitions
     private var previouslyWaiting: Set<String> = []
-    /// Don't re-notify the same session within this window
     private var recentlyNotified: [String: Date] = [:]
     private let notifyCooldown: TimeInterval = 60
 
@@ -43,152 +47,248 @@ final class WebSocketManager {
         return d
     }()
 
-    init(host: String) {
-        self.host = host
+    init(deviceId: String, authManager: RelayAuthManager) {
+        self.deviceId = deviceId
+        self.authManager = authManager
     }
 
-    // MARK: - Terminal WebSocket
+    // MARK: - Tunnel Connection
 
-    func connectTerminal(sessionId: String) {
-        disconnectTerminal()
-        terminalState = .connecting
-        terminalTask = Task { [weak self] in
+    /// Connect the tunnel to the relay, which forwards to the target Mac.
+    func connect() {
+        disconnect()
+        tunnelState = .connecting
+        tunnelTask = Task { [weak self] in
             guard let self else { return }
             var attempt = 0
             while !Task.isCancelled {
                 do {
                     attempt = 0
-                    try await runTerminalSocket(sessionId: sessionId)
+                    try await self.runTunnel()
+                    // Clean exit (server closed connection gracefully)
                     break
                 } catch {
                     guard !Task.isCancelled else { break }
                     attempt += 1
                     let currentAttempt = attempt
-                    await MainActor.run { self.terminalState = .reconnecting(attempt: currentAttempt) }
-                    let delay = min(15.0, pow(2.0, Double(currentAttempt - 1)))
+                    await MainActor.run { self.tunnelState = .reconnecting(attempt: currentAttempt) }
+                    let delay = min(30.0, pow(2.0, Double(currentAttempt - 1)))
                     try? await Task.sleep(for: .seconds(delay))
                 }
             }
-            await MainActor.run { self.terminalState = .disconnected }
+            await MainActor.run { self.tunnelState = .disconnected }
         }
     }
 
-    func disconnectTerminal() {
-        terminalTask?.cancel()
-        terminalTask = nil
-        terminalState = .disconnected
+    func disconnect() {
+        tunnelTask?.cancel()
+        tunnelTask = nil
+        activeSocket?.cancel(with: .goingAway, reason: nil)
+        activeSocket = nil
+        tunnelState = .disconnected
+        activeTerminalSessionId = nil
     }
 
-    /// Send input to the terminal via the active WebSocket connection.
-    func sendTerminalInput(_ message: String) -> Bool {
-        guard let ws = activeTerminalSocket else { return false }
-        let payload: [String: Any] = ["type": "input", "message": message]
-        guard let data = try? JSONSerialization.data(withJSONObject: payload),
-              let text = String(data: data, encoding: .utf8) else { return false }
-        ws.send(.string(text)) { _ in }
+    // MARK: - Send Messages Through Tunnel
+
+    /// Send a text command through the tunnel WebSocket.
+    func send(_ payload: [String: Any]) -> Bool {
+        guard let socket = activeSocket,
+              let data = try? JSONSerialization.data(withJSONObject: payload),
+              let text = String(data: data, encoding: .utf8) else {
+            return false
+        }
+        socket.send(.string(text)) { _ in }
         return true
     }
 
-    private var activeTerminalSocket: URLSessionWebSocketTask?
+    /// Send terminal input for a specific session.
+    func sendInput(sessionId: String, message: String) -> Bool {
+        return send([
+            "type": "input",
+            "sessionId": sessionId,
+            "message": message
+        ])
+    }
 
-    private func runTerminalSocket(sessionId: String) async throws {
-        guard let url = URL(string: "ws://\(host):8847/ws/terminal/\(sessionId)") else {
+    /// Send an image through the tunnel for a specific session.
+    func sendImage(sessionId: String, imageData: Data, filename: String) -> Bool {
+        return send([
+            "type": "image",
+            "sessionId": sessionId,
+            "image": imageData.base64EncodedString(),
+            "filename": filename
+        ])
+    }
+
+    /// Request the Mac to start streaming terminal content for a session.
+    func subscribeTerminal(sessionId: String) {
+        activeTerminalSessionId = sessionId
+        terminalContent = ""
+        terminalIsRunning = false
+        terminalIsWaiting = false
+        _ = send([
+            "type": "subscribe_terminal",
+            "sessionId": sessionId
+        ])
+    }
+
+    /// Stop terminal streaming.
+    func unsubscribeTerminal() {
+        if let sessionId = activeTerminalSessionId {
+            _ = send([
+                "type": "unsubscribe_terminal",
+                "sessionId": sessionId
+            ])
+        }
+        activeTerminalSessionId = nil
+        terminalContent = ""
+        terminalIsRunning = false
+        terminalIsWaiting = false
+    }
+
+    /// Request the Mac to create a new session.
+    func createSession(projectId: String, name: String, description: String?) -> Bool {
+        var payload: [String: Any] = [
+            "type": "create_session",
+            "projectId": projectId,
+            "name": name
+        ]
+        if let description, !description.isEmpty {
+            payload["description"] = description
+        }
+        return send(payload)
+    }
+
+    /// Request a full state refresh from the Mac.
+    func requestStateRefresh() {
+        _ = send(["type": "request_state"])
+    }
+
+    // MARK: - Tunnel Loop
+
+    private func runTunnel() async throws {
+        let token = try await authManager.validAccessToken()
+
+        let urlString = "wss://relay.shellspace.app/ws/tunnel/\(deviceId)?token=\(token)"
+        guard let url = URL(string: urlString) else {
             throw APIError.invalidURL
         }
+
         let wsTask = URLSession.shared.webSocketTask(with: url)
         wsTask.resume()
-        activeTerminalSocket = wsTask
-        await MainActor.run { self.terminalState = .connected }
+        activeSocket = wsTask
+        await MainActor.run { self.tunnelState = .connected }
+
+        // Re-subscribe to terminal if we had an active session before reconnect
+        if let sessionId = activeTerminalSessionId {
+            _ = send(["type": "subscribe_terminal", "sessionId": sessionId])
+        }
+
+        // Request initial state
+        requestStateRefresh()
 
         while !Task.isCancelled {
             let message = try await wsTask.receive()
-            if case .string(let text) = message { parseTerminalMessage(text) }
+            switch message {
+            case .string(let text):
+                await parseTunnelMessage(text)
+            case .data(let data):
+                if let text = String(data: data, encoding: .utf8) {
+                    await parseTunnelMessage(text)
+                }
+            @unknown default:
+                break
+            }
         }
-        activeTerminalSocket = nil
+
+        activeSocket = nil
         wsTask.cancel(with: .goingAway, reason: nil)
     }
 
-    private func parseTerminalMessage(_ text: String) {
+    // MARK: - Message Parsing
+
+    private func parseTunnelMessage(_ text: String) async {
         guard let data = text.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              (json["type"] as? String) == "terminal_update" else { return }
+              let type = json["type"] as? String else { return }
+
+        switch type {
+        case "state_update":
+            await handleStateUpdate(json)
+
+        case "sessions_update":
+            await handleSessionsUpdate(json)
+
+        case "terminal_update":
+            await handleTerminalUpdate(json)
+
+        case "session_created":
+            // Mac confirms a session was created; request full state refresh
+            requestStateRefresh()
+
+        case "error":
+            let message = json["message"] as? String ?? "Unknown relay error"
+            print("[WebSocketManager] Relay error: \(message)")
+
+        case "pong":
+            break // keepalive response
+
+        default:
+            break
+        }
+    }
+
+    private func handleStateUpdate(_ json: [String: Any]) async {
+        // Parse projects
+        if let projectsArray = json["projects"] {
+            if let projectsData = try? JSONSerialization.data(withJSONObject: projectsArray),
+               let decoded = try? Self.decoder.decode([RemoteProject].self, from: projectsData) {
+                await MainActor.run { self.projects = decoded }
+            }
+        }
+
+        // Parse sessions
+        if let sessionsArray = json["sessions"] {
+            if let sessionsData = try? JSONSerialization.data(withJSONObject: sessionsArray),
+               let decoded = try? Self.decoder.decode([RemoteSession].self, from: sessionsData) {
+                await MainActor.run {
+                    self.sessions = decoded
+                    self.checkForNewWaitingSessions(decoded)
+                }
+            }
+        }
+    }
+
+    private func handleSessionsUpdate(_ json: [String: Any]) async {
+        guard let sessionsArray = json["sessions"],
+              let sessionsData = try? JSONSerialization.data(withJSONObject: sessionsArray),
+              let decoded = try? Self.decoder.decode([RemoteSession].self, from: sessionsData) else { return }
+
+        await MainActor.run {
+            self.sessions = decoded
+            self.checkForNewWaitingSessions(decoded)
+        }
+    }
+
+    private func handleTerminalUpdate(_ json: [String: Any]) async {
+        let sessionId = json["sessionId"] as? String ?? json["session_id"] as? String
+        // Only apply if this terminal update is for our subscribed session
+        guard sessionId == nil || sessionId == activeTerminalSessionId else { return }
 
         let content = json["content"] as? String ?? ""
-        let isRunning = json["is_running"] as? Bool ?? false
-        let isWaiting = json["is_waiting_for_input"] as? Bool ?? false
+        let isRunning = json["is_running"] as? Bool ?? json["isRunning"] as? Bool ?? false
+        let isWaiting = json["is_waiting_for_input"] as? Bool ?? json["isWaitingForInput"] as? Bool ?? false
 
-        Task { @MainActor in
+        await MainActor.run {
             self.terminalContent = content
             self.terminalIsRunning = isRunning
             self.terminalIsWaiting = isWaiting
         }
     }
 
-    // MARK: - Sessions WebSocket
-
-    func connectSessions() {
-        disconnectSessions()
-        sessionsState = .connecting
-        sessionsTask = Task { [weak self] in
-            guard let self else { return }
-            var attempt = 0
-            while !Task.isCancelled {
-                do {
-                    attempt = 0
-                    try await runSessionsSocket()
-                    break
-                } catch {
-                    guard !Task.isCancelled else { break }
-                    attempt += 1
-                    let currentAttempt = attempt
-                    await MainActor.run { self.sessionsState = .reconnecting(attempt: currentAttempt) }
-                    let delay = min(15.0, pow(2.0, Double(currentAttempt - 1)))
-                    try? await Task.sleep(for: .seconds(delay))
-                }
-            }
-            await MainActor.run { self.sessionsState = .disconnected }
-        }
-    }
-
-    func disconnectSessions() {
-        sessionsTask?.cancel()
-        sessionsTask = nil
-        sessionsState = .disconnected
-    }
-
-    private func runSessionsSocket() async throws {
-        guard let url = URL(string: "ws://\(host):8847/ws/sessions") else {
-            throw APIError.invalidURL
-        }
-        let wsTask = URLSession.shared.webSocketTask(with: url)
-        wsTask.resume()
-        await MainActor.run { self.sessionsState = .connected }
-
-        while !Task.isCancelled {
-            let message = try await wsTask.receive()
-            if case .string(let text) = message { parseSessionsMessage(text) }
-        }
-        wsTask.cancel(with: .goingAway, reason: nil)
-    }
-
-    private func parseSessionsMessage(_ text: String) {
-        guard let data = text.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              (json["type"] as? String) == "sessions_update",
-              let sessionsArray = json["sessions"] else { return }
-
-        guard let sessionsData = try? JSONSerialization.data(withJSONObject: sessionsArray),
-              let decoded = try? Self.decoder.decode([RemoteSession].self, from: sessionsData) else { return }
-
-        Task { @MainActor in
-            self.sessions = decoded
-            self.checkForNewWaitingSessions(decoded)
-        }
-    }
-
     // MARK: - Local Notifications
 
-    /// Detects sessions that just started waiting and fires a local notification.
     private func checkForNewWaitingSessions(_ sessions: [RemoteSession]) {
         let nowWaiting = Set(
             sessions
@@ -199,7 +299,6 @@ final class WebSocketManager {
         let newlyWaiting = nowWaiting.subtracting(previouslyWaiting)
         previouslyWaiting = nowWaiting
 
-        // Clean up old cooldowns
         let now = Date()
         recentlyNotified = recentlyNotified.filter { now.timeIntervalSince($0.value) < notifyCooldown }
 
@@ -220,7 +319,7 @@ final class WebSocketManager {
             let request = UNNotificationRequest(
                 identifier: "waiting-\(sessionId)",
                 content: content,
-                trigger: nil // Deliver immediately
+                trigger: nil
             )
 
             UNUserNotificationCenter.current().add(request)
@@ -230,12 +329,5 @@ final class WebSocketManager {
     /// Request notification permission. Call once at app startup.
     static func requestNotificationPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
-    }
-
-    // MARK: - Cleanup
-
-    func disconnectAll() {
-        disconnectTerminal()
-        disconnectSessions()
     }
 }
