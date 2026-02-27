@@ -22,6 +22,16 @@ struct LauncherView: View {
             .sorted { $0.lastAccessedAt > $1.lastAccessedAt }
     }
 
+    /// Sessions with running processes that are NOT waiting for input (actively working)
+    private var runningSessions: [Session] {
+        let waitingIds = Set(waitingSessions.map { $0.id })
+        return allSessions.filter { session in
+            !session.isHidden && !session.isCompleted
+            && appState.terminalControllers[session.id]?.terminalView?.process?.running == true
+            && !waitingIds.contains(session.id)
+        }.sorted { $0.lastAccessedAt > $1.lastAccessedAt }
+    }
+
     // Persisted order for dashboard
     @AppStorage("dashboardOrder") private var orderData: Data = Data()
 
@@ -117,6 +127,12 @@ struct LauncherView: View {
                     // MARK: - Inbox (Sessions Waiting for Input)
                     if !waitingSessions.isEmpty {
                         InboxSection(sessions: waitingSessions)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+
+                    // MARK: - Active Sessions (Running but not waiting)
+                    if !runningSessions.isEmpty {
+                        ActiveSessionsSection(sessions: runningSessions)
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     }
 
@@ -329,6 +345,140 @@ struct ProjectCard: View {
         }
     }
 
+}
+
+// MARK: - Active Sessions Section
+
+struct ActiveSessionsSection: View {
+    @EnvironmentObject var appState: AppState
+    let sessions: [Session]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // Header
+            HStack(spacing: 8) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.blue)
+
+                Text("Running")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.primary)
+
+                Text("\(sessions.count)")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(.blue))
+            }
+
+            // Session rows
+            VStack(spacing: 2) {
+                ForEach(sessions, id: \.id) { session in
+                    ActiveSessionRow(session: session)
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(.blue.opacity(0.2), lineWidth: 1)
+                )
+        )
+    }
+}
+
+struct ActiveSessionRow: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var windowState: WindowState
+    let session: Session
+
+    @State private var isHovered = false
+    @State private var isPulsing = false
+
+    private var projectName: String {
+        session.project?.name ?? URL(fileURLWithPath: session.projectPath).lastPathComponent
+    }
+
+    private var projectIcon: String {
+        session.project?.icon ?? "folder.fill"
+    }
+
+    private var relativeTime: String {
+        let interval = Date().timeIntervalSince(session.lastAccessedAt)
+        if interval < 60 { return "just now" }
+        if interval < 3600 { return "\(Int(interval / 60))m ago" }
+        if interval < 86400 { return "\(Int(interval / 3600))h ago" }
+        return "\(Int(interval / 86400))d ago"
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Pulsing blue dot (actively working)
+            Circle()
+                .fill(.blue)
+                .frame(width: 8, height: 8)
+                .shadow(color: .blue.opacity(0.6), radius: isPulsing ? 5 : 2)
+                .scaleEffect(isPulsing ? 1.2 : 1.0)
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                        isPulsing = true
+                    }
+                }
+
+            Image(systemName: projectIcon)
+                .font(.system(size: 16))
+                .foregroundStyle(.secondary)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(projectName)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.primary)
+
+                Text(session.name)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Text("Working...")
+                .font(.system(size: 12))
+                .foregroundStyle(.blue.opacity(0.8))
+
+            Text(relativeTime)
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .frame(width: 50, alignment: .trailing)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isHovered ? Color.primary.opacity(0.05) : .clear)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if let project = session.project {
+                withAnimation(.spring(response: 0.3)) {
+                    windowState.selectedProject = project
+                    windowState.activeSession = session
+                    windowState.userTappedSession = true
+                }
+            }
+        }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+    }
 }
 
 // MARK: - Inbox Section
