@@ -361,7 +361,7 @@ struct ActiveSessionsSection: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.blue)
 
-                Text("Running")
+                Text("Open Processes")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Color(red: 0.92, green: 0.93, blue: 0.95))
 
@@ -371,6 +371,25 @@ struct ActiveSessionsSection: View {
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
                     .background(Capsule().fill(.blue))
+
+                Spacer()
+
+                if sessions.count > 1 {
+                    Button {
+                        for session in sessions {
+                            appState.removeController(for: session)
+                            session.isWaitingForInput = false
+                        }
+                    } label: {
+                        Text("End All")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color(red: 0.80, green: 0.22, blue: 0.22).opacity(0.3)))
+                    }
+                    .buttonStyle(.plain)
+                }
             }
 
             // Session rows
@@ -448,9 +467,19 @@ struct ActiveSessionRow: View {
 
             Spacer()
 
-            Text("Working...")
-                .font(.system(size: 12))
-                .foregroundStyle(Color(red: 0.45, green: 0.72, blue: 0.95))
+            // End process button
+            Button {
+                appState.removeController(for: session)
+                session.isWaitingForInput = false
+            } label: {
+                Text("End")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color(red: 0.80, green: 0.22, blue: 0.22).opacity(0.25)))
+            }
+            .buttonStyle(.plain)
 
             Text(relativeTime)
                 .font(.system(size: 11))
