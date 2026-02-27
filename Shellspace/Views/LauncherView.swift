@@ -400,51 +400,91 @@ struct InboxRow: View {
         return "\(Int(interval / 86400))d ago"
     }
 
+    /// Last meaningful lines from the terminal buffer — shows what Claude is asking
+    private var terminalSnippet: String {
+        guard let controller = appState.terminalControllers[session.id],
+              let content = controller.terminalView?.getTerminal().getBufferAsData(),
+              let text = String(data: content, encoding: .utf8) else {
+            return ""
+        }
+
+        // Get last non-empty lines, strip ANSI escape codes
+        let ansiPattern = try! NSRegularExpression(pattern: "\\x1b\\[[0-9;]*[a-zA-Z]|\\x1b\\][^\\x07]*\\x07|\\x1b[^\\[\\]][a-zA-Z]")
+        let lines = text.components(separatedBy: .newlines)
+            .map { line in
+                let range = NSRange(line.startIndex..., in: line)
+                return ansiPattern.stringByReplacingMatches(in: line, range: range, withTemplate: "")
+                    .trimmingCharacters(in: .whitespaces)
+            }
+            .filter { !$0.isEmpty }
+
+        // Take last 3 lines
+        let tail = lines.suffix(3)
+        return tail.joined(separator: "\n")
+    }
+
     var body: some View {
-        HStack(spacing: 12) {
-            // Pulsing orange dot
-            InboxPulsingDot()
+        VStack(alignment: .leading, spacing: 8) {
+            // Top row: dot + icon + name + time
+            HStack(spacing: 12) {
+                InboxPulsingDot()
 
-            // Project icon
-            Image(systemName: projectIcon)
-                .font(.system(size: 16))
-                .foregroundStyle(.secondary)
-                .frame(width: 24)
-
-            // Session info
-            VStack(alignment: .leading, spacing: 2) {
-                Text(projectName)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.primary)
-
-                Text(session.name)
-                    .font(.system(size: 12))
+                Image(systemName: projectIcon)
+                    .font(.system(size: 16))
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .frame(width: 24)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(projectName)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.primary)
+
+                    Text(session.name)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Text(relativeTime)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
             }
 
-            Spacer()
+            // Terminal snippet — what Claude is saying/asking
+            let snippet = terminalSnippet
+            if !snippet.isEmpty {
+                Text(snippet)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(Color(red: 0.75, green: 0.78, blue: 0.85))
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color(red: 0.12, green: 0.12, blue: 0.14))
+                    )
+                    .padding(.leading, 44)  // Align with text (dot + icon width)
+            }
 
-            // Sent confirmation or quick-reply chips
-            if let sent = sentText {
-                Text(sent)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.green)
-                    .transition(.opacity)
-            } else {
-                HStack(spacing: 6) {
+            // Quick-reply chips row
+            HStack(spacing: 6) {
+                Spacer()
+                    .frame(width: 38)  // Align with text
+
+                if let sent = sentText {
+                    Text(sent)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.green)
+                        .transition(.opacity)
+                } else {
                     InboxChip(label: "yes") { sendReply("yes") }
                     InboxChip(label: "no") { sendReply("no") }
                     InboxChip(label: "continue") { sendReply("continue") }
                     InboxChip(label: "stop") { sendReply("stop") }
                 }
             }
-
-            // Relative time
-            Text(relativeTime)
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
-                .frame(width: 50, alignment: .trailing)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
