@@ -297,13 +297,9 @@ final class AppViewModel {
     var lastSendError: String = ""
 
     func sendQuickReply(sessionId: String, message: String) async -> Bool {
-        // Try WebSocket first (already connected, avoids new HTTP connection)
-        if let ws = wsManager, ws.sendTerminalInput(message) {
-            lastSendError = ""
-            return true
-        }
-
-        // Fall back to REST POST
+        // Always use REST for input -- it supports auto-launching stopped sessions
+        // and provides reliable delivery confirmation. WebSocket input can silently
+        // fail if the session has no active terminal controller.
         guard let api else {
             lastSendError = "No API connection"
             return false
