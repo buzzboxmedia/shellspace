@@ -99,14 +99,18 @@ struct ShellspaceApp: App {
                         DebugLog.log("[App] Started local server (Hummingbird on port 8847)")
                     }
 
-                    // Heavy sync operations - run async so the window appears immediately
+                    // Heavy sync operations - run on background context to avoid @Query avalanche
                     let container = sharedModelContainer
-                    Task { @MainActor in
-                        SessionSyncService.shared.importAllSessions(modelContext: container.mainContext)
-                        DebugLog.log("[App] Session import done")
+                    Task.detached {
+                        let backgroundContext = ModelContext(container)
+                        SessionSyncService.shared.importAllSessions(modelContext: backgroundContext)
+                        try? backgroundContext.save()
 
-                        ProjectSyncService.shared.exportProjects(from: container.mainContext)
-                        DebugLog.log("[App] Startup complete")
+                        await MainActor.run {
+                            DebugLog.log("[App] Session import done")
+                            ProjectSyncService.shared.exportProjects(from: container.mainContext)
+                            DebugLog.log("[App] Startup complete")
+                        }
                     }
                 }
         }
@@ -346,28 +350,16 @@ class AppState: ObservableObject {
 struct WindowContainer: View {
     @EnvironmentObject var appState: AppState
     @State private var windowId = UUID()
-    @State private var windowState: WindowState?
+    @StateObject private var windowState = WindowState()
 
     var body: some View {
-        Group {
-            if let state = windowState {
-                WindowContent()
-                    .environmentObject(state)
-            } else {
-                Color.clear
+        WindowContent()
+            .environmentObject(windowState)
+            .frame(minWidth: 520, minHeight: 500)
+            .onDisappear {
+                // Clean up window state when window closes
+                appState.removeWindowState(for: windowId)
             }
-        }
-        .frame(minWidth: 520, minHeight: 500)
-        .onAppear {
-            // Get or create window state for this window's unique ID
-            if windowState == nil {
-                windowState = appState.getOrCreateWindowState(for: windowId)
-            }
-        }
-        .onDisappear {
-            // Clean up window state when window closes
-            appState.removeWindowState(for: windowId)
-        }
     }
 }
 
