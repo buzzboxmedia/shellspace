@@ -654,8 +654,12 @@ class TerminalController: ObservableObject {
         }
 
         // Positive signals: looks like it's asking for something
+        // Check if line ends with a question mark (actual question, not just a URL with ?)
+        if lower.hasSuffix("?") {
+            return true
+        }
+
         let questionPatterns = [
-            "?",                    // Questions
             "[y/n]", "(y/n)",      // Yes/No prompts
             "allow", "deny",       // Permission prompts
             "approve", "reject",
@@ -664,13 +668,9 @@ class TerminalController: ObservableObject {
             "shall i",
             "should i",
             "press enter",
-            "continue?",
-            "proceed?",
             "overwrite",
             "replace",
             "confirm",
-            "select",
-            "choose",
             "(yes/no)",
             "enter to",
         ]
@@ -683,6 +683,9 @@ class TerminalController: ObservableObject {
         // Check second-to-last line too (question might be on line above input cursor)
         if lines.count >= 2 {
             let prevLine = lines[lines.count - 2].lowercased()
+            if prevLine.hasSuffix("?") {
+                return true
+            }
             for pattern in questionPatterns {
                 if prevLine.contains(pattern) {
                     return true
