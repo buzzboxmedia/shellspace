@@ -151,9 +151,6 @@ struct TerminalView: View {
                         Image(systemName: "textformat.size.larger")
                             .font(.caption)
                     }
-                    Circle()
-                        .fill(connectionDotColor)
-                        .frame(width: 8, height: 8)
                 }
             }
         }

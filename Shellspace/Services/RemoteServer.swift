@@ -14,6 +14,9 @@ final class RemoteServer: @unchecked Sendable {
     private weak var appState: AppState?
     private var modelContainer: ModelContainer?
 
+    /// Sessions currently being auto-launched (prevents double-send from WS fast path)
+    @MainActor private var autoLaunchingSessionIds: Set<UUID> = []
+
     // Bonjour advertisement (NetService is deprecated but is the only way to advertise
     // a service on a port already bound by another server without port conflicts)
     @available(macOS, deprecated: 13.0)
@@ -182,7 +185,7 @@ final class RemoteServer: @unchecked Sendable {
         } catch { return }
 
         // Consume inbound messages (keeps connection alive, handles input)
-        let inputTask = Task {
+        let inputTask = Task { [weak self] in
             for try await frame in inbound {
                 if case .text = frame.opcode,
                    let text = frame.data.getString(at: frame.data.readerIndex, length: frame.data.readableBytes),
@@ -190,9 +193,34 @@ final class RemoteServer: @unchecked Sendable {
                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let type = json["type"] as? String, type == "input",
                    let message = json["message"] as? String {
+                    guard let self else { continue }
                     await MainActor.run {
                         DebugLog.log("[RemoteServer] WS input received: \(message.prefix(50))")
-                        self.appState?.terminalControllers[uuid]?.sendToTerminal(message)
+                    }
+
+                    // Skip if this session is currently being auto-launched (prevents double-send)
+                    let isAutoLaunching = await MainActor.run { self.autoLaunchingSessionIds.contains(uuid) }
+                    if isAutoLaunching {
+                        await MainActor.run { DebugLog.log("[RemoteServer] WS skipping (auto-launch in progress): \(sessionId)") }
+                        continue
+                    }
+
+                    // Try fast path: controller exists and process is running
+                    let sent = await MainActor.run {
+                        if let controller = self.appState?.terminalControllers[uuid],
+                           controller.terminalView?.process?.running == true {
+                            controller.sendToTerminal(message)
+                            DebugLog.log("[RemoteServer] WS sent to running session \(sessionId)")
+                            return true
+                        }
+                        return false
+                    }
+                    if !sent {
+                        await MainActor.run {
+                            self.autoLaunchingSessionIds.insert(uuid)
+                            DebugLog.log("[RemoteServer] WS session not running, auto-launching \(sessionId)")
+                        }
+                        await self.autoLaunchAndSend(uuid: uuid, sessionId: sessionId, message: message)
                     }
                 }
             }
@@ -567,15 +595,19 @@ final class RemoteServer: @unchecked Sendable {
         }
 
         // Auto-launch: no controller or process not running
-        guard let container = modelContainer else {
-            return jsonResponse(["error": "No model container"], status: .internalServerError)
+        await autoLaunchAndSend(uuid: uuid, sessionId: sessionId, message: message)
+        return jsonResponse(["status": "launched_and_sent", "session_id": sessionId])
+    }
+
+    // MARK: - Auto-launch
+
+    /// Auto-launch a stopped session and send input. Shared by REST and WebSocket handlers.
+    private func autoLaunchAndSend(uuid: UUID, sessionId: String, message: String) async {
+        guard let container = modelContainer, let appState = appState else {
+            await MainActor.run { DebugLog.log("[RemoteServer] Auto-launch failed: no container/appState") }
+            return
         }
 
-        guard let appState = appState else {
-            return jsonResponse(["error": "App state unavailable"], status: .internalServerError)
-        }
-
-        // All Core Data + UI work must happen on main thread
         let controller = await MainActor.run {
             let mainContext = container.mainContext
             let descriptor = FetchDescriptor<Session>()
@@ -595,13 +627,11 @@ final class RemoteServer: @unchecked Sendable {
                 hasBeenLaunched: session.hasBeenLaunched
             )
 
-            // Set terminal size AFTER startClaude (which creates the terminal with .zero frame)
             if let terminal = ctrl.terminalView {
                 terminal.frame = NSRect(x: 0, y: 0, width: 960, height: 480)
                 terminal.getTerminal().resize(cols: 120, rows: 40)
             }
 
-            // Mark as launched and persist
             session.hasBeenLaunched = true
             try? mainContext.save()
 
@@ -609,18 +639,19 @@ final class RemoteServer: @unchecked Sendable {
         }
 
         guard let controller else {
-            return jsonResponse(["error": "Session not found"], status: .notFound)
+            await MainActor.run { DebugLog.log("[RemoteServer] Auto-launch failed: session not found \(sessionId)") }
+            return
         }
 
-        // Wait for old --continue buffer to finish loading (content stabilizes)
+        // Wait for buffer to stabilize (previous session content finishes loading)
         var lastLength = 0
         var stableCount = 0
-        for _ in 0..<20 { // Up to 10 seconds for buffer to load
-            try? await Task.sleep(for: .milliseconds(500))
+        for _ in 0..<20 {
+            try? await Task.sleep(for: .milliseconds(300))
             let currentLength = await MainActor.run { controller.getFullTerminalContent().count }
             if currentLength == lastLength && currentLength > 0 {
                 stableCount += 1
-                if stableCount >= 3 { break } // Stable for 1.5s
+                if stableCount >= 2 { break } // 2 stable checks = 600ms stable
             } else {
                 stableCount = 0
             }
@@ -629,28 +660,34 @@ final class RemoteServer: @unchecked Sendable {
         let stableLength = lastLength
         await MainActor.run { DebugLog.log("[RemoteServer] Buffer stabilized at \(stableLength) chars for session \(sessionId)") }
 
-        // Now wait for FRESH content from Claude startup (bypass permissions prompt)
-        var ready = false
-        for _ in 0..<40 { // Up to 20 seconds
+        // Wait for ANY new content beyond the stabilized buffer (Claude has started)
+        for _ in 0..<30 { // Up to 15 seconds
             try? await Task.sleep(for: .milliseconds(500))
             let content = await MainActor.run { controller.getFullTerminalContent() }
-            if content.count > stableLength + 10 { // Need meaningful new content
-                let newContent = String(content.suffix(content.count - stableLength))
-                await MainActor.run { DebugLog.log("[RemoteServer] Fresh content (\(newContent.count) chars): \(newContent.suffix(150))") }
-                if newContent.contains("bypass permissions") || newContent.contains("autoaccept") || newContent.contains("shift+tab") {
-                    ready = true
-                    break
-                }
+            if content.count > stableLength + 10 {
+                await MainActor.run { DebugLog.log("[RemoteServer] New content detected for session \(sessionId), waiting for render...") }
+                break
             }
         }
 
-        if !ready {
-            await MainActor.run { DebugLog.log("[RemoteServer] Claude may not be ready yet for session \(sessionId), sending input anyway after timeout") }
+        // Brief pause to let Claude finish rendering its prompt
+        try? await Task.sleep(for: .seconds(1))
+
+        // Check if someone else already sent this message while we were waiting
+        let alreadyHandled = await MainActor.run { autoLaunchingSessionIds.contains(uuid) == false }
+        if alreadyHandled {
+            await MainActor.run { DebugLog.log("[RemoteServer] Auto-launch cancelled (session already handled): \(sessionId)") }
+            return
         }
 
-        await MainActor.run { controller.sendToTerminal(message) }
-        await MainActor.run { DebugLog.log("[RemoteServer] Auto-launched and sent input to session \(sessionId): \(message.prefix(50))") }
-        return jsonResponse(["status": "launched_and_sent", "session_id": sessionId])
+        await MainActor.run {
+            controller.sendToTerminal(message)
+            DebugLog.log("[RemoteServer] Auto-launched and sent input to session \(sessionId): \(message.prefix(50))")
+        }
+
+        // Keep the lock active briefly so queued WS frames don't double-send
+        try? await Task.sleep(for: .seconds(2))
+        await MainActor.run { autoLaunchingSessionIds.remove(uuid) }
     }
 
     // MARK: - Helpers
