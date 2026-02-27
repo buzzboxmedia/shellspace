@@ -397,6 +397,7 @@ struct TerminalView: View {
         }
 
         DebugLog.log("[ensureClaude]   Starting Claude in: \(session.taskFolderPath ?? session.projectPath)")
+        terminalController.session = session
         terminalController.startClaude(
             in: session.projectPath,
             sessionId: session.id,
@@ -575,6 +576,13 @@ class TerminalController: ObservableObject {
     var projectPath: String?  // Store project path for screenshot saving
     private let logger = Logger(subsystem: "com.buzzbox.shellspace", category: "TerminalController")
 
+    // MARK: - Idle Detection (waiting for input)
+    weak var session: Session?
+    private var idleTimer: Timer?
+    private var lastContentHash: Int = 0
+    private var idleTickCount: Int = 0
+    private let idleThresholdTicks: Int = 5  // 5 seconds (1 tick per second)
+
     // MARK: - Pop-Out to Terminal.app
 
     /// Opens the session in Terminal.app using `claude --continue`
@@ -592,6 +600,59 @@ class TerminalController: ObservableObject {
                 logger.error("AppleScript error: \(error)")
             } else {
                 logger.info("Opened Terminal.app for: \(workingDir)")
+            }
+        }
+    }
+
+    func startIdleDetection() {
+        stopIdleDetection()
+        idleTickCount = 0
+        lastContentHash = 0
+        idleTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.checkIdle()
+        }
+        logger.info("Started idle detection for session: \(self.session?.name ?? "unknown")")
+    }
+
+    func stopIdleDetection() {
+        idleTimer?.invalidate()
+        idleTimer = nil
+        // Clear waiting state when stopping detection (process exited)
+        if session?.isWaitingForInput == true {
+            session?.isWaitingForInput = false
+        }
+    }
+
+    private func checkIdle() {
+        guard let terminal = terminalView,
+              terminal.process?.running == true else {
+            // Process exited — stop polling, clear waiting
+            stopIdleDetection()
+            return
+        }
+
+        let content = terminal.getTerminal().getBufferAsData()
+        let currentHash = content.hashValue
+
+        if currentHash == lastContentHash {
+            idleTickCount += 1
+            if idleTickCount >= idleThresholdTicks && session?.isWaitingForInput != true {
+                logger.info("Session idle for \(self.idleTickCount)s — marking as waiting for input")
+                DispatchQueue.main.async { [weak self] in
+                    self?.session?.isWaitingForInput = true
+                }
+            }
+        } else {
+            // Content changed — reset
+            lastContentHash = currentHash
+            if idleTickCount >= idleThresholdTicks {
+                logger.info("Session became active again")
+            }
+            idleTickCount = 0
+            if session?.isWaitingForInput == true {
+                DispatchQueue.main.async { [weak self] in
+                    self?.session?.isWaitingForInput = false
+                }
             }
         }
     }
@@ -713,6 +774,12 @@ class TerminalController: ObservableObject {
         let bpm = terminal.bracketedPasteMode
         DebugLog.log("[sendToTerminal] bracketedPasteMode=\(bpm), message=\(message.prefix(50))")
 
+        // Clear waiting state immediately on send
+        if session?.isWaitingForInput == true {
+            session?.isWaitingForInput = false
+        }
+        idleTickCount = 0
+
         // Send the text
         tv.send(txt: message)
 
@@ -807,6 +874,9 @@ class TerminalController: ObservableObject {
             args: [scriptPath.path],
             environment: envArray
         )
+
+        // Start idle detection after terminal is set up
+        startIdleDetection()
 
         // Focus terminal after Claude starts
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in

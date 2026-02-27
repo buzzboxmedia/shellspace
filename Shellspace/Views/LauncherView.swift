@@ -9,11 +9,18 @@ struct LauncherView: View {
 
     // Fetch all projects, sorted by name
     @Query(sort: \Project.name) private var allProjects: [Project]
+    @Query private var allSessions: [Session]
 
     @State private var showSettings = false
     @State private var showCleanup = false
     @State private var showAddProject = false
     @State private var draggedProject: Project?
+
+    /// Sessions that are waiting for user input (idle Claude processes)
+    private var waitingSessions: [Session] {
+        allSessions.filter { $0.isWaitingForInput && !$0.isHidden && !$0.isCompleted }
+            .sorted { $0.lastAccessedAt > $1.lastAccessedAt }
+    }
 
     // Persisted order for dashboard
     @AppStorage("dashboardOrder") private var orderData: Data = Data()
@@ -105,6 +112,12 @@ struct LauncherView: View {
                             }
                         }
                         .padding(.trailing, 8)
+                    }
+
+                    // MARK: - Inbox (Sessions Waiting for Input)
+                    if !waitingSessions.isEmpty {
+                        InboxSection(sessions: waitingSessions)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
                     }
 
                     VStack(spacing: 36) {
@@ -316,6 +329,212 @@ struct ProjectCard: View {
         }
     }
 
+}
+
+// MARK: - Inbox Section
+
+struct InboxSection: View {
+    @EnvironmentObject var appState: AppState
+    let sessions: [Session]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // Header
+            HStack(spacing: 8) {
+                Image(systemName: "bell.badge.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.orange)
+
+                Text("Waiting for Input")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.primary)
+
+                Text("\(sessions.count)")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(.orange))
+            }
+
+            // Session rows
+            VStack(spacing: 2) {
+                ForEach(sessions, id: \.id) { session in
+                    InboxRow(session: session)
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(.orange.opacity(0.3), lineWidth: 1)
+                )
+        )
+    }
+}
+
+struct InboxRow: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var windowState: WindowState
+    let session: Session
+
+    @State private var sentText: String?  // Shows "Sent ✓" confirmation
+    @State private var isHovered = false
+
+    private var projectName: String {
+        session.project?.name ?? URL(fileURLWithPath: session.projectPath).lastPathComponent
+    }
+
+    private var projectIcon: String {
+        session.project?.icon ?? "folder.fill"
+    }
+
+    private var relativeTime: String {
+        let interval = Date().timeIntervalSince(session.lastAccessedAt)
+        if interval < 60 { return "just now" }
+        if interval < 3600 { return "\(Int(interval / 60))m ago" }
+        if interval < 86400 { return "\(Int(interval / 3600))h ago" }
+        return "\(Int(interval / 86400))d ago"
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Pulsing orange dot
+            InboxPulsingDot()
+
+            // Project icon
+            Image(systemName: projectIcon)
+                .font(.system(size: 16))
+                .foregroundStyle(.secondary)
+                .frame(width: 24)
+
+            // Session info
+            VStack(alignment: .leading, spacing: 2) {
+                Text(projectName)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.primary)
+
+                Text(session.name)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            // Sent confirmation or quick-reply chips
+            if let sent = sentText {
+                Text(sent)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.green)
+                    .transition(.opacity)
+            } else {
+                HStack(spacing: 6) {
+                    InboxChip(label: "yes") { sendReply("yes") }
+                    InboxChip(label: "no") { sendReply("no") }
+                    InboxChip(label: "continue") { sendReply("continue") }
+                    InboxChip(label: "stop") { sendReply("stop") }
+                }
+            }
+
+            // Relative time
+            Text(relativeTime)
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .frame(width: 50, alignment: .trailing)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isHovered ? Color.primary.opacity(0.05) : .clear)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            navigateToSession()
+        }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+    }
+
+    private func sendReply(_ text: String) {
+        if let controller = appState.terminalControllers[session.id],
+           controller.terminalView?.process?.running == true {
+            controller.sendToTerminal(text)
+            withAnimation {
+                sentText = "Sent \u{2713}"
+            }
+            // Remove confirmation after 1.5s
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation {
+                    sentText = nil
+                }
+            }
+        } else {
+            // Process not running — navigate to session to relaunch
+            navigateToSession()
+        }
+    }
+
+    private func navigateToSession() {
+        if let project = session.project {
+            withAnimation(.spring(response: 0.3)) {
+                windowState.selectedProject = project
+                windowState.activeSession = session
+                windowState.userTappedSession = true
+            }
+        }
+    }
+}
+
+struct InboxChip: View {
+    let label: String
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(isHovered ? .white : .orange)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule()
+                        .fill(isHovered ? .orange : .orange.opacity(0.15))
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.1)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+struct InboxPulsingDot: View {
+    @State private var isPulsing = false
+
+    var body: some View {
+        Circle()
+            .fill(.orange)
+            .frame(width: 8, height: 8)
+            .shadow(color: .orange.opacity(0.6), radius: isPulsing ? 6 : 2)
+            .scaleEffect(isPulsing ? 1.3 : 1.0)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                    isPulsing = true
+                }
+            }
+    }
 }
 
 // NSVisualEffectView wrapper for glass effect

@@ -38,6 +38,11 @@ struct NavigationRailView: View {
         }
     }
 
+    /// Count of sessions waiting for user input
+    private var inboxCount: Int {
+        allSessions.filter { $0.isWaitingForInput && !$0.isHidden && !$0.isCompleted }.count
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Shellspace icon at top - goes to dashboard/launcher
@@ -47,17 +52,29 @@ struct NavigationRailView: View {
                     windowState.activeSession = nil
                 }
             } label: {
-                Image(systemName: "fossil.shell.fill")
-                    .font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(windowState.selectedProject == nil ? .white : .secondary)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(windowState.selectedProject == nil ? Color.accentColor : .clear)
-                    )
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "fossil.shell.fill")
+                        .font(.system(size: 24, weight: .medium))
+                        .foregroundStyle(windowState.selectedProject == nil ? .white : .secondary)
+                        .frame(width: 36, height: 36)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(windowState.selectedProject == nil ? Color.accentColor : .clear)
+                        )
+
+                    // Orange badge for waiting sessions
+                    if inboxCount > 0 {
+                        Text("\(inboxCount)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .background(Circle().fill(.orange))
+                            .offset(x: 4, y: -4)
+                    }
+                }
             }
             .buttonStyle(.plain)
-            .help("Home")
+            .help(inboxCount > 0 ? "Home (\(inboxCount) waiting)" : "Home")
             .padding(.vertical, 12)
 
             RailDivider()
