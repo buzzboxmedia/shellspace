@@ -120,11 +120,6 @@ struct ContentView: View {
                         }
                         .tag(AppTab.projects)
                 }
-                .overlay(alignment: .topTrailing) {
-                    ConnectionDot()
-                        .padding(.trailing, 16)
-                        .padding(.top, 8)
-                }
                 .sheet(isPresented: $vm.showSettings) {
                     SettingsSheet(isPresented: $vm.showSettings)
                 }
