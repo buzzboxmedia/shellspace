@@ -534,6 +534,26 @@ struct InboxSection: View {
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
                     .background(Capsule().fill(.orange))
+
+                Spacer()
+
+                if sessions.count > 1 {
+                    Button {
+                        withAnimation {
+                            for session in sessions {
+                                session.isWaitingForInput = false
+                            }
+                        }
+                    } label: {
+                        Text("Dismiss All")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color.white.opacity(0.08)))
+                    }
+                    .buttonStyle(.plain)
+                }
             }
 
             // Session rows
@@ -599,7 +619,18 @@ struct InboxRow: View {
                 cleaned = prefixPattern.stringByReplacingMatches(in: cleaned, range: cleanedRange, withTemplate: "")
                 return cleaned
             }
-            .filter { !$0.isEmpty }
+            .filter { line in
+                guard !line.isEmpty else { return false }
+                // Skip Claude Code status bar lines
+                let lower = line.lowercased()
+                if lower.contains("bypass permissions") || lower.contains("shift+tab to cycle") ||
+                   lower.contains("permissions on") || lower.contains("bypasspermission") {
+                    return false
+                }
+                // Skip pure prompt markers
+                if line == ">" || line == "$" || line == "%" { return false }
+                return true
+            }
 
         // Take last meaningful line
         return lines.last ?? ""
@@ -628,6 +659,22 @@ struct InboxRow: View {
                 }
 
                 Spacer()
+
+                // Dismiss from inbox (hover-reveal only)
+                if isHovered {
+                    Button {
+                        withAnimation {
+                            session.isWaitingForInput = false
+                        }
+                    } label: {
+                        Image(systemName: "minus.circle")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(Color(red: 0.50, green: 0.52, blue: 0.58))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Dismiss")
+                    .transition(.opacity)
+                }
 
                 Text(relativeTime)
                     .font(.system(size: 11))

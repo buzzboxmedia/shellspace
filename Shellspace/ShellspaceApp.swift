@@ -84,6 +84,19 @@ struct ShellspaceApp: App {
                         UserDefaults.standard.set(true, forKey: "deduplicatedProjectsByPath")
                     }
 
+                    // Clear stale waiting-for-input flags from sessions that have no running process
+                    // (e.g. after a crash, isWaitingForInput stays true in SwiftData but the process is gone)
+                    let waitingDescriptor = FetchDescriptor<Session>(predicate: #Predicate { $0.isWaitingForInput == true })
+                    if let staleSessions = try? sharedModelContainer.mainContext.fetch(waitingDescriptor) {
+                        for session in staleSessions {
+                            session.isWaitingForInput = false
+                        }
+                        if !staleSessions.isEmpty {
+                            try? sharedModelContainer.mainContext.save()
+                            DebugLog.log("[App] Cleared \(staleSessions.count) stale waiting-for-input flags")
+                        }
+                    }
+
                     // Import projects from Dropbox (before session sync)
                     ProjectSyncService.shared.importProjects(into: sharedModelContainer.mainContext)
 
