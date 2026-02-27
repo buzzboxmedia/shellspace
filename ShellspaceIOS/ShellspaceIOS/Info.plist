@@ -18,6 +18,10 @@
 			<string>com.buzzbox.shellspace-ios</string>
 		</dict>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Take photos to send to Claude sessions</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose photos to send to Claude sessions</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Shellspace uses your local network to automatically discover and connect to your Mac running Shellspace.</string>
 	<key>NSBonjourServices</key>
