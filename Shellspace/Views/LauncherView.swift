@@ -587,19 +587,22 @@ struct InboxRow: View {
             return ""
         }
 
-        // Get last non-empty lines, strip ANSI escape codes
+        // Get last non-empty line, strip ANSI codes and terminal prefixes
         let ansiPattern = try! NSRegularExpression(pattern: "\\x1b\\[[0-9;]*[a-zA-Z]|\\x1b\\][^\\x07]*\\x07|\\x1b[^\\[\\]][a-zA-Z]")
+        let prefixPattern = try! NSRegularExpression(pattern: "^[❯›>▶]+\\s*")
         let lines = text.components(separatedBy: .newlines)
             .map { line in
                 let range = NSRange(line.startIndex..., in: line)
-                return ansiPattern.stringByReplacingMatches(in: line, range: range, withTemplate: "")
+                var cleaned = ansiPattern.stringByReplacingMatches(in: line, range: range, withTemplate: "")
                     .trimmingCharacters(in: .whitespaces)
+                let cleanedRange = NSRange(cleaned.startIndex..., in: cleaned)
+                cleaned = prefixPattern.stringByReplacingMatches(in: cleaned, range: cleanedRange, withTemplate: "")
+                return cleaned
             }
             .filter { !$0.isEmpty }
 
-        // Take last 3 lines
-        let tail = lines.suffix(3)
-        return tail.joined(separator: "\n")
+        // Take last meaningful line
+        return lines.last ?? ""
     }
 
     var body: some View {
@@ -631,26 +634,28 @@ struct InboxRow: View {
                     .foregroundStyle(Color(red: 0.50, green: 0.52, blue: 0.58))
             }
 
-            // Terminal snippet — what Claude is saying/asking
+            // Terminal snippet — single line with left rule
             let snippet = terminalSnippet
             if !snippet.isEmpty {
-                Text(snippet)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(Color(red: 0.75, green: 0.78, blue: 0.85))
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color(red: 0.12, green: 0.12, blue: 0.14))
-                    )
-                    .padding(.leading, 44)  // Align with text (dot + icon width)
+                HStack(spacing: 0) {
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(.orange.opacity(0.4))
+                        .frame(width: 2)
+
+                    Text(snippet)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(Color(red: 0.75, green: 0.78, blue: 0.85))
+                        .lineLimit(1)
+                        .padding(.leading, 8)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 44)
             }
 
-            // Quick-reply chips row
-            HStack(spacing: 6) {
+            // Quick-reply icons
+            HStack(spacing: 8) {
                 Spacer()
-                    .frame(width: 38)  // Align with text
+                    .frame(width: 38)
 
                 if let sent = sentText {
                     Text(sent)
@@ -658,10 +663,10 @@ struct InboxRow: View {
                         .foregroundStyle(.green)
                         .transition(.opacity)
                 } else {
-                    InboxChip(label: "yes") { sendReply("yes") }
-                    InboxChip(label: "no") { sendReply("no") }
-                    InboxChip(label: "continue") { sendReply("continue") }
-                    InboxChip(label: "stop") { sendReply("stop") }
+                    InboxChip(icon: "checkmark", hint: "yes") { sendReply("yes") }
+                    InboxChip(icon: "xmark", hint: "no") { sendReply("no") }
+                    InboxChip(icon: "arrow.right", hint: "continue") { sendReply("continue") }
+                    InboxChip(icon: "stop.fill", hint: "stop", isDestructive: true) { sendReply("stop") }
                 }
             }
         }
@@ -713,12 +718,12 @@ struct InboxRow: View {
 }
 
 struct InboxChip: View {
-    let label: String
+    let icon: String
+    let hint: String
+    var isDestructive: Bool = false
     let action: () -> Void
 
     @State private var isHovered = false
-
-    private var isDestructive: Bool { label == "stop" }
 
     private var accentColor: Color {
         isDestructive ? Color(red: 0.80, green: 0.22, blue: 0.22) : .orange
@@ -726,17 +731,17 @@ struct InboxChip: View {
 
     var body: some View {
         Button(action: action) {
-            Text(label)
-                .font(.system(size: 11, weight: .medium))
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .frame(width: 28, height: 28)
                 .background(
-                    Capsule()
+                    Circle()
                         .fill(isHovered ? accentColor : accentColor.opacity(0.25))
                 )
         }
         .buttonStyle(.plain)
+        .help(hint)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.1)) {
                 isHovered = hovering
