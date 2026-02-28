@@ -28,6 +28,7 @@
 		F87F942490188DD2D7496053 /* ShellspaceAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2E1976A256D34BD07724A7D /* ShellspaceAPI.swift */; };
 		FC62FBCDD899972427DB8CAC /* BonjourBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBA57F7AFFFEDCE73FF31D46 /* BonjourBrowser.swift */; };
 		FDE5F4C94862E8659E3351FE /* AllSessionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9773FC04C143B884991810C /* AllSessionsView.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* SpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F2A3 /* SpeechService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,6 +55,7 @@
 		E1F184919BF4E348FBE8C15A /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
 		F229A38FD17FACDC1C7D93F8 /* SessionsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsListView.swift; sourceTree = "<group>"; };
 		F9773FC04C143B884991810C /* AllSessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllSessionsView.swift; sourceTree = "<group>"; };
+		B2C3D4E5F6A7B8C9D0E1F2A3 /* SpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -90,6 +92,7 @@
 				CBA57F7AFFFEDCE73FF31D46 /* BonjourBrowser.swift */,
 				D0F3FC3A84C494C8F8E02BDE /* RelayAuthManager.swift */,
 				D2E1976A256D34BD07724A7D /* ShellspaceAPI.swift */,
+				B2C3D4E5F6A7B8C9D0E1F2A3 /* SpeechService.swift */,
 				5B3ACA9E191B5DA47B0E6DAE /* WebSocketManager.swift */,
 			);
 			path = Services;
@@ -214,6 +217,7 @@
 				27E05565A65A447D6270D241 /* SettingsSheet.swift in Sources */,
 				F87F942490188DD2D7496053 /* ShellspaceAPI.swift in Sources */,
 				443DB03F222120F3673C6E66 /* ShellspaceIOSApp.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E1F2 /* SpeechService.swift in Sources */,
 				ED565BF19AF4A9308528EA87 /* TerminalView.swift in Sources */,
 				F10E33C4BEE7FEC06ACAD991 /* WaitingView.swift in Sources */,
 				649155D12D429C81AF44FED8 /* WebSocketManager.swift in Sources */,

@@ -115,8 +115,8 @@ struct WaitingSessionRow: View {
                 HStack(spacing: 8) {
                     QuickChip(label: "yes") { onQuickReply("yes") }
                     QuickChip(label: "no") { onQuickReply("no") }
-                    QuickChip(label: "continue") { onQuickReply("continue") }
                     QuickChip(label: "stop", isDestructive: true) { onQuickReply("stop") }
+                    QuickChip(label: "/compact", isDestructive: true) { onQuickReply("/compact") }
                 }
             } else {
                 SentConfirmation()

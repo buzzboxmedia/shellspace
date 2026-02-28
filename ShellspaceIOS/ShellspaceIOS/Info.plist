@@ -22,6 +22,10 @@
 	<string>Take photos to send to Claude sessions</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose photos to send to Claude sessions</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Record voice messages to send to Claude sessions</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Transcribe voice to text for Claude sessions</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Shellspace uses your local network to automatically discover and connect to your Mac running Shellspace.</string>
 	<key>NSBonjourServices</key>

@@ -5,20 +5,32 @@ struct AllSessionsView: View {
     @State private var navigationPath = NavigationPath()
     @State private var searchText = ""
 
-    private var filteredSessions: [RemoteSession] {
-        let active = viewModel.allActiveSessions
-        guard !searchText.isEmpty else { return active }
+    /// Projects that have at least one active (non-completed, non-hidden) session
+    private var activeProjects: [RemoteProject] {
+        let activeProjectPaths = Set(
+            viewModel.allActiveSessions.map { $0.projectPath }
+        )
+        return viewModel.projects
+            .filter { activeProjectPaths.contains($0.path) }
+            .sorted { $0.name < $1.name }
+    }
+
+    private var filteredProjects: [RemoteProject] {
+        guard !searchText.isEmpty else { return activeProjects }
         let query = searchText.lowercased()
-        return active.filter {
-            $0.name.lowercased().contains(query) ||
-            $0.projectName.lowercased().contains(query) ||
-            ($0.summary?.lowercased().contains(query) ?? false)
+        return activeProjects.filter {
+            $0.name.lowercased().contains(query)
         }
     }
 
-    private var groupedSessions: [(String, [RemoteSession])] {
-        let grouped = Dictionary(grouping: filteredSessions) { $0.projectName }
-        return grouped.sorted { $0.key < $1.key }
+    /// For search: sessions matching the query across all active sessions
+    private var filteredSessions: [RemoteSession] {
+        guard !searchText.isEmpty else { return [] }
+        let query = searchText.lowercased()
+        return viewModel.allActiveSessions.filter {
+            $0.name.lowercased().contains(query) ||
+            ($0.summary?.lowercased().contains(query) ?? false)
+        }
     }
 
     var body: some View {
@@ -30,9 +42,9 @@ struct AllSessionsView: View {
                         systemImage: "wifi.slash",
                         description: Text("Connect to your Mac to see sessions")
                     )
-                } else if filteredSessions.isEmpty && !searchText.isEmpty {
+                } else if filteredProjects.isEmpty && filteredSessions.isEmpty && !searchText.isEmpty {
                     ContentUnavailableView.search(text: searchText)
-                } else if filteredSessions.isEmpty {
+                } else if activeProjects.isEmpty {
                     ContentUnavailableView(
                         "No Active Sessions",
                         systemImage: "text.bubble",
@@ -40,11 +52,26 @@ struct AllSessionsView: View {
                     )
                 } else {
                     List {
-                        ForEach(groupedSessions, id: \.0) { projectName, sessions in
-                            Section(projectName) {
-                                ForEach(sessions) { session in
+                        // When searching, also show matching sessions directly
+                        if !filteredSessions.isEmpty {
+                            Section("Sessions") {
+                                ForEach(filteredSessions) { session in
                                     NavigationLink(value: session) {
                                         SessionListRow(session: session)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Projects with active sessions
+                        if !filteredProjects.isEmpty {
+                            Section(searchText.isEmpty ? "" : "Projects") {
+                                ForEach(filteredProjects) { project in
+                                    NavigationLink(value: project) {
+                                        ActiveProjectRow(
+                                            project: project,
+                                            sessions: sessionsForProject(project)
+                                        )
                                     }
                                 }
                             }
@@ -60,6 +87,9 @@ struct AllSessionsView: View {
                 text: $searchText,
                 placement: .navigationBarDrawer(displayMode: .always)
             )
+            .navigationDestination(for: RemoteProject.self) { project in
+                SessionsListView(project: project)
+            }
             .navigationDestination(for: RemoteSession.self) { session in
                 TerminalView(session: session)
                     .environment(viewModel)
@@ -85,6 +115,65 @@ struct AllSessionsView: View {
                 viewModel.activateSearch = false
             }
         }
+    }
+
+    private func sessionsForProject(_ project: RemoteProject) -> [RemoteSession] {
+        viewModel.allActiveSessions.filter { $0.projectPath == project.path }
+    }
+}
+
+// MARK: - Active Project Row
+
+struct ActiveProjectRow: View {
+    let project: RemoteProject
+    let sessions: [RemoteSession]
+
+    private var waitingCount: Int {
+        sessions.filter { $0.isWaitingForInput }.count
+    }
+
+    private var runningCount: Int {
+        sessions.filter { $0.isRunning && !$0.isWaitingForInput }.count
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: project.icon)
+                .font(.title2)
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 36)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(project.name)
+                    .font(.body)
+                    .fontWeight(.medium)
+
+                HStack(spacing: 12) {
+                    Label("\(sessions.count) session\(sessions.count == 1 ? "" : "s")", systemImage: "terminal")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if waitingCount > 0 {
+                        Label("\(waitingCount) waiting", systemImage: "bell.badge")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
+
+            Spacer()
+
+            if waitingCount > 0 {
+                Circle()
+                    .fill(.orange)
+                    .frame(width: 8, height: 8)
+            } else if runningCount > 0 {
+                Circle()
+                    .fill(.green)
+                    .frame(width: 8, height: 8)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 

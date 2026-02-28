@@ -18,6 +18,7 @@ struct TerminalView: View {
     @State private var showCamera = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var isUploadingImage = false
+    @State private var speechService = SpeechService()
     @AppStorage("terminalFontSize") private var fontSize: Double = 14
     @FocusState private var inputFocused: Bool
 
@@ -57,6 +58,7 @@ struct TerminalView: View {
                         .id("terminalBottom")
                 }
                 .defaultScrollAnchor(.bottom)
+                .scrollDismissesKeyboard(.interactively)
                 .background(Color(red: 0.1, green: 0.1, blue: 0.11))
                 .onChange(of: terminalContent) {
                     if !isUserScrolledUp {
@@ -94,7 +96,7 @@ struct TerminalView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     TerminalChip(label: "stop", isDestructive: true) { sendMessage("stop") }
-                    TerminalChip(label: "/clear", isDestructive: true) { sendMessage("/clear") }
+                    TerminalChip(label: "/compact", isDestructive: true) { sendMessage("/compact") }
 
                     Divider()
                         .frame(height: 20)
@@ -102,12 +104,40 @@ struct TerminalView: View {
 
                     TerminalChip(label: "yes") { sendMessage("yes") }
                     TerminalChip(label: "no") { sendMessage("no") }
-                    TerminalChip(label: "continue") { sendMessage("continue") }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
             }
             .background(Color(white: 0.1))
+
+            // Transcript preview (shown while recording or with unsent transcript)
+            if speechService.isListening || !speechService.transcript.isEmpty {
+                HStack(spacing: 8) {
+                    if speechService.isListening {
+                        Circle()
+                            .fill(.red)
+                            .frame(width: 8, height: 8)
+                            .opacity(0.8)
+                    }
+                    Text(speechService.transcript.isEmpty ? "Listening..." : speechService.transcript)
+                        .font(.system(size: 14, design: .monospaced))
+                        .foregroundStyle(speechService.isListening ? .white : .white.opacity(0.8))
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if !speechService.isListening && !speechService.transcript.isEmpty {
+                        Button {
+                            speechService.clearTranscript()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.gray)
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(speechService.isListening ? Color.red.opacity(0.15) : Color(white: 0.12))
+            }
 
             // Input bar
             HStack(spacing: 8) {
@@ -127,14 +157,27 @@ struct TerminalView: View {
                 }
                 .disabled(isUploadingImage)
 
-                TextField("Send to terminal...", text: $inputText)
-                    .font(.system(size: 16, design: .monospaced))
+                Button {
+                    handleMicTap()
+                } label: {
+                    Image(systemName: speechService.isListening ? "mic.fill" : "mic")
+                        .font(.system(size: 20))
+                        .foregroundStyle(speechService.isListening ? .red : .gray.opacity(0.8))
+                        .frame(width: 32, height: 32)
+                }
+
+                TextField("Send to terminal...", text: $inputText, axis: .vertical)
+                    .font(.system(size: 17))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
+                    .lineLimit(1...5)
+                    .padding(.horizontal, 16)
                     .padding(.vertical, 14)
-                    .frame(minHeight: 52)
-                    .background(Color(white: 0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(Color(white: 0.2))
+                    .clipShape(RoundedRectangle(cornerRadius: 22))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22)
+                            .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
+                    )
                     .focused($inputFocused)
                     .submitLabel(.send)
                     .onSubmit { sendCurrentInput() }
@@ -144,9 +187,9 @@ struct TerminalView: View {
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 32))
-                        .foregroundStyle(inputText.isEmpty ? .gray.opacity(0.5) : .blue)
+                        .foregroundStyle(inputText.isEmpty && speechService.transcript.isEmpty ? .gray.opacity(0.5) : .blue)
                 }
-                .disabled(inputText.isEmpty)
+                .disabled(inputText.isEmpty && speechService.transcript.isEmpty)
                 .frame(width: 44, height: 44)
             }
             .padding(.horizontal, 12)
@@ -247,10 +290,19 @@ struct TerminalView: View {
     private func startTerminalObserver() {
         pollTask?.cancel()
         pollTask = Task {
+            var wasConnected = false
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(500))
                 guard !Task.isCancelled else { break }
                 guard let wsManager = viewModel.wsManager else { break }
+
+                let isConnected = wsManager.tunnelState == .connected
+
+                // Re-subscribe after reconnect so the Mac starts streaming
+                if isConnected && !wasConnected {
+                    wsManager.subscribeTerminal(sessionId: session.id)
+                }
+                wasConnected = isConnected
 
                 let wsContent = wsManager.terminalContent
                 if !wsContent.isEmpty {
@@ -273,12 +325,32 @@ struct TerminalView: View {
 
     // MARK: - Actions
 
+    private func handleMicTap() {
+        if speechService.isListening {
+            // Stop recording — transcript stays visible for review
+            speechService.stopListening()
+        } else if !speechService.transcript.isEmpty {
+            // Has unsent transcript — send it
+            let text = speechService.transcript
+            speechService.clearTranscript()
+            sendMessage(text)
+        } else {
+            // Start recording
+            speechService.requestAuthorization()
+            speechService.startListening()
+        }
+    }
+
     private func sendCurrentInput() {
-        let text = inputText.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else {
-            sendError = "Input empty (raw: '\(inputText)')"
+        // Prefer speech transcript if text field is empty
+        if inputText.trimmingCharacters(in: .whitespaces).isEmpty && !speechService.transcript.isEmpty {
+            let text = speechService.transcript
+            speechService.clearTranscript()
+            sendMessage(text)
             return
         }
+        let text = inputText.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
         inputText = ""
         sendMessage(text)
     }
