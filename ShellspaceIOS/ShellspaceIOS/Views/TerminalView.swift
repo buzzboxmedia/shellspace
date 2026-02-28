@@ -50,6 +50,7 @@ struct TerminalView: View {
                     Text(terminalContent.isEmpty ? " " : terminalContent)
                         .font(.system(size: fontSize, design: .monospaced))
                         .foregroundStyle(.white)
+                        .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
@@ -180,6 +181,17 @@ struct TerminalView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 12) {
+                    Button {
+                        UIPasteboard.general.string = terminalContent
+                        withAnimation { showSentToast = true }
+                        Task {
+                            try? await Task.sleep(for: .seconds(1))
+                            withAnimation { showSentToast = false }
+                        }
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.caption)
+                    }
                     Button { fontSize = max(8, fontSize - 2) } label: {
                         Image(systemName: "textformat.size.smaller")
                             .font(.caption)

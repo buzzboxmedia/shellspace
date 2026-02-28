@@ -5,8 +5,10 @@ struct RelayDevice: Codable, Identifiable {
     let id: String
     let name: String
     let platform: String
-    let isOnline: Bool
+    let isOnline: Int
     let lastSeen: String?
+
+    var online: Bool { isOnline != 0 }
 
     var relativeLastSeen: String {
         guard let lastSeen, let date = ISO8601DateFormatter().date(from: lastSeen) else { return "" }
@@ -103,7 +105,7 @@ struct DevicePickerView: View {
     }
 
     private func selectDevice(_ device: RelayDevice) {
-        guard device.isOnline else { return }
+        guard device.online else { return }
         viewModel.selectDevice(device)
     }
 
@@ -156,21 +158,21 @@ struct DeviceRow: View {
         HStack(spacing: 12) {
             Image(systemName: platformIcon)
                 .font(.title2)
-                .foregroundStyle(device.isOnline ? .blue : .gray)
+                .foregroundStyle(device.online ? .blue : .gray)
                 .frame(width: 36)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(device.name)
                     .font(.body)
                     .fontWeight(.medium)
-                    .foregroundStyle(device.isOnline ? .primary : .secondary)
+                    .foregroundStyle(device.online ? .primary : .secondary)
 
                 HStack(spacing: 4) {
                     Text(device.platform.capitalized)
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    if !device.isOnline, !device.relativeLastSeen.isEmpty {
+                    if !device.online, !device.relativeLastSeen.isEmpty {
                         Text("- Last seen \(device.relativeLastSeen)")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
@@ -183,15 +185,15 @@ struct DeviceRow: View {
             // Online/offline indicator
             HStack(spacing: 4) {
                 Circle()
-                    .fill(device.isOnline ? Color.green : Color.gray.opacity(0.4))
+                    .fill(device.online ? Color.green : Color.gray.opacity(0.4))
                     .frame(width: 8, height: 8)
-                Text(device.isOnline ? "Online" : "Offline")
+                Text(device.online ? "Online" : "Offline")
                     .font(.caption)
-                    .foregroundStyle(device.isOnline ? .green : .secondary)
+                    .foregroundStyle(device.online ? .green : .secondary)
             }
         }
         .padding(.vertical, 4)
-        .opacity(device.isOnline ? 1.0 : 0.6)
+        .opacity(device.online ? 1.0 : 0.6)
     }
 
     private var platformIcon: String {

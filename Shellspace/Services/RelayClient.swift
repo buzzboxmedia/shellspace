@@ -13,6 +13,7 @@ final class RelayClient: @unchecked Sendable {
     private var receiveTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var heartbeatTask: Task<Void, Never>?
+    private var tokenRefreshTask: Task<Void, Never>?
 
     /// Sessions currently being auto-launched (prevents double-send)
     @MainActor private var autoLaunchingSessionIds: Set<UUID> = []
@@ -107,8 +108,9 @@ final class RelayClient: @unchecked Sendable {
         DebugLog.log("[RelayClient] WebSocket connecting to relay (device: \(deviceId))")
 
         // Start receiving messages
-        receiveTask = Task { [weak self] in
-            await self?.receiveLoop()
+        let client = self
+        receiveTask = Task {
+            await client.receiveLoop()
         }
 
         // Start polling terminal buffers
@@ -116,9 +118,14 @@ final class RelayClient: @unchecked Sendable {
             await self?.pollingLoop()
         }
 
-        // Start heartbeat
+        // Start heartbeat (WebSocket-level pings for connection health)
         heartbeatTask = Task { [weak self] in
             await self?.heartbeatLoop()
+        }
+
+        // Start proactive token refresh (before 15m JWT expiry)
+        tokenRefreshTask = Task { [weak self] in
+            await self?.tokenRefreshLoop()
         }
 
         state = .connected
@@ -135,6 +142,8 @@ final class RelayClient: @unchecked Sendable {
         reconnectTask = nil
         heartbeatTask?.cancel()
         heartbeatTask = nil
+        tokenRefreshTask?.cancel()
+        tokenRefreshTask = nil
         webSocketTask?.cancel(with: .normalClosure, reason: nil)
         webSocketTask = nil
 
@@ -147,8 +156,11 @@ final class RelayClient: @unchecked Sendable {
 
     // MARK: - Reconnect
 
+    private var isReconnecting = false
+
     private func scheduleReconnect() {
-        guard shouldReconnect else { return }
+        guard shouldReconnect, !isReconnecting else { return }
+        isReconnecting = true
 
         reconnectAttempts += 1
         let delay = reconnectDelay
@@ -161,18 +173,17 @@ final class RelayClient: @unchecked Sendable {
                 try? await Task.sleep(for: .seconds(delay))
                 guard !Task.isCancelled else { return }
 
-                // Try refreshing the token before reconnecting
-                if self.reconnectAttempts > 1 {
-                    do {
-                        try await RelayAuth.shared.refreshAccessToken()
-                    } catch {
-                        await MainActor.run {
-                            DebugLog.log("[RelayClient] Token refresh failed: \(error)")
-                        }
+                // Always refresh the token before reconnecting (JWT expires in 15m)
+                do {
+                    try await RelayAuth.shared.refreshAccessToken()
+                } catch {
+                    await MainActor.run {
+                        DebugLog.log("[RelayClient] Token refresh failed: \(error)")
                     }
                 }
 
                 await MainActor.run {
+                    self.isReconnecting = false
                     self.tearDown()
                     self.startConnection()
                 }
@@ -183,15 +194,22 @@ final class RelayClient: @unchecked Sendable {
     // MARK: - Receive Loop
 
     private func receiveLoop() async {
-        guard let ws = webSocketTask else { return }
+        guard let ws = webSocketTask else {
+            await MainActor.run { DebugLog.log("[RelayClient] receiveLoop: webSocketTask is nil, exiting") }
+            return
+        }
+
+        await MainActor.run { DebugLog.log("[RelayClient] receiveLoop: started, waiting for messages...") }
 
         while !Task.isCancelled {
             do {
                 let message = try await ws.receive()
                 switch message {
                 case .string(let text):
+                    await MainActor.run { DebugLog.log("[RelayClient] Received: \(text.prefix(150))") }
                     await handleInboundMessage(text)
                 case .data(let data):
+                    await MainActor.run { DebugLog.log("[RelayClient] Received binary: \(data.count) bytes") }
                     if let text = String(data: data, encoding: .utf8) {
                         await handleInboundMessage(text)
                     }
@@ -221,7 +239,7 @@ final class RelayClient: @unchecked Sendable {
 
         switch type {
         case "input":
-            guard let sessionId = json["session_id"] as? String,
+            guard let sessionId = (json["session_id"] ?? json["sessionId"]) as? String,
                   let message = json["message"] as? String else {
                 await MainActor.run { DebugLog.log("[RelayClient] Invalid input message") }
                 return
@@ -229,7 +247,7 @@ final class RelayClient: @unchecked Sendable {
             await handleInput(sessionId: sessionId, message: message)
 
         case "create_session":
-            guard let projectId = json["project_id"] as? String,
+            guard let projectId = (json["project_id"] ?? json["projectId"]) as? String,
                   let name = json["name"] as? String else {
                 await MainActor.run { DebugLog.log("[RelayClient] Invalid create_session message") }
                 return
@@ -237,8 +255,8 @@ final class RelayClient: @unchecked Sendable {
             let description = json["description"] as? String
             await handleCreateSession(projectId: projectId, name: name, description: description)
 
-        case "image_upload":
-            guard let sessionId = json["session_id"] as? String,
+        case "image_upload", "image":
+            guard let sessionId = (json["session_id"] ?? json["sessionId"]) as? String,
                   let base64 = json["image"] as? String else {
                 await MainActor.run { DebugLog.log("[RelayClient] Invalid image_upload message") }
                 return
@@ -252,10 +270,13 @@ final class RelayClient: @unchecked Sendable {
         case "request_sessions":
             await sendSessionsUpdate(force: true)
 
-        case "request_terminal":
-            if let sessionId = json["session_id"] as? String {
+        case "request_terminal", "subscribe_terminal":
+            if let sessionId = (json["session_id"] ?? json["sessionId"]) as? String {
                 await sendTerminalUpdate(sessionId: sessionId, force: true)
             }
+
+        case "unsubscribe_terminal":
+            break  // No-op, Mac sends updates for all sessions via polling
 
         case "ping":
             await sendMessage(["type": "pong"])
@@ -424,6 +445,10 @@ final class RelayClient: @unchecked Sendable {
     // MARK: - Polling Loop (Outbound Updates)
 
     private func pollingLoop() async {
+        // Wait for WebSocket handshake to complete before sending
+        try? await Task.sleep(for: .seconds(2))
+        guard !Task.isCancelled else { return }
+
         // Send initial state (projects + sessions)
         await sendStateUpdate()
 
@@ -579,13 +604,51 @@ final class RelayClient: @unchecked Sendable {
         ])
     }
 
-    // MARK: - Heartbeat
+    // MARK: - Heartbeat (WebSocket-level ping for dead connection detection)
 
     private func heartbeatLoop() async {
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(30))
-            guard !Task.isCancelled else { break }
-            await sendMessage(["type": "ping"])
+            guard !Task.isCancelled, let ws = webSocketTask else { break }
+
+            // Use WebSocket-level ping - URLSession handles pong detection
+            ws.sendPing { [weak self] error in
+                if let error {
+                    Task { @MainActor in
+                        DebugLog.log("[RelayClient] Ping failed (connection dead): \(error)")
+                    }
+                    self?.scheduleReconnect()
+                }
+            }
+        }
+    }
+
+    // MARK: - Token Refresh (proactive, before 15m JWT expiry)
+
+    private func tokenRefreshLoop() async {
+        while !Task.isCancelled {
+            // Refresh every 10 minutes (JWT expires at 15m)
+            try? await Task.sleep(for: .seconds(600))
+            guard !Task.isCancelled, shouldReconnect else { break }
+
+            await MainActor.run {
+                DebugLog.log("[RelayClient] Proactive token refresh...")
+            }
+
+            do {
+                try await RelayAuth.shared.refreshAccessToken()
+                await MainActor.run {
+                    DebugLog.log("[RelayClient] Token refreshed, reconnecting with new token")
+                    self.tearDown()
+                    self.startConnection()
+                }
+            } catch {
+                await MainActor.run {
+                    DebugLog.log("[RelayClient] Proactive token refresh failed: \(error)")
+                }
+                // Don't reconnect on failure - the existing connection may still work
+                // The next heartbeat or send failure will trigger reconnect if needed
+            }
         }
     }
 

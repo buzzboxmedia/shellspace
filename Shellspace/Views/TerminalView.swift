@@ -710,6 +710,18 @@ class TerminalController: ObservableObject {
         if currentHash == lastContentHash {
             idleTickCount += 1
             if idleTickCount >= idleThresholdTicks && session?.isWaitingForInput != true {
+                // Log what the terminal looks like when idle threshold is hit
+                if idleTickCount == idleThresholdTicks {
+                    if let text = String(data: content, encoding: .utf8) {
+                        let lines = text.components(separatedBy: .newlines)
+                            .map { $0.trimmingCharacters(in: .whitespaces) }
+                            .filter { !$0.isEmpty }
+                        let lastFew = lines.suffix(5).map { "  |\($0)|" }.joined(separator: "\n")
+                        let name = self.session?.name ?? "?"
+                        let asking = terminalIsAskingForInput(content)
+                        DebugLog.log("[IdleDetect] \(name) hit threshold. asking=\(asking). Last 5 lines:\n\(lastFew)")
+                    }
+                }
                 // Only mark as waiting if the terminal actually looks like it's asking a question
                 if terminalIsAskingForInput(content) {
                     DispatchQueue.main.async { [weak self] in

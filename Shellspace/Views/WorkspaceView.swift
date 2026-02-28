@@ -400,9 +400,9 @@ struct SessionSidebar: View {
             return
         }
 
-        // Check if a session with this name already exists (case-insensitive)
+        // Check if an active (non-completed) session with this name already exists
         if let existingSession = sessions.first(where: {
-            $0.name.lowercased() == name.lowercased()
+            $0.name.lowercased() == name.lowercased() && !$0.isCompleted
         }) {
             // Unhide if hidden
             if existingSession.isHidden {
@@ -685,10 +685,10 @@ struct SessionSidebar: View {
                                     .stroke(Color.white.opacity(0.15), lineWidth: 1)
                             )
 
-                            // Autocomplete suggestions
+                            // Autocomplete suggestions (only active/hidden sessions, not completed)
                             if !newTaskName.isEmpty {
                                 let suggestions = sessions.filter {
-                                    $0.name.lowercased().contains(newTaskName.lowercased())
+                                    !$0.isCompleted && $0.name.lowercased().contains(newTaskName.lowercased())
                                 }.prefix(5)
 
                                 if !suggestions.isEmpty {
