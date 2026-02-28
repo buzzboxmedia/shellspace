@@ -246,6 +246,9 @@ final class RelayClient: @unchecked Sendable {
             let filename = json["filename"] as? String
             await handleImageUpload(sessionId: sessionId, base64: base64, filename: filename)
 
+        case "request_state":
+            await sendStateUpdate()
+
         case "request_sessions":
             await sendSessionsUpdate(force: true)
 
@@ -421,8 +424,8 @@ final class RelayClient: @unchecked Sendable {
     // MARK: - Polling Loop (Outbound Updates)
 
     private func pollingLoop() async {
-        // Send initial snapshots
-        await sendSessionsUpdate(force: true)
+        // Send initial state (projects + sessions)
+        await sendStateUpdate()
 
         while !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(500))
@@ -530,6 +533,49 @@ final class RelayClient: @unchecked Sendable {
         await sendMessage([
             "type": "sessions_update",
             "sessions": sessionDicts
+        ])
+    }
+
+    // MARK: - State Update (projects + sessions)
+
+    private func sendStateUpdate() async {
+        let (projectDicts, sessionDicts) = await MainActor.run {
+            guard let container = modelContainer else { return (nil as [[String: Any]]?, nil as [[String: Any]]?) }
+            let context = ModelContext(container)
+
+            // Fetch projects
+            let projectDescriptor = FetchDescriptor<Project>()
+            let projects = (try? context.fetch(projectDescriptor)) ?? []
+            let projectsList = projects.map { project -> [String: Any] in
+                let activeSessions = project.sessions.filter { !$0.isHidden && !$0.isCompleted }
+                let waitingSessions = activeSessions.filter { $0.isWaitingForInput }
+                return [
+                    "id": project.id.uuidString,
+                    "name": project.name,
+                    "path": project.path,
+                    "icon": project.icon,
+                    "category": project.category.rawValue,
+                    "active_sessions": activeSessions.count,
+                    "waiting_sessions": waitingSessions.count,
+                ]
+            }
+
+            // Fetch sessions
+            let sessionDescriptor = FetchDescriptor<Session>()
+            let allSessions = (try? context.fetch(sessionDescriptor)) ?? []
+            let sessionsList = allSessions.filter { !$0.isHidden }.map { session in
+                sessionToJSON(session)
+            }
+
+            return (projectsList, sessionsList)
+        }
+
+        guard let projectDicts, let sessionDicts else { return }
+
+        await sendMessage([
+            "type": "state_update",
+            "projects": projectDicts,
+            "sessions": sessionDicts,
         ])
     }
 
