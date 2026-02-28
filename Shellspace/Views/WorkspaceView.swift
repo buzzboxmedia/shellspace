@@ -401,23 +401,31 @@ struct SessionSidebar: View {
         }
 
         // Check if an active (non-completed) session with this name already exists
+        // AND its task folder still exists on disk (may have been moved to completed/)
         if let existingSession = sessions.first(where: {
             $0.name.lowercased() == name.lowercased() && !$0.isCompleted
         }) {
-            // Unhide if hidden
-            if existingSession.isHidden {
-                existingSession.isHidden = false
-            }
-            existingSession.lastAccessedAt = Date()
-            showTaskList = true
-            windowState.userTappedSession = true
-            windowState.activeSession = existingSession
-            SessionSyncService.shared.exportSession(existingSession)
+            // If the task folder was moved/deleted, mark it completed and create a fresh one
+            if let taskPath = existingSession.taskFolderPath,
+               !FileManager.default.fileExists(atPath: taskPath) {
+                existingSession.isCompleted = true
+                existingSession.completedAt = Date()
+            } else {
+                // Unhide if hidden
+                if existingSession.isHidden {
+                    existingSession.isHidden = false
+                }
+                existingSession.lastAccessedAt = Date()
+                showTaskList = true
+                windowState.userTappedSession = true
+                windowState.activeSession = existingSession
+                SessionSyncService.shared.exportSession(existingSession)
 
-            isCreatingTask = false
-            newTaskName = ""
-            selectedGroupForNewTask = nil
-            return
+                isCreatingTask = false
+                newTaskName = ""
+                selectedGroupForNewTask = nil
+                return
+            }
         }
 
         // Create task folder path
@@ -685,10 +693,12 @@ struct SessionSidebar: View {
                                     .stroke(Color.white.opacity(0.15), lineWidth: 1)
                             )
 
-                            // Autocomplete suggestions (only active/hidden sessions, not completed)
+                            // Autocomplete suggestions (only sessions with existing task folders)
                             if !newTaskName.isEmpty {
                                 let suggestions = sessions.filter {
-                                    !$0.isCompleted && $0.name.lowercased().contains(newTaskName.lowercased())
+                                    !$0.isCompleted &&
+                                    $0.name.lowercased().contains(newTaskName.lowercased()) &&
+                                    (($0.taskFolderPath).map { FileManager.default.fileExists(atPath: $0) } ?? true)
                                 }.prefix(5)
 
                                 if !suggestions.isEmpty {
