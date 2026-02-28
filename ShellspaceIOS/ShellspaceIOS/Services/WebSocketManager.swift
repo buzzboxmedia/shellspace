@@ -34,6 +34,8 @@ final class WebSocketManager {
     private let deviceId: String
     private let authManager: RelayAuthManager
     private var tunnelTask: Task<Void, Never>?
+    private var heartbeatTask: Task<Void, Never>?
+    private var tokenRefreshTask: Task<Void, Never>?
     private var activeSocket: URLSessionWebSocketTask?
 
     /// Tracks which sessions were waiting last time, so we only notify on transitions
@@ -74,6 +76,9 @@ final class WebSocketManager {
                     await MainActor.run { self.tunnelState = .reconnecting(attempt: currentAttempt) }
                     let delay = min(30.0, pow(2.0, Double(currentAttempt - 1)))
                     try? await Task.sleep(for: .seconds(delay))
+
+                    // Refresh token before reconnecting (JWT expires in 15m)
+                    _ = try? await self.authManager.refreshAccessToken()
                 }
             }
             await MainActor.run { self.tunnelState = .disconnected }
@@ -83,6 +88,10 @@ final class WebSocketManager {
     func disconnect() {
         tunnelTask?.cancel()
         tunnelTask = nil
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
+        tokenRefreshTask?.cancel()
+        tokenRefreshTask = nil
         activeSocket?.cancel(with: .goingAway, reason: nil)
         activeSocket = nil
         tunnelState = .disconnected
@@ -179,6 +188,18 @@ final class WebSocketManager {
         wsTask.resume()
         activeSocket = wsTask
         await MainActor.run { self.tunnelState = .connected }
+
+        // Start heartbeat pings for dead connection detection
+        heartbeatTask?.cancel()
+        heartbeatTask = Task { [weak self] in
+            await self?.heartbeatLoop()
+        }
+
+        // Start proactive token refresh (before 15m JWT expiry)
+        tokenRefreshTask?.cancel()
+        tokenRefreshTask = Task { [weak self] in
+            await self?.tokenRefreshLoop()
+        }
 
         // Re-subscribe to terminal if we had an active session before reconnect
         if let sessionId = activeTerminalSessionId {
@@ -323,6 +344,43 @@ final class WebSocketManager {
             )
 
             UNUserNotificationCenter.current().add(request)
+        }
+    }
+
+    // MARK: - Heartbeat (WebSocket-level ping for dead connection detection)
+
+    private func heartbeatLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(30))
+            guard !Task.isCancelled, let ws = activeSocket else { break }
+
+            ws.sendPing { [weak self] error in
+                if let error {
+                    print("[WebSocketManager] Ping failed (connection dead): \(error)")
+                    // Force the receive loop to fail by cancelling the socket
+                    self?.activeSocket?.cancel(with: .abnormalClosure, reason: nil)
+                }
+            }
+        }
+    }
+
+    // MARK: - Token Refresh (proactive, before 15m JWT expiry)
+
+    private func tokenRefreshLoop() async {
+        while !Task.isCancelled {
+            // Refresh every 10 minutes (JWT expires at 15m)
+            try? await Task.sleep(for: .seconds(600))
+            guard !Task.isCancelled else { break }
+
+            do {
+                _ = try await authManager.refreshAccessToken()
+                print("[WebSocketManager] Proactive token refresh succeeded, reconnecting")
+                // Tear down current connection and reconnect with fresh token
+                activeSocket?.cancel(with: .goingAway, reason: nil)
+            } catch {
+                print("[WebSocketManager] Proactive token refresh failed: \(error)")
+                // Don't force reconnect on failure - existing connection may still work
+            }
         }
     }
 
