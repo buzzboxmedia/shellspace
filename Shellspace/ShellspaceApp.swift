@@ -138,6 +138,138 @@ struct ShellspaceApp: App {
             // (Don't override pasteboard commands - they break terminal copy/paste)
 
         }
+
+        MenuBarExtra {
+            MenuBarContentView()
+                .environmentObject(appState)
+        } label: {
+            Image(systemName: "fossil.shell.fill")
+        }
+        .menuBarExtraStyle(.window)
+    }
+}
+
+// MARK: - Menu Bar Content
+
+struct MenuBarContentView: View {
+    @EnvironmentObject var appState: AppState
+
+    private var runningCount: Int {
+        appState.terminalControllers.count
+    }
+
+    private var attentionCount: Int {
+        appState.sessionsNeedingAttention.count
+    }
+
+    private var statusText: String {
+        if runningCount > 0 {
+            return "\(runningCount) session\(runningCount == 1 ? "" : "s") running"
+        }
+        return "Running"
+    }
+
+    private var hostname: String {
+        ProcessInfo.processInfo.hostName.replacingOccurrences(of: ".local", with: "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header: Shellspace + status
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Shellspace")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(statusText)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Circle()
+                    .fill(runningCount > 0 ? .green : .gray)
+                    .frame(width: 8, height: 8)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+
+            Divider()
+
+            // Device info
+            VStack(alignment: .leading, spacing: 8) {
+                Text("This Mac: \(hostname)")
+                    .font(.system(size: 13))
+
+                if runningCount > 0 {
+                    Label("\(runningCount) active terminal\(runningCount == 1 ? "" : "s")", systemImage: "terminal.fill")
+                        .font(.system(size: 13))
+                }
+
+                if attentionCount > 0 {
+                    Label("\(attentionCount) waiting on you", systemImage: "exclamationmark.circle.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.orange)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+
+            Divider()
+
+            // Actions
+            MenuBarButton(title: "Open Shellspace", shortcut: "O") {
+                openOrCreateWindow()
+            }
+
+            Divider()
+
+            MenuBarButton(title: "Quit Shellspace", shortcut: "Q") {
+                NSApplication.shared.terminate(nil)
+            }
+        }
+        .frame(width: 260)
+    }
+
+    private func openOrCreateWindow() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        if let window = NSApplication.shared.windows.first(where: { $0.isVisible || $0.isMiniaturized }) {
+            window.makeKeyAndOrderFront(nil)
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
+            }
+        } else {
+            // No visible windows - create a new one via the standard WindowGroup mechanism
+            NSApplication.shared.sendAction(Selector(("newWindowForTab:")), to: nil, from: nil)
+        }
+    }
+}
+
+/// A menu-bar-style button row with hover highlight
+struct MenuBarButton: View {
+    let title: String
+    var shortcut: String? = nil
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 13))
+                Spacer()
+                if let shortcut {
+                    Text("\u{2318}\(shortcut)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .background(isHovered ? Color.accentColor.opacity(0.2) : .clear)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
     }
 }
 
@@ -205,6 +337,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApplication.shared.activate(ignoringOtherApps: true)
             }
         }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return false  // Keep running with menu bar icon when window is closed
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {

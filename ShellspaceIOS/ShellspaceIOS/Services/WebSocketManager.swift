@@ -232,20 +232,24 @@ final class WebSocketManager {
     private func parseTunnelMessage(_ text: String) async {
         guard let data = text.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let type = json["type"] as? String else { return }
+              let type = json["type"] as? String else {
+            print("[WebSocketManager] Failed to parse message: \(text.prefix(200))")
+            return
+        }
 
         switch type {
         case "state_update":
+            print("[WebSocketManager] Received state_update")
             await handleStateUpdate(json)
 
         case "sessions_update":
+            print("[WebSocketManager] Received sessions_update")
             await handleSessionsUpdate(json)
 
         case "terminal_update":
             await handleTerminalUpdate(json)
 
         case "session_created":
-            // Mac confirms a session was created; request full state refresh
             requestStateRefresh()
 
         case "error":
@@ -253,9 +257,10 @@ final class WebSocketManager {
             print("[WebSocketManager] Relay error: \(message)")
 
         case "pong":
-            break // keepalive response
+            break
 
         default:
+            print("[WebSocketManager] Unknown message type: \(type)")
             break
         }
     }
@@ -263,28 +268,50 @@ final class WebSocketManager {
     private func handleStateUpdate(_ json: [String: Any]) async {
         // Parse projects
         if let projectsArray = json["projects"] {
-            if let projectsData = try? JSONSerialization.data(withJSONObject: projectsArray),
-               let decoded = try? Self.decoder.decode([RemoteProject].self, from: projectsData) {
+            do {
+                let projectsData = try JSONSerialization.data(withJSONObject: projectsArray)
+                let decoded = try Self.decoder.decode([RemoteProject].self, from: projectsData)
+                print("[WebSocketManager] Decoded \(decoded.count) projects")
                 await MainActor.run { self.projects = decoded }
+            } catch {
+                print("[WebSocketManager] Projects decode error: \(error)")
             }
+        } else {
+            print("[WebSocketManager] state_update has no 'projects' key")
         }
 
         // Parse sessions
         if let sessionsArray = json["sessions"] {
-            if let sessionsData = try? JSONSerialization.data(withJSONObject: sessionsArray),
-               let decoded = try? Self.decoder.decode([RemoteSession].self, from: sessionsData) {
+            do {
+                let sessionsData = try JSONSerialization.data(withJSONObject: sessionsArray)
+                let decoded = try Self.decoder.decode([RemoteSession].self, from: sessionsData)
+                print("[WebSocketManager] Decoded \(decoded.count) sessions")
                 await MainActor.run {
                     self.sessions = decoded
                     self.checkForNewWaitingSessions(decoded)
                 }
+            } catch {
+                print("[WebSocketManager] Sessions decode error: \(error)")
             }
+        } else {
+            print("[WebSocketManager] state_update has no 'sessions' key")
         }
     }
 
     private func handleSessionsUpdate(_ json: [String: Any]) async {
-        guard let sessionsArray = json["sessions"],
-              let sessionsData = try? JSONSerialization.data(withJSONObject: sessionsArray),
-              let decoded = try? Self.decoder.decode([RemoteSession].self, from: sessionsData) else { return }
+        guard let sessionsArray = json["sessions"] else {
+            print("[WebSocketManager] sessions_update has no 'sessions' key")
+            return
+        }
+        let decoded: [RemoteSession]
+        do {
+            let sessionsData = try JSONSerialization.data(withJSONObject: sessionsArray)
+            decoded = try Self.decoder.decode([RemoteSession].self, from: sessionsData)
+            print("[WebSocketManager] sessions_update decoded \(decoded.count) sessions")
+        } catch {
+            print("[WebSocketManager] sessions_update decode error: \(error)")
+            return
+        }
 
         await MainActor.run {
             self.sessions = decoded
