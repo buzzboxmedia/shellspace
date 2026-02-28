@@ -60,8 +60,8 @@ class TaskImportService {
             // Skip already completed sessions
             if session.isCompleted { continue }
 
-            // Sessions WITHOUT taskFolderPath are root/quick sessions - not filesystem-backed.
-            // Only try to link them to completed task folders; never delete them.
+            // Sessions WITHOUT taskFolderPath are legacy sessions from before task folder tracking.
+            // Try to match them to completed or active task folders. If no match and old enough, delete them.
             if session.taskFolderPath == nil {
                 let sessionSlug = taskFolderService.slugify(session.name)
 
@@ -71,7 +71,23 @@ class TaskImportService {
                     session.taskFolderPath = completedPath.path
                     session.isCompleted = true
                     session.completedAt = Date()
+                    continue
                 }
+
+                // Check if it matches an active task folder
+                if activeTaskNames.contains(sessionSlug) {
+                    continue  // Still active on disk, keep it
+                }
+
+                // Grace period for recently created sessions
+                let sessionAge = Date().timeIntervalSince(session.createdAt)
+                if sessionAge < gracePeriod {
+                    continue
+                }
+
+                // No matching folder on disk (active or completed) — legacy stale session, remove it
+                logger.info("Legacy session with no folder path and no matching task folder, removing: \(session.name)")
+                sessionsToDelete.append(session)
                 continue
             }
 
