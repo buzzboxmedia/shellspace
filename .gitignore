@@ -12,3 +12,4 @@ build/
 
 # CLAUDE.md is a symlink to Dropbox (not tracked in git)
 CLAUDE.md
+private_keys/

@@ -345,13 +345,15 @@ struct TerminalView: View {
                         terminalContent = stripped
                         isRunning = wsManager.terminalIsRunning
 
-                        // In conversation mode, speak new content when response arrives
-                        if speechService.conversationMode && waitingForResponse && stripped.count > contentLengthAtSend + 20 {
+                        // In conversation mode, speak new content when Claude finishes
+                        if speechService.conversationMode && waitingForResponse
+                            && wsManager.terminalIsWaiting
+                            && stripped.count > contentLengthAtSend + 20 {
                             waitingForResponse = false
                             // Extract just the new part
                             let newText = String(stripped.dropFirst(contentLengthAtSend))
                                 .trimmingCharacters(in: .whitespacesAndNewlines)
-                            if !newText.isEmpty && !wsManager.terminalIsRunning {
+                            if !newText.isEmpty {
                                 speechService.speak(newText)
                             }
                         }
