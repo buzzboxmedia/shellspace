@@ -2,25 +2,34 @@ import Foundation
 import Speech
 import AVFoundation
 
-/// Simple speech-to-text service for iOS. Tap to record, tap again to send.
+/// Speech-to-text and text-to-speech service for conversational voice mode.
 @Observable
-final class SpeechService {
+final class SpeechService: NSObject, AVSpeechSynthesizerDelegate {
     var isListening = false
     var transcript = ""
     var isAuthorized = false
+    var isSpeaking = false
+    var conversationMode = false
 
     private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var audioEngine: AVAudioEngine?
     private var countdownTimer: Timer?
+    private var synthesizer: AVSpeechSynthesizer?
+
+    /// Called when TTS finishes speaking — used to auto-listen
+    var onSpeakingFinished: (() -> Void)?
 
     /// Seconds remaining (60s Apple limit)
     var remainingTime: Double = 60
     var timerProgress: Double { max(0, remainingTime / 60.0) }
 
-    init() {
+    override init() {
+        super.init()
         speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+        synthesizer = AVSpeechSynthesizer()
+        synthesizer?.delegate = self
     }
 
     func requestAuthorization() {
@@ -31,12 +40,16 @@ final class SpeechService {
         }
     }
 
+    // MARK: - Speech-to-Text
+
     func startListening() {
         guard let speechRecognizer, speechRecognizer.isAvailable else {
             print("[SpeechService] Recognizer not available")
             return
         }
 
+        // Stop any TTS first
+        stopSpeaking()
         stopAudioEngine()
 
         do {
@@ -106,6 +119,54 @@ final class SpeechService {
     func clearTranscript() {
         transcript = ""
     }
+
+    // MARK: - Text-to-Speech
+
+    func speak(_ text: String) {
+        stopAudioEngine()
+        stopSpeaking()
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default)
+            try session.setActive(true)
+        } catch {
+            print("[SpeechService] TTS audio session error: \(error)")
+        }
+
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+
+        isSpeaking = true
+        synthesizer?.speak(utterance)
+    }
+
+    func stopSpeaking() {
+        if synthesizer?.isSpeaking == true {
+            synthesizer?.stopSpeaking(at: .immediate)
+        }
+        isSpeaking = false
+    }
+
+    /// Stop everything — listening, speaking, conversation
+    func stopAll() {
+        conversationMode = false
+        stopListening()
+        stopSpeaking()
+        clearTranscript()
+    }
+
+    // MARK: - AVSpeechSynthesizerDelegate
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        DispatchQueue.main.async {
+            self.isSpeaking = false
+            self.onSpeakingFinished?()
+        }
+    }
+
+    // MARK: - Private
 
     private func stopAudioEngine() {
         countdownTimer?.invalidate()

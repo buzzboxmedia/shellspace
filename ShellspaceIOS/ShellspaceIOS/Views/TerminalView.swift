@@ -19,6 +19,8 @@ struct TerminalView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var isUploadingImage = false
     @State private var speechService = SpeechService()
+    @State private var contentLengthAtSend: Int = 0
+    @State private var waitingForResponse = false
     @AppStorage("terminalFontSize") private var fontSize: Double = 14
     @FocusState private var inputFocused: Bool
 
@@ -110,22 +112,52 @@ struct TerminalView: View {
             }
             .background(Color(white: 0.1))
 
-            // Transcript preview (shown while recording or with unsent transcript)
-            if speechService.isListening || !speechService.transcript.isEmpty {
+            // Voice status bar (recording, speaking, or unsent transcript)
+            if speechService.isListening || speechService.isSpeaking || waitingForResponse || !speechService.transcript.isEmpty {
                 HStack(spacing: 8) {
                     if speechService.isListening {
                         Circle()
                             .fill(.red)
                             .frame(width: 8, height: 8)
                             .opacity(0.8)
+                    } else if speechService.isSpeaking {
+                        Image(systemName: "speaker.wave.2.fill")
+                            .font(.caption)
+                            .foregroundStyle(.blue)
+                    } else if waitingForResponse {
+                        ProgressView()
+                            .scaleEffect(0.7)
                     }
-                    Text(speechService.transcript.isEmpty ? "Listening..." : speechService.transcript)
-                        .font(.system(size: 14, design: .monospaced))
-                        .foregroundStyle(speechService.isListening ? .white : .white.opacity(0.8))
-                        .lineLimit(3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                    if !speechService.isListening && !speechService.transcript.isEmpty {
+                    if speechService.isSpeaking {
+                        Text("Speaking...")
+                            .font(.system(size: 14, design: .monospaced))
+                            .foregroundStyle(.blue)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else if waitingForResponse {
+                        Text("Waiting for response...")
+                            .font(.system(size: 14, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.6))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        Text(speechService.transcript.isEmpty ? "Listening..." : speechService.transcript)
+                            .font(.system(size: 14, design: .monospaced))
+                            .foregroundStyle(speechService.isListening ? .white : .white.opacity(0.8))
+                            .lineLimit(3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    // Stop conversation button
+                    if speechService.conversationMode {
+                        Button {
+                            speechService.stopAll()
+                            waitingForResponse = false
+                        } label: {
+                            Image(systemName: "stop.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.red)
+                        }
+                    } else if !speechService.isListening && !speechService.transcript.isEmpty {
                         Button {
                             speechService.clearTranscript()
                         } label: {
@@ -136,38 +168,26 @@ struct TerminalView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(speechService.isListening ? Color.red.opacity(0.15) : Color(white: 0.12))
+                .background(
+                    speechService.isListening ? Color.red.opacity(0.15) :
+                    speechService.isSpeaking ? Color.blue.opacity(0.15) :
+                    Color(white: 0.12)
+                )
             }
 
             // Input bar
             HStack(spacing: 8) {
                 Button {
-                    showImageSourcePicker = true
-                } label: {
-                    if isUploadingImage {
-                        ProgressView()
-                            .tint(.gray)
-                            .frame(width: 32, height: 32)
-                    } else {
-                        Image(systemName: "photo.on.rectangle")
-                            .font(.system(size: 20))
-                            .foregroundStyle(.gray.opacity(0.8))
-                            .frame(width: 32, height: 32)
-                    }
-                }
-                .disabled(isUploadingImage)
-
-                Button {
                     handleMicTap()
                 } label: {
-                    Image(systemName: speechService.isListening ? "mic.fill" : "mic")
-                        .font(.system(size: 20))
-                        .foregroundStyle(speechService.isListening ? .red : .gray.opacity(0.8))
-                        .frame(width: 32, height: 32)
+                    Image(systemName: micIconName)
+                        .font(.system(size: 24))
+                        .foregroundStyle(micIconColor)
+                        .frame(width: 44, height: 44)
                 }
 
                 TextField("Send to terminal...", text: $inputText, axis: .vertical)
-                    .font(.system(size: 17))
+                    .font(.body)
                     .foregroundStyle(.white)
                     .lineLimit(1...5)
                     .padding(.horizontal, 16)
@@ -224,6 +244,19 @@ struct TerminalView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 12) {
+                    Button {
+                        showImageSourcePicker = true
+                    } label: {
+                        if isUploadingImage {
+                            ProgressView()
+                                .tint(.white)
+                                .scaleEffect(0.7)
+                        } else {
+                            Image(systemName: "photo")
+                                .font(.caption)
+                        }
+                    }
+                    .disabled(isUploadingImage)
                     Button {
                         UIPasteboard.general.string = terminalContent
                         withAnimation { showSentToast = true }
@@ -308,8 +341,20 @@ struct TerminalView: View {
                 if !wsContent.isEmpty {
                     let stripped = Self.cleanContent(wsContent)
                     if stripped != terminalContent {
+                        let oldContent = terminalContent
                         terminalContent = stripped
                         isRunning = wsManager.terminalIsRunning
+
+                        // In conversation mode, speak new content when response arrives
+                        if speechService.conversationMode && waitingForResponse && stripped.count > contentLengthAtSend + 20 {
+                            waitingForResponse = false
+                            // Extract just the new part
+                            let newText = String(stripped.dropFirst(contentLengthAtSend))
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !newText.isEmpty && !wsManager.terminalIsRunning {
+                                speechService.speak(newText)
+                            }
+                        }
                     }
                 }
 
@@ -323,22 +368,58 @@ struct TerminalView: View {
         }
     }
 
+    // MARK: - Mic Icon
+
+    private var micIconName: String {
+        if speechService.isSpeaking { return "speaker.wave.2.fill" }
+        if speechService.isListening { return "mic.fill" }
+        if speechService.conversationMode { return "mic.circle.fill" }
+        return "mic"
+    }
+
+    private var micIconColor: Color {
+        if speechService.isSpeaking { return .blue }
+        if speechService.isListening { return .red }
+        if speechService.conversationMode { return .blue }
+        return .gray.opacity(0.8)
+    }
+
     // MARK: - Actions
 
     private func handleMicTap() {
-        if speechService.isListening {
+        if speechService.isSpeaking {
+            // Stop TTS and start listening
+            speechService.stopSpeaking()
+            speechService.requestAuthorization()
+            speechService.startListening()
+        } else if speechService.isListening {
             // Stop recording — transcript stays visible for review
             speechService.stopListening()
         } else if !speechService.transcript.isEmpty {
-            // Has unsent transcript — send it
+            // Has unsent transcript — send it in conversation mode
+            speechService.conversationMode = true
             let text = speechService.transcript
             speechService.clearTranscript()
-            sendMessage(text)
+            sendVoiceMessage(text)
         } else {
             // Start recording
+            speechService.conversationMode = false
             speechService.requestAuthorization()
             speechService.startListening()
         }
+    }
+
+    private func sendVoiceMessage(_ text: String) {
+        contentLengthAtSend = terminalContent.count
+        waitingForResponse = true
+
+        // Auto-listen after TTS finishes speaking the response
+        speechService.onSpeakingFinished = { [self] in
+            speechService.requestAuthorization()
+            speechService.startListening()
+        }
+
+        sendMessage(text)
     }
 
     private func sendCurrentInput() {
@@ -346,7 +427,11 @@ struct TerminalView: View {
         if inputText.trimmingCharacters(in: .whitespaces).isEmpty && !speechService.transcript.isEmpty {
             let text = speechService.transcript
             speechService.clearTranscript()
-            sendMessage(text)
+            if speechService.conversationMode {
+                sendVoiceMessage(text)
+            } else {
+                sendMessage(text)
+            }
             return
         }
         let text = inputText.trimmingCharacters(in: .whitespaces)
@@ -356,6 +441,12 @@ struct TerminalView: View {
     }
 
     private func sendMessage(_ message: String) {
+        // Optimistic echo so the user sees their input immediately
+        if !terminalContent.isEmpty {
+            terminalContent += "\n"
+        }
+        terminalContent += "> \(message)"
+
         Task {
             let success = await viewModel.sendQuickReply(sessionId: session.id, message: message)
             if success {
@@ -363,6 +454,9 @@ struct TerminalView: View {
                 withAnimation { showSentToast = true }
                 try? await Task.sleep(for: .seconds(1))
                 withAnimation { showSentToast = false }
+
+                // Nudge the Mac to send back fresh terminal content
+                viewModel.wsManager?.subscribeTerminal(sessionId: session.id)
             } else {
                 sendError = "Error: \(viewModel.lastSendError)"
             }
