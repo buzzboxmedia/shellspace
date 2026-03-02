@@ -376,6 +376,14 @@ struct SessionSidebar: View {
         sessions.filter { $0.isHidden }
     }
 
+    /// Sessions that are hidden but still have a running terminal controller
+    var hiddenRunning: [Session] {
+        sessions.filter { session in
+            session.isHidden
+            && appState.terminalControllers[session.id]?.terminalView?.process?.running == true
+        }
+    }
+
     var taskGroups: [ProjectGroup] {
         // Use persisted project's groups, or filter all groups by project path
         if let persisted = persistedProject {
@@ -746,6 +754,32 @@ struct SessionSidebar: View {
                                     ForEach(activeSessions) { session in
                                         TaskRow(session: session, project: project)
                                     }
+                                }
+                            }
+                        }
+
+                        // Hidden but still running sessions
+                        if !hiddenRunning.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "eye.slash")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.secondary)
+                                    Text("Running in Background")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                    Text("\(hiddenRunning.count)")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 1)
+                                        .background(Capsule().fill(.gray))
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.top, 8)
+
+                                ForEach(hiddenRunning) { session in
+                                    HiddenRunningRow(session: session, project: project)
                                 }
                             }
                         }
@@ -1906,6 +1940,72 @@ struct BillingSheetView: View {
                 return "\(wholeHours)h \(minutes)m"
             }
         }
+    }
+}
+
+// MARK: - Hidden Running Row (background sessions still alive)
+
+struct HiddenRunningRow: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var windowState: WindowState
+    let session: Session
+    let project: Project
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(Color.gray)
+                .frame(width: 8, height: 8)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(session.name)
+                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text("Hidden - still running")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.tertiary)
+            }
+
+            Spacer()
+
+            if isHovered {
+                Button {
+                    session.isHidden = false
+                } label: {
+                    Image(systemName: "eye")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.blue)
+                }
+                .buttonStyle(.plain)
+                .help("Unhide")
+
+                Button {
+                    appState.removeController(for: session)
+                } label: {
+                    Image(systemName: "stop.circle")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+                .help("Stop process")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isHovered ? Color.white.opacity(0.05) : .clear)
+        )
+        .padding(.horizontal, 8)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            session.isHidden = false
+            windowState.userTappedSession = true
+            windowState.activeSession = session
+        }
+        .onHover { isHovered = $0 }
     }
 }
 

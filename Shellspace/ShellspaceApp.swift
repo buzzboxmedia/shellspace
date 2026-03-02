@@ -99,6 +99,16 @@ struct ShellspaceApp: App {
                         DebugLog.log("[App] Started local server (Hummingbird on port 8847)")
                     }
 
+                    // Periodic cleanup: prune dead controllers, discover orphan processes
+                    Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { _ in
+                        DispatchQueue.main.async {
+                            appState.pruneDeadControllers()
+                            appState.refreshOrphanProcesses()
+                        }
+                    }
+                    // Run once immediately
+                    appState.refreshOrphanProcesses()
+
                     // Heavy sync operations - run on background context to avoid @Query avalanche
                     let container = sharedModelContainer
                     Task.detached {
@@ -155,7 +165,7 @@ struct MenuBarContentView: View {
     @EnvironmentObject var appState: AppState
 
     private var runningCount: Int {
-        appState.terminalControllers.count
+        appState.runningControllerCount
     }
 
     private var attentionCount: Int {
@@ -194,7 +204,7 @@ struct MenuBarContentView: View {
 
             Divider()
 
-            // Device info
+            // Device info + per-project breakdown
             VStack(alignment: .leading, spacing: 8) {
                 Text("This Mac: \(hostname)")
                     .font(.system(size: 13))
@@ -202,6 +212,12 @@ struct MenuBarContentView: View {
                 if runningCount > 0 {
                     Label("\(runningCount) active terminal\(runningCount == 1 ? "" : "s")", systemImage: "terminal.fill")
                         .font(.system(size: 13))
+                }
+
+                if !appState.orphanProcesses.isEmpty {
+                    Label("\(appState.orphanProcesses.count) subagent\(appState.orphanProcesses.count == 1 ? "" : "s")", systemImage: "arrow.triangle.branch")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.purple)
                 }
 
                 if attentionCount > 0 {
@@ -361,6 +377,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// An OS-level Claude process not managed by any Shellspace TerminalController
+struct OrphanClaudeProcess: Identifiable {
+    let pid: Int32
+    let parentPid: Int32
+    let workingDirectory: String
+    let commandLine: String
+
+    var id: Int32 { pid }
+
+    var directoryName: String {
+        URL(fileURLWithPath: workingDirectory).lastPathComponent
+    }
+}
+
 /// Simplified AppState - SwiftData handles persistence, this handles local-only state
 class AppState: ObservableObject {
     // MARK: - Local-only state (not synced to CloudKit)
@@ -376,6 +406,9 @@ class AppState: ObservableObject {
 
     /// Relay connection status (for UI indicator)
     @Published var relayConnectionState: RelayClient.ConnectionState = .disconnected
+
+    /// OS-level Claude processes not managed by any TerminalController
+    @Published var orphanProcesses: [OrphanClaudeProcess] = []
 
     /// Per-window states keyed by window ID
     private var windowStates: [UUID: WindowState] = [:]
@@ -439,6 +472,97 @@ class AppState: ObservableObject {
 
     func sessionNeedsAttention(_ sessionId: UUID) -> Bool {
         sessionsNeedingAttention.contains(sessionId)
+    }
+
+    // MARK: - Running Process Management
+
+    /// Count of controllers with actually-running processes
+    var runningControllerCount: Int {
+        terminalControllers.values.filter { $0.terminalView?.process?.running == true }.count
+    }
+
+    /// Remove controllers whose processes have exited
+    func pruneDeadControllers() {
+        let deadIds = terminalControllers.filter { _, controller in
+            controller.terminalView?.process?.running != true
+        }.map { $0.key }
+
+        for id in deadIds {
+            if let controller = terminalControllers.removeValue(forKey: id) {
+                controller.stopIdleDetection()
+            }
+        }
+        if !deadIds.isEmpty {
+            appLogger.info("Pruned \(deadIds.count) dead terminal controllers")
+        }
+    }
+
+    /// Discover OS-level Claude processes not managed by Shellspace
+    func refreshOrphanProcesses() {
+        let managedPids = Set(terminalControllers.values.compactMap {
+            $0.terminalView?.process?.shellPid
+        })
+
+        let task = Process()
+        let pipe = Pipe()
+        task.executableURL = URL(fileURLWithPath: "/bin/ps")
+        task.arguments = ["-eo", "pid,ppid,command"]
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+
+        do {
+            try task.run()
+            task.waitUntilExit()
+
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            guard let output = String(data: data, encoding: .utf8) else { return }
+
+            var results: [OrphanClaudeProcess] = []
+            for line in output.components(separatedBy: "\n") {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard trimmed.contains("/claude") && trimmed.contains("--") else { continue }
+                guard !trimmed.contains("grep") && !trimmed.contains("pgrep") else { continue }
+
+                let parts = trimmed.split(separator: " ", maxSplits: 2)
+                guard parts.count >= 3,
+                      let pid = Int32(parts[0]),
+                      let ppid = Int32(parts[1]) else { continue }
+
+                guard !managedPids.contains(pid) else { continue }
+
+                let command = String(parts[2])
+                let cwd = Self.getWorkingDirectory(for: pid)
+                results.append(OrphanClaudeProcess(pid: pid, parentPid: ppid, workingDirectory: cwd, commandLine: command))
+            }
+
+            orphanProcesses = results
+        } catch {
+            appLogger.error("Failed to discover Claude processes: \(error.localizedDescription)")
+        }
+    }
+
+    /// Get the current working directory of a process via lsof
+    private static func getWorkingDirectory(for pid: Int32) -> String {
+        let task = Process()
+        let pipe = Pipe()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        task.arguments = ["-p", "\(pid)", "-d", "cwd", "-Fn"]
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+
+        do {
+            try task.run()
+            task.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let output = String(data: data, encoding: .utf8) {
+                for line in output.components(separatedBy: "\n") {
+                    if line.hasPrefix("n/") {
+                        return String(line.dropFirst())
+                    }
+                }
+            }
+        } catch {}
+        return ""
     }
 
     // MARK: - Log Management

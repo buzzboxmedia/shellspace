@@ -23,10 +23,11 @@ struct LauncherView: View {
     }
 
     /// Sessions with running processes that are NOT waiting for input (actively working)
+    /// Includes hidden sessions — they should be visible if still running
     private var runningSessions: [Session] {
         let waitingIds = Set(waitingSessions.map { $0.id })
         return allSessions.filter { session in
-            !session.isHidden && !session.isCompleted
+            !session.isCompleted
             && appState.terminalControllers[session.id]?.terminalView?.process?.running == true
             && !waitingIds.contains(session.id)
         }.sorted { $0.lastAccessedAt > $1.lastAccessedAt }
@@ -136,6 +137,12 @@ struct LauncherView: View {
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     }
 
+                    // MARK: - Subagent Processes (OS-level, not managed by Shellspace)
+                    if !appState.orphanProcesses.isEmpty {
+                        OrphanProcessSection(processes: appState.orphanProcesses)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+
                     VStack(spacing: 36) {
                         // All projects in a single grid
                         VStack(alignment: .leading, spacing: 20) {
@@ -240,9 +247,9 @@ struct ProjectCard: View {
     @State private var showDeleteConfirm = false
     @State private var showEditProject = false
 
-    /// Count of sessions with active terminal controllers (running in background)
+    /// Count of sessions with actually-running terminal controllers
     var runningCount: Int {
-        project.sessions.filter { appState.terminalControllers[$0.id] != nil }.count
+        project.sessions.filter { appState.terminalControllers[$0.id]?.terminalView?.process?.running == true }.count
     }
 
     var body: some View {
@@ -455,9 +462,20 @@ struct ActiveSessionRow: View {
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(projectName)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color(red: 0.88, green: 0.89, blue: 0.92))
+                HStack(spacing: 6) {
+                    Text(projectName)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color(red: 0.88, green: 0.89, blue: 0.92))
+
+                    if session.isHidden {
+                        Text("hidden")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(Color.white.opacity(0.1)))
+                    }
+                }
 
                 Text(session.name)
                     .font(.system(size: 12))
@@ -824,6 +842,118 @@ struct InboxPulsingDot: View {
                     isPulsing = true
                 }
             }
+    }
+}
+
+// MARK: - Orphan Process Section (subagents not managed by Shellspace)
+
+struct OrphanProcessSection: View {
+    let processes: [OrphanClaudeProcess]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.purple)
+
+                Text("Subagents")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.92, green: 0.93, blue: 0.95))
+
+                Text("\(processes.count)")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(.purple))
+
+                Spacer()
+
+                if processes.count > 1 {
+                    Button {
+                        for process in processes {
+                            kill(process.pid, SIGTERM)
+                        }
+                    } label: {
+                        Text("Stop All")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color(red: 0.80, green: 0.22, blue: 0.22).opacity(0.3)))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            VStack(spacing: 2) {
+                ForEach(processes) { process in
+                    OrphanProcessRow(process: process)
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(red: 0.13, green: 0.14, blue: 0.16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(.purple.opacity(0.25), lineWidth: 1)
+                )
+        )
+    }
+}
+
+struct OrphanProcessRow: View {
+    let process: OrphanClaudeProcess
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(.purple)
+                .frame(width: 8, height: 8)
+
+            Image(systemName: "terminal")
+                .font(.system(size: 16))
+                .foregroundStyle(Color(red: 0.65, green: 0.67, blue: 0.72))
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(process.directoryName)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color(red: 0.88, green: 0.89, blue: 0.92))
+
+                Text("PID \(process.pid)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(red: 0.65, green: 0.67, blue: 0.72))
+            }
+
+            Spacer()
+
+            if isHovered {
+                Button {
+                    kill(process.pid, SIGTERM)
+                } label: {
+                    Text("Stop")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color(red: 0.80, green: 0.22, blue: 0.22).opacity(0.25)))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isHovered ? Color.white.opacity(0.05) : .clear)
+        )
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
     }
 }
 
