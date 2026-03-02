@@ -498,46 +498,51 @@ class AppState: ObservableObject {
     }
 
     /// Discover OS-level Claude processes not managed by Shellspace
+    /// Runs shell commands on a background queue to avoid blocking the main thread.
     func refreshOrphanProcesses() {
         let managedPids = Set(terminalControllers.values.compactMap {
             $0.terminalView?.process?.shellPid
         })
 
-        let task = Process()
-        let pipe = Pipe()
-        task.executableURL = URL(fileURLWithPath: "/bin/ps")
-        task.arguments = ["-eo", "pid,ppid,command"]
-        task.standardOutput = pipe
-        task.standardError = FileHandle.nullDevice
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let task = Process()
+            let pipe = Pipe()
+            task.executableURL = URL(fileURLWithPath: "/bin/ps")
+            task.arguments = ["-eo", "pid,ppid,command"]
+            task.standardOutput = pipe
+            task.standardError = FileHandle.nullDevice
 
-        do {
-            try task.run()
-            task.waitUntilExit()
+            do {
+                try task.run()
+                task.waitUntilExit()
 
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            guard let output = String(data: data, encoding: .utf8) else { return }
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                guard let output = String(data: data, encoding: .utf8) else { return }
 
-            var results: [OrphanClaudeProcess] = []
-            for line in output.components(separatedBy: "\n") {
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                guard trimmed.contains("/claude") && trimmed.contains("--") else { continue }
-                guard !trimmed.contains("grep") && !trimmed.contains("pgrep") else { continue }
+                var results: [OrphanClaudeProcess] = []
+                for line in output.components(separatedBy: "\n") {
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    guard trimmed.contains("/claude") && trimmed.contains("--") else { continue }
+                    guard !trimmed.contains("grep") && !trimmed.contains("pgrep") else { continue }
 
-                let parts = trimmed.split(separator: " ", maxSplits: 2)
-                guard parts.count >= 3,
-                      let pid = Int32(parts[0]),
-                      let ppid = Int32(parts[1]) else { continue }
+                    let parts = trimmed.split(separator: " ", maxSplits: 2)
+                    guard parts.count >= 3,
+                          let pid = Int32(parts[0]),
+                          let ppid = Int32(parts[1]) else { continue }
 
-                guard !managedPids.contains(pid) else { continue }
+                    guard !managedPids.contains(pid) else { continue }
 
-                let command = String(parts[2])
-                let cwd = Self.getWorkingDirectory(for: pid)
-                results.append(OrphanClaudeProcess(pid: pid, parentPid: ppid, workingDirectory: cwd, commandLine: command))
+                    let command = String(parts[2])
+                    let cwd = Self.getWorkingDirectory(for: pid)
+                    results.append(OrphanClaudeProcess(pid: pid, parentPid: ppid, workingDirectory: cwd, commandLine: command))
+                }
+
+                DispatchQueue.main.async {
+                    self?.orphanProcesses = results
+                }
+            } catch {
+                appLogger.error("Failed to discover Claude processes: \(error.localizedDescription)")
             }
-
-            orphanProcesses = results
-        } catch {
-            appLogger.error("Failed to discover Claude processes: \(error.localizedDescription)")
         }
     }
 
