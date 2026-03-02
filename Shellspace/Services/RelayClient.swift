@@ -107,24 +107,24 @@ final class RelayClient: @unchecked Sendable {
 
         DebugLog.log("[RelayClient] WebSocket connecting to relay (device: \(deviceId))")
 
-        // Start receiving messages
+        // Start receiving messages (detached to avoid inheriting @MainActor)
         let client = self
-        receiveTask = Task {
+        receiveTask = Task.detached {
             await client.receiveLoop()
         }
 
         // Start polling terminal buffers
-        pollingTask = Task { [weak self] in
+        pollingTask = Task.detached { [weak self] in
             await self?.pollingLoop()
         }
 
         // Start heartbeat (WebSocket-level pings for connection health)
-        heartbeatTask = Task { [weak self] in
+        heartbeatTask = Task.detached { [weak self] in
             await self?.heartbeatLoop()
         }
 
         // Start proactive token refresh (before 15m JWT expiry)
-        tokenRefreshTask = Task { [weak self] in
+        tokenRefreshTask = Task.detached { [weak self] in
             await self?.tokenRefreshLoop()
         }
 
@@ -492,20 +492,18 @@ final class RelayClient: @unchecked Sendable {
     private func sendTerminalUpdate(sessionId: String, force: Bool) async {
         guard let uuid = UUID(uuidString: sessionId) else { return }
 
-        let (content, isRunning, isWaiting) = await MainActor.run {
-            var c = appState?.terminalControllers[uuid]?.getFullTerminalContent() ?? ""
+        let (bufferContent, isRunning, isWaiting) = await MainActor.run {
+            let c = appState?.terminalControllers[uuid]?.getFullTerminalContent() ?? ""
             let running = appState?.terminalControllers[uuid]?.terminalView?.process?.running == true
             let waiting = findSession(sessionId)?.isWaitingForInput ?? false
-
-            // Fall back to log file when live buffer is empty
-            if c.isEmpty {
-                let logPath = Session.centralLogsDir.appendingPathComponent("\(sessionId).log")
-                if let logContent = try? String(contentsOf: logPath, encoding: .utf8) {
-                    c = logContent
-                }
-            }
-
             return (c, running, waiting)
+        }
+
+        // Fall back to log file when live buffer is empty (read off main thread)
+        var content = bufferContent
+        if content.isEmpty {
+            let logPath = Session.centralLogsDir.appendingPathComponent("\(sessionId).log")
+            content = (try? String(contentsOf: logPath, encoding: .utf8)) ?? ""
         }
 
         let contentHash = content.hashValue
