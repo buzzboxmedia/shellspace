@@ -1278,6 +1278,8 @@ struct TaskRow: View {
     @State private var isCompleting = false
     @State private var showBillingSheet = false
     @State private var calculatedBilling: BillingHours?
+    @AppStorage("clearedToday") private var clearedToday: Int = 0
+    @AppStorage("clearedDate") private var clearedDate: String = ""
 
     var isActive: Bool {
         windowState.activeSession?.id == session.id
@@ -1589,6 +1591,15 @@ struct TaskRow: View {
         // Hide immediately for instant UI response
         session.isHidden = true
 
+        // Increment "cleared today" game counter
+        let today = DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .none)
+        if clearedDate != today {
+            clearedToday = 1
+            clearedDate = today
+        } else {
+            clearedToday += 1
+        }
+
         // Persist and sync in background
         let sessionRef = session
         Task.detached(priority: .utility) {
@@ -1667,6 +1678,15 @@ struct TaskRow: View {
             // Mark as completed
             session.isCompleted = true
             session.completedAt = Date()
+
+            // Increment "cleared today" game counter
+            let today = DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .none)
+            if self.clearedDate != today {
+                self.clearedToday = 1
+                self.clearedDate = today
+            } else {
+                self.clearedToday += 1
+            }
 
             // Save the log one final time
             if let controller = appState.terminalControllers[session.id] {

@@ -2,12 +2,68 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
+// MARK: - Session Priority Scoring
+
+struct SessionPriority: Comparable, Identifiable {
+    let session: Session
+    let score: Int
+    let reason: String      // "Waiting on you", "Stale 2h", "Working..."
+    let accentColor: Color  // orange (waiting), red (stale), blue (active)
+
+    var id: UUID { session.id }
+
+    static func < (lhs: Self, rhs: Self) -> Bool { lhs.score < rhs.score }
+}
+
+/// Extract last meaningful terminal line for a session (what Claude is saying/asking)
+func terminalSnippet(for session: Session, appState: AppState) -> String {
+    guard let controller = appState.terminalControllers[session.id],
+          let content = controller.terminalView?.getTerminal().getBufferAsData(),
+          let text = String(data: content, encoding: .utf8) else {
+        return ""
+    }
+
+    let ansiPattern = try! NSRegularExpression(pattern: "\\x1b\\[[0-9;]*[a-zA-Z]|\\x1b\\][^\\x07]*\\x07|\\x1b[^\\[\\]][a-zA-Z]")
+    let prefixPattern = try! NSRegularExpression(pattern: "^[>\u{276F}\u{203A}\u{25B6}]+\\s*")
+    let lines = text.components(separatedBy: .newlines)
+        .map { line in
+            let range = NSRange(line.startIndex..., in: line)
+            var cleaned = ansiPattern.stringByReplacingMatches(in: line, range: range, withTemplate: "")
+                .trimmingCharacters(in: .whitespaces)
+            let cleanedRange = NSRange(cleaned.startIndex..., in: cleaned)
+            cleaned = prefixPattern.stringByReplacingMatches(in: cleaned, range: cleanedRange, withTemplate: "")
+            return cleaned
+        }
+        .filter { line in
+            guard !line.isEmpty else { return false }
+            let lower = line.lowercased()
+            if lower.contains("bypass permissions") || lower.contains("shift+tab to cycle") ||
+               lower.contains("permissions on") || lower.contains("bypasspermission") {
+                return false
+            }
+            if line == ">" || line == "$" || line == "%" { return false }
+            return true
+        }
+
+    return lines.last ?? ""
+}
+
+/// Relative time string (compact)
+func relativeTimeString(from date: Date) -> String {
+    let interval = Date().timeIntervalSince(date)
+    if interval < 60 { return "just now" }
+    if interval < 3600 { return "\(Int(interval / 60))m ago" }
+    if interval < 86400 { return "\(Int(interval / 3600))h ago" }
+    return "\(Int(interval / 86400))d ago"
+}
+
+// MARK: - Launcher View
+
 struct LauncherView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var windowState: WindowState
 
-    // Fetch all projects, sorted by name
     @Query(sort: \Project.name) private var allProjects: [Project]
     @Query private var allSessions: [Session]
 
@@ -16,21 +72,74 @@ struct LauncherView: View {
     @State private var showAddProject = false
     @State private var draggedProject: Project?
 
-    /// Sessions that are waiting for user input (idle Claude processes)
-    private var waitingSessions: [Session] {
-        allSessions.filter { $0.isWaitingForInput && !$0.isHidden && !$0.isCompleted }
-            .sorted { $0.lastAccessedAt > $1.lastAccessedAt }
+    // "Cleared today" game stats
+    @AppStorage("clearedToday") private var clearedToday: Int = 0
+    @AppStorage("clearedDate") private var clearedDate: String = ""
+
+    /// All sessions that should appear in Mission Control, scored and sorted
+    private var prioritizedSessions: [SessionPriority] {
+        let now = Date()
+
+        var results: [SessionPriority] = []
+
+        for session in allSessions {
+            guard !session.isCompleted else { continue }
+
+            let isRunning = appState.terminalControllers[session.id]?.terminalView?.process?.running == true
+            let isWaiting = session.isWaitingForInput && !session.isHidden
+
+            // Must be either waiting or running to appear
+            guard isWaiting || isRunning else { continue }
+
+            let staleness = now.timeIntervalSince(session.lastAccessedAt)
+
+            let score: Int
+            let reason: String
+            let color: Color
+
+            if isWaiting {
+                score = 100
+                reason = "Waiting on you"
+                color = .orange
+            } else if staleness > 7200 { // >2h
+                score = 80
+                let hours = Int(staleness / 3600)
+                reason = "Stale \(hours)h"
+                color = Color(red: 0.85, green: 0.25, blue: 0.25)
+            } else if staleness > 1800 { // >30min
+                score = 60
+                let mins = Int(staleness / 60)
+                reason = "Idle \(mins)m"
+                color = Color(red: 0.90, green: 0.55, blue: 0.20)
+            } else if staleness > 600 { // >10min
+                score = 40
+                let mins = Int(staleness / 60)
+                reason = "Idle \(mins)m"
+                color = .yellow
+            } else {
+                score = 10
+                reason = "Working..."
+                color = .blue
+            }
+
+            results.append(SessionPriority(
+                session: session,
+                score: score,
+                reason: reason,
+                accentColor: color
+            ))
+        }
+
+        return results.sorted(by: >)
     }
 
-    /// Sessions with running processes that are NOT waiting for input (actively working)
-    /// Includes hidden sessions — they should be visible if still running
-    private var runningSessions: [Session] {
-        let waitingIds = Set(waitingSessions.map { $0.id })
-        return allSessions.filter { session in
-            !session.isCompleted
-            && appState.terminalControllers[session.id]?.terminalView?.process?.running == true
-            && !waitingIds.contains(session.id)
-        }.sorted { $0.lastAccessedAt > $1.lastAccessedAt }
+    /// Check and reset cleared counter at midnight
+    private func checkClearedDate() {
+        let today = DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .none)
+        if clearedDate != today {
+            clearedToday = 0
+            clearedDate = today
+        }
     }
 
     // Persisted order for dashboard
@@ -47,7 +156,6 @@ struct LauncherView: View {
         ProjectSyncService.shared.exportProjects(from: modelContext)
     }
 
-    // All projects sorted by persisted order
     var displayProjects: [Project] {
         let order = savedOrder
         guard !order.isEmpty else { return allProjects.map { $0 } }
@@ -58,20 +166,18 @@ struct LauncherView: View {
         }
     }
 
-    // Adaptive grid that responds to window width
     private let gridColumns = [
         GridItem(.adaptive(minimum: 120, maximum: 140), spacing: 16)
     ]
 
     var body: some View {
         ZStack {
-            // Glass background
             VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
                 .ignoresSafeArea()
 
             ScrollView {
                 VStack(spacing: 40) {
-                    // Header with settings button and running sessions indicator
+                    // Header
                     HStack {
                         Spacer()
                         Text("Shellspace")
@@ -80,7 +186,6 @@ struct LauncherView: View {
                         Spacer()
                     }
                     .overlay(alignment: .leading) {
-                        // Show running sessions indicator
                         if !appState.terminalControllers.isEmpty {
                             HStack(spacing: 6) {
                                 Circle()
@@ -125,30 +230,26 @@ struct LauncherView: View {
                         .padding(.trailing, 8)
                     }
 
-                    // MARK: - Inbox (Sessions Waiting for Input)
-                    if !waitingSessions.isEmpty {
-                        InboxSection(sessions: waitingSessions)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    // MARK: - Mission Control
+                    if !prioritizedSessions.isEmpty {
+                        MissionControlSection(
+                            sessions: prioritizedSessions,
+                            clearedToday: clearedToday
+                        )
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                     }
 
-                    // MARK: - Active Sessions (Running but not waiting)
-                    if !runningSessions.isEmpty {
-                        ActiveSessionsSection(sessions: runningSessions)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
-
-                    // MARK: - Subagent Processes (OS-level, not managed by Shellspace)
+                    // MARK: - Subagent Processes
                     if !appState.orphanProcesses.isEmpty {
                         OrphanProcessSection(processes: appState.orphanProcesses)
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     }
 
+                    // MARK: - Project Grid
                     VStack(spacing: 36) {
-                        // All projects in a single grid
                         VStack(alignment: .leading, spacing: 20) {
                             HStack {
                                 Spacer()
-
                                 Button {
                                     showAddProject = true
                                 } label: {
@@ -198,6 +299,435 @@ struct LauncherView: View {
         .sheet(isPresented: $showAddProject) {
             AddProjectSheet()
         }
+        .onAppear {
+            checkClearedDate()
+        }
+    }
+}
+
+// MARK: - Mission Control Section
+
+struct MissionControlSection: View {
+    @EnvironmentObject var appState: AppState
+    let sessions: [SessionPriority]
+    let clearedToday: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // Header
+            HStack(spacing: 8) {
+                Image(systemName: "scope")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.cyan)
+
+                Text("Mission Control")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.92, green: 0.93, blue: 0.95))
+
+                Text("\(sessions.count)")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(.cyan))
+
+                Spacer()
+
+                if clearedToday > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 12))
+                        Text("\(clearedToday) cleared")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundStyle(.green)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color.green.opacity(0.15)))
+                }
+            }
+
+            // Hero card for top priority
+            if let first = sessions.first {
+                NextUpCard(priority: first)
+            }
+
+            // Remaining items as compact rows
+            if sessions.count > 1 {
+                VStack(spacing: 2) {
+                    ForEach(Array(sessions.dropFirst())) { priority in
+                        MissionRow(priority: priority)
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(red: 0.11, green: 0.12, blue: 0.14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(.cyan.opacity(0.2), lineWidth: 1)
+                )
+        )
+    }
+}
+
+// MARK: - Next Up Hero Card
+
+struct NextUpCard: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var windowState: WindowState
+    let priority: SessionPriority
+
+    @State private var isHovered = false
+    @State private var sentText: String?
+    @State private var glowPulse = false
+
+    private var session: Session { priority.session }
+
+    private var projectName: String {
+        session.project?.name ?? URL(fileURLWithPath: session.projectPath).lastPathComponent
+    }
+
+    private var projectIcon: String {
+        session.project?.icon ?? "folder.fill"
+    }
+
+    private var snippet: String {
+        terminalSnippet(for: session, appState: appState)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Top bar: NEXT UP label + staleness
+            HStack {
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.system(size: 12, weight: .bold))
+                    Text("NEXT UP")
+                        .font(.system(size: 11, weight: .heavy, design: .rounded))
+                }
+                .foregroundStyle(priority.accentColor)
+
+                Spacer()
+
+                // Staleness badge
+                Text(priority.reason)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(priority.accentColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(priority.accentColor.opacity(0.15)))
+            }
+
+            // Session info
+            HStack(spacing: 12) {
+                Image(systemName: projectIcon)
+                    .font(.system(size: 22))
+                    .foregroundStyle(Color(red: 0.75, green: 0.78, blue: 0.85))
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(projectName)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.92, green: 0.93, blue: 0.95))
+
+                    Text(session.name)
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color(red: 0.70, green: 0.72, blue: 0.78))
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Text(relativeTimeString(from: session.lastAccessedAt))
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(red: 0.50, green: 0.52, blue: 0.58))
+            }
+
+            // Terminal snippet (what Claude is saying)
+            if !snippet.isEmpty {
+                HStack(spacing: 0) {
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(priority.accentColor.opacity(0.5))
+                        .frame(width: 3)
+
+                    Text(snippet)
+                        .font(.system(size: 13, design: .monospaced))
+                        .foregroundStyle(Color(red: 0.80, green: 0.83, blue: 0.90))
+                        .lineLimit(3)
+                        .padding(.leading, 10)
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.white.opacity(0.04))
+                )
+            }
+
+            // Quick-reply chips (only if waiting for input)
+            if session.isWaitingForInput {
+                HStack(spacing: 8) {
+                    if let sent = sentText {
+                        Text(sent)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.green)
+                            .transition(.opacity)
+                    } else {
+                        InboxChip(icon: "checkmark", hint: "yes") { sendReply("yes") }
+                        InboxChip(icon: "xmark", hint: "no") { sendReply("no") }
+                        InboxChip(icon: "arrow.right", hint: "continue") { sendReply("continue") }
+                        InboxChip(icon: "stop.fill", hint: "stop", isDestructive: true) { sendReply("stop") }
+                    }
+
+                    Spacer()
+                }
+                .padding(.top, 2)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(red: 0.14, green: 0.15, blue: 0.18))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(priority.accentColor.opacity(glowPulse ? 0.5 : 0.25), lineWidth: 2)
+                )
+                .shadow(color: priority.accentColor.opacity(glowPulse ? 0.2 : 0.08), radius: glowPulse ? 12 : 6)
+        )
+        .scaleEffect(isHovered ? 1.01 : 1.0)
+        .contentShape(Rectangle())
+        .onTapGesture { navigateToSession() }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                glowPulse = true
+            }
+        }
+    }
+
+    private func sendReply(_ text: String) {
+        if text == "stop" {
+            withAnimation {
+                appState.removeController(for: session)
+                session.isWaitingForInput = false
+            }
+            return
+        }
+
+        if let controller = appState.terminalControllers[session.id],
+           controller.terminalView?.process?.running == true {
+            controller.sendToTerminal(text)
+            controller.idleTickCount = -25
+            withAnimation { sentText = "Sent \u{2713}" }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation { sentText = nil }
+            }
+        } else {
+            navigateToSession()
+        }
+    }
+
+    private func navigateToSession() {
+        if let project = session.project {
+            withAnimation(.spring(response: 0.3)) {
+                windowState.selectedProject = project
+                windowState.activeSession = session
+                windowState.userTappedSession = true
+            }
+        }
+    }
+}
+
+// MARK: - Mission Row (compact queue item)
+
+struct MissionRow: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var windowState: WindowState
+    let priority: SessionPriority
+
+    @State private var isHovered = false
+    @State private var sentText: String?
+
+    private var session: Session { priority.session }
+
+    private var projectName: String {
+        session.project?.name ?? URL(fileURLWithPath: session.projectPath).lastPathComponent
+    }
+
+    private var projectIcon: String {
+        session.project?.icon ?? "folder.fill"
+    }
+
+    private var snippet: String {
+        terminalSnippet(for: session, appState: appState)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+                // Priority dot
+                Circle()
+                    .fill(priority.accentColor)
+                    .frame(width: 8, height: 8)
+
+                Image(systemName: projectIcon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(Color(red: 0.65, green: 0.67, blue: 0.72))
+                    .frame(width: 24)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(projectName)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(Color(red: 0.88, green: 0.89, blue: 0.92))
+
+                        if session.isHidden {
+                            Text("hidden")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(Color.white.opacity(0.1)))
+                        }
+                    }
+
+                    Text(session.name)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color(red: 0.65, green: 0.67, blue: 0.72))
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                // Reason badge
+                Text(priority.reason)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(priority.accentColor)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(priority.accentColor.opacity(0.12)))
+
+                // Quick actions on hover
+                if isHovered {
+                    if session.isWaitingForInput {
+                        if let sent = sentText {
+                            Text(sent)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.green)
+                                .transition(.opacity)
+                        } else {
+                            HStack(spacing: 4) {
+                                MiniChip(icon: "checkmark", color: .orange) { sendReply("yes") }
+                                MiniChip(icon: "xmark", color: .orange) { sendReply("no") }
+                                MiniChip(icon: "arrow.right", color: .orange) { sendReply("continue") }
+                            }
+                        }
+                    }
+
+                    // Dismiss button
+                    Button {
+                        withAnimation {
+                            session.isWaitingForInput = false
+                            appState.removeController(for: session)
+                        }
+                    } label: {
+                        Image(systemName: "minus.circle")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color(red: 0.50, green: 0.52, blue: 0.58))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Dismiss")
+                    .transition(.opacity)
+                }
+
+                Text(relativeTimeString(from: session.lastAccessedAt))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(red: 0.50, green: 0.52, blue: 0.58))
+                    .frame(width: 50, alignment: .trailing)
+            }
+
+            // Terminal snippet on hover or if waiting
+            let snip = snippet
+            if !snip.isEmpty && (isHovered || session.isWaitingForInput) {
+                HStack(spacing: 0) {
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(priority.accentColor.opacity(0.4))
+                        .frame(width: 2)
+
+                    Text(snip)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(Color(red: 0.75, green: 0.78, blue: 0.85))
+                        .lineLimit(1)
+                        .padding(.leading, 8)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 44)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isHovered ? Color.white.opacity(0.05) : .clear)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { navigateToSession() }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+    }
+
+    private func sendReply(_ text: String) {
+        if let controller = appState.terminalControllers[session.id],
+           controller.terminalView?.process?.running == true {
+            controller.sendToTerminal(text)
+            controller.idleTickCount = -25
+            withAnimation { sentText = "Sent \u{2713}" }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                withAnimation { sentText = nil }
+            }
+        } else {
+            navigateToSession()
+        }
+    }
+
+    private func navigateToSession() {
+        if let project = session.project {
+            withAnimation(.spring(response: 0.3)) {
+                windowState.selectedProject = project
+                windowState.activeSession = session
+                windowState.userTappedSession = true
+            }
+        }
+    }
+}
+
+/// Tiny inline action chip for mission rows
+struct MiniChip: View {
+    let icon: String
+    let color: Color
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(isHovered ? color : color.opacity(0.3)))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
     }
 }
 
@@ -247,7 +777,6 @@ struct ProjectCard: View {
     @State private var showDeleteConfirm = false
     @State private var showEditProject = false
 
-    /// Count of sessions with actually-running terminal controllers
     var runningCount: Int {
         project.sessions.filter { appState.terminalControllers[$0.id]?.terminalView?.process?.running == true }.count
     }
@@ -259,7 +788,6 @@ struct ProjectCard: View {
                     .font(.system(size: 40))
                     .foregroundStyle(.primary)
 
-                // Show blue dot for running sessions
                 if runningCount > 0 {
                     Circle()
                         .fill(Color.blue.opacity(0.7))
@@ -283,7 +811,6 @@ struct ProjectCard: View {
                 .stroke(.white.opacity(0.2), lineWidth: 1)
         }
         .overlay(alignment: .topTrailing) {
-            // Delete button on hover
             if isHovered {
                 Button {
                     showDeleteConfirm = true
@@ -351,449 +878,9 @@ struct ProjectCard: View {
             Text("This removes it from Shellspace. Your files on disk are not affected.")
         }
     }
-
 }
 
-// MARK: - Active Sessions Section
-
-struct ActiveSessionsSection: View {
-    @EnvironmentObject var appState: AppState
-    let sessions: [Session]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            // Header
-            HStack(spacing: 8) {
-                Image(systemName: "bolt.fill")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.blue)
-
-                Text("In Progress")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.92, green: 0.93, blue: 0.95))
-
-                Text("\(sessions.count)")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(.blue))
-
-                Spacer()
-
-                if sessions.count > 1 {
-                    Button {
-                        for session in sessions {
-                            appState.removeController(for: session)
-                            session.isWaitingForInput = false
-                        }
-                    } label: {
-                        Text("Pause All")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Capsule().fill(Color(red: 0.80, green: 0.22, blue: 0.22).opacity(0.3)))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            // Session rows
-            VStack(spacing: 2) {
-                ForEach(sessions, id: \.id) { session in
-                    ActiveSessionRow(session: session)
-                }
-            }
-        }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(red: 0.13, green: 0.14, blue: 0.16))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(.blue.opacity(0.25), lineWidth: 1)
-                )
-        )
-    }
-}
-
-struct ActiveSessionRow: View {
-    @EnvironmentObject var appState: AppState
-    @EnvironmentObject var windowState: WindowState
-    let session: Session
-
-    @State private var isHovered = false
-    @State private var isPulsing = false
-
-    private var projectName: String {
-        session.project?.name ?? URL(fileURLWithPath: session.projectPath).lastPathComponent
-    }
-
-    private var projectIcon: String {
-        session.project?.icon ?? "folder.fill"
-    }
-
-    private var relativeTime: String {
-        let interval = Date().timeIntervalSince(session.lastAccessedAt)
-        if interval < 60 { return "just now" }
-        if interval < 3600 { return "\(Int(interval / 60))m ago" }
-        if interval < 86400 { return "\(Int(interval / 3600))h ago" }
-        return "\(Int(interval / 86400))d ago"
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            // Pulsing blue dot (actively working)
-            Circle()
-                .fill(.blue)
-                .frame(width: 8, height: 8)
-                .shadow(color: .blue.opacity(0.6), radius: isPulsing ? 5 : 2)
-                .scaleEffect(isPulsing ? 1.2 : 1.0)
-                .onAppear {
-                    withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                        isPulsing = true
-                    }
-                }
-
-            Image(systemName: projectIcon)
-                .font(.system(size: 16))
-                .foregroundStyle(Color(red: 0.65, green: 0.67, blue: 0.72))
-                .frame(width: 24)
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(projectName)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Color(red: 0.88, green: 0.89, blue: 0.92))
-
-                    if session.isHidden {
-                        Text("hidden")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(Capsule().fill(Color.white.opacity(0.1)))
-                    }
-                }
-
-                Text(session.name)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(red: 0.65, green: 0.67, blue: 0.72))
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            // End process button
-            Button {
-                appState.removeController(for: session)
-                session.isWaitingForInput = false
-            } label: {
-                Text("Pause")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(Color(red: 0.80, green: 0.22, blue: 0.22).opacity(0.25)))
-            }
-            .buttonStyle(.plain)
-
-            Text(relativeTime)
-                .font(.system(size: 11))
-                .foregroundStyle(Color(red: 0.50, green: 0.52, blue: 0.58))
-                .frame(width: 50, alignment: .trailing)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isHovered ? Color.white.opacity(0.05) : .clear)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if let project = session.project {
-                withAnimation(.spring(response: 0.3)) {
-                    windowState.selectedProject = project
-                    windowState.activeSession = session
-                    windowState.userTappedSession = true
-                }
-            }
-        }
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                isHovered = hovering
-            }
-        }
-    }
-}
-
-// MARK: - Inbox Section
-
-struct InboxSection: View {
-    @EnvironmentObject var appState: AppState
-    let sessions: [Session]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            // Header
-            HStack(spacing: 8) {
-                Image(systemName: "bell.badge.fill")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.orange)
-
-                Text("Waiting on You")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.92, green: 0.93, blue: 0.95))
-
-                Text("\(sessions.count)")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(.orange))
-
-                Spacer()
-
-                if sessions.count > 1 {
-                    Button {
-                        withAnimation {
-                            for session in sessions {
-                                session.isWaitingForInput = false
-                            }
-                        }
-                    } label: {
-                        Text("Dismiss All")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Capsule().fill(Color.white.opacity(0.08)))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            // Session rows
-            VStack(spacing: 2) {
-                ForEach(sessions, id: \.id) { session in
-                    InboxRow(session: session)
-                }
-            }
-        }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(red: 0.13, green: 0.14, blue: 0.16))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(.orange.opacity(0.35), lineWidth: 1)
-                )
-        )
-    }
-}
-
-struct InboxRow: View {
-    @EnvironmentObject var appState: AppState
-    @EnvironmentObject var windowState: WindowState
-    let session: Session
-
-    @State private var sentText: String?  // Shows "Sent ✓" confirmation
-    @State private var isHovered = false
-
-    private var projectName: String {
-        session.project?.name ?? URL(fileURLWithPath: session.projectPath).lastPathComponent
-    }
-
-    private var projectIcon: String {
-        session.project?.icon ?? "folder.fill"
-    }
-
-    private var relativeTime: String {
-        let interval = Date().timeIntervalSince(session.lastAccessedAt)
-        if interval < 60 { return "just now" }
-        if interval < 3600 { return "\(Int(interval / 60))m ago" }
-        if interval < 86400 { return "\(Int(interval / 3600))h ago" }
-        return "\(Int(interval / 86400))d ago"
-    }
-
-    /// Last meaningful lines from the terminal buffer — shows what Claude is asking
-    private var terminalSnippet: String {
-        guard let controller = appState.terminalControllers[session.id],
-              let content = controller.terminalView?.getTerminal().getBufferAsData(),
-              let text = String(data: content, encoding: .utf8) else {
-            return ""
-        }
-
-        // Get last non-empty line, strip ANSI codes and terminal prefixes
-        let ansiPattern = try! NSRegularExpression(pattern: "\\x1b\\[[0-9;]*[a-zA-Z]|\\x1b\\][^\\x07]*\\x07|\\x1b[^\\[\\]][a-zA-Z]")
-        let prefixPattern = try! NSRegularExpression(pattern: "^[❯›>▶]+\\s*")
-        let lines = text.components(separatedBy: .newlines)
-            .map { line in
-                let range = NSRange(line.startIndex..., in: line)
-                var cleaned = ansiPattern.stringByReplacingMatches(in: line, range: range, withTemplate: "")
-                    .trimmingCharacters(in: .whitespaces)
-                let cleanedRange = NSRange(cleaned.startIndex..., in: cleaned)
-                cleaned = prefixPattern.stringByReplacingMatches(in: cleaned, range: cleanedRange, withTemplate: "")
-                return cleaned
-            }
-            .filter { line in
-                guard !line.isEmpty else { return false }
-                // Skip Claude Code status bar lines
-                let lower = line.lowercased()
-                if lower.contains("bypass permissions") || lower.contains("shift+tab to cycle") ||
-                   lower.contains("permissions on") || lower.contains("bypasspermission") {
-                    return false
-                }
-                // Skip pure prompt markers
-                if line == ">" || line == "$" || line == "%" { return false }
-                return true
-            }
-
-        // Take last meaningful line
-        return lines.last ?? ""
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Top row: dot + icon + name + time (tappable to navigate)
-            HStack(spacing: 12) {
-                InboxPulsingDot()
-
-                Image(systemName: projectIcon)
-                    .font(.system(size: 16))
-                    .foregroundStyle(Color(red: 0.65, green: 0.67, blue: 0.72))
-                    .frame(width: 24)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(projectName)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Color(red: 0.88, green: 0.89, blue: 0.92))
-
-                    Text(session.name)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color(red: 0.65, green: 0.67, blue: 0.72))
-                        .lineLimit(1)
-                }
-
-                Spacer()
-
-                // Dismiss from inbox (hover-reveal only)
-                if isHovered {
-                    Button {
-                        withAnimation {
-                            session.isWaitingForInput = false
-                        }
-                    } label: {
-                        Image(systemName: "minus.circle")
-                            .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(Color(red: 0.50, green: 0.52, blue: 0.58))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Dismiss")
-                    .transition(.opacity)
-                }
-
-                Text(relativeTime)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color(red: 0.50, green: 0.52, blue: 0.58))
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                navigateToSession()
-            }
-
-            // Terminal snippet — single line with left rule
-            let snippet = terminalSnippet
-            if !snippet.isEmpty {
-                HStack(spacing: 0) {
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(.orange.opacity(0.4))
-                        .frame(width: 2)
-
-                    Text(snippet)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(Color(red: 0.75, green: 0.78, blue: 0.85))
-                        .lineLimit(1)
-                        .padding(.leading, 8)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 44)
-                .onTapGesture {
-                    navigateToSession()
-                }
-            }
-
-            // Quick-reply icons (no parent tap gesture — buttons handle their own clicks)
-            HStack(spacing: 8) {
-                Spacer()
-                    .frame(width: 38)
-
-                if let sent = sentText {
-                    Text(sent)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.green)
-                        .transition(.opacity)
-                } else {
-                    InboxChip(icon: "checkmark", hint: "yes") { sendReply("yes") }
-                    InboxChip(icon: "xmark", hint: "no") { sendReply("no") }
-                    InboxChip(icon: "arrow.right", hint: "continue") { sendReply("continue") }
-                    InboxChip(icon: "stop.fill", hint: "stop", isDestructive: true) { sendReply("stop") }
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isHovered ? Color.white.opacity(0.05) : .clear)
-        )
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                isHovered = hovering
-            }
-        }
-    }
-
-    private func sendReply(_ text: String) {
-        if text == "stop" {
-            // Stop always ends the process and dismisses from inbox
-            withAnimation {
-                appState.removeController(for: session)
-                session.isWaitingForInput = false
-            }
-            return
-        }
-
-        if let controller = appState.terminalControllers[session.id],
-           controller.terminalView?.process?.running == true {
-            controller.sendToTerminal(text)
-            // Push idle counter negative so it takes longer to re-trigger (30s cooldown)
-            controller.idleTickCount = -25
-            withAnimation {
-                sentText = "Sent \u{2713}"
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                withAnimation {
-                    sentText = nil
-                }
-            }
-        } else {
-            // Process not running — navigate to session to relaunch
-            navigateToSession()
-        }
-    }
-
-    private func navigateToSession() {
-        if let project = session.project {
-            withAnimation(.spring(response: 0.3)) {
-                windowState.selectedProject = project
-                windowState.activeSession = session
-                windowState.userTappedSession = true
-            }
-        }
-    }
-}
+// MARK: - Shared Quick-Reply Chips
 
 struct InboxChip: View {
     let icon: String
