@@ -469,18 +469,42 @@ final class RelayClient: @unchecked Sendable {
     private func sendAllTerminalUpdates() async {
         pollCount += 1
 
-        let sessionIds: [String] = await MainActor.run {
+        // Single MainActor hop to collect all session data at once (avoids O(n^2) SwiftData queries)
+        struct SessionSnapshot {
+            let id: String
+            let content: String
+            let isRunning: Bool
+            let isWaiting: Bool
+        }
+
+        let snapshots: [SessionSnapshot] = await MainActor.run {
             guard let container = modelContainer else { return [] }
             let context = ModelContext(container)
             let descriptor = FetchDescriptor<Session>()
             guard let sessions = try? context.fetch(descriptor) else { return [] }
+
             return sessions
                 .filter { !$0.isHidden && !$0.isCompleted }
-                .map { $0.id.uuidString }
+                .map { session in
+                    let content = appState?.terminalControllers[session.id]?.getFullTerminalContent() ?? ""
+                    let running = appState?.terminalControllers[session.id]?.terminalView?.process?.running == true
+                    return SessionSnapshot(
+                        id: session.id.uuidString,
+                        content: content,
+                        isRunning: running,
+                        isWaiting: session.isWaitingForInput
+                    )
+                }
         }
 
-        for sessionId in sessionIds {
-            await sendTerminalUpdate(sessionId: sessionId, force: false)
+        for snap in snapshots {
+            await sendTerminalUpdateFromSnapshot(
+                sessionId: snap.id,
+                bufferContent: snap.content,
+                isRunning: snap.isRunning,
+                isWaiting: snap.isWaiting,
+                force: false
+            )
         }
 
         // Sessions snapshot every 2 seconds (every 4th poll at 500ms)
@@ -499,6 +523,37 @@ final class RelayClient: @unchecked Sendable {
             return (c, running, waiting)
         }
 
+        // Fall back to log file when live buffer is empty (read off main thread)
+        var content = bufferContent
+        if content.isEmpty {
+            let logPath = Session.centralLogsDir.appendingPathComponent("\(sessionId).log")
+            content = (try? String(contentsOf: logPath, encoding: .utf8)) ?? ""
+        }
+
+        let contentHash = content.hashValue
+        let prevHash = lastTerminalHashes[sessionId]
+        let prevRunning = lastRunningStates[sessionId]
+        let prevWaiting = lastWaitingStates[sessionId]
+
+        guard force || contentHash != prevHash || isRunning != prevRunning || isWaiting != prevWaiting else {
+            return
+        }
+
+        lastTerminalHashes[sessionId] = contentHash
+        lastRunningStates[sessionId] = isRunning
+        lastWaitingStates[sessionId] = isWaiting
+
+        await sendMessage([
+            "type": "terminal_update",
+            "session_id": sessionId,
+            "content": content,
+            "is_running": isRunning,
+            "is_waiting_for_input": isWaiting,
+        ])
+    }
+
+    /// Send terminal update using pre-fetched snapshot data (no additional SwiftData queries)
+    private func sendTerminalUpdateFromSnapshot(sessionId: String, bufferContent: String, isRunning: Bool, isWaiting: Bool, force: Bool) async {
         // Fall back to log file when live buffer is empty (read off main thread)
         var content = bufferContent
         if content.isEmpty {
