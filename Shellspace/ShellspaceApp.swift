@@ -497,14 +497,21 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Guard to prevent concurrent refreshOrphanProcesses calls from stacking up threads
+    private var isRefreshingOrphans = false
+
     /// Discover OS-level Claude processes not managed by Shellspace
     /// Runs shell commands on a background queue to avoid blocking the main thread.
     func refreshOrphanProcesses() {
+        guard !isRefreshingOrphans else { return }
+        isRefreshingOrphans = true
+
         let managedPids = Set(terminalControllers.values.compactMap {
             $0.terminalView?.process?.shellPid
         })
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
+            defer { DispatchQueue.main.async { self?.isRefreshingOrphans = false } }
             let task = Process()
             let pipe = Pipe()
             task.executableURL = URL(fileURLWithPath: "/bin/ps")
