@@ -593,13 +593,16 @@ class TerminalController: ObservableObject {
             do script "cd '\(workingDir)' && claude --continue"
         end tell
         """
-        if let appleScript = NSAppleScript(source: script) {
-            var error: NSDictionary?
-            appleScript.executeAndReturnError(&error)
-            if let error = error {
-                logger.error("AppleScript error: \(error)")
-            } else {
-                logger.info("Opened Terminal.app for: \(workingDir)")
+        // Run AppleScript off the main thread to avoid blocking the UI
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            if let appleScript = NSAppleScript(source: script) {
+                var error: NSDictionary?
+                appleScript.executeAndReturnError(&error)
+                if let error = error {
+                    self?.logger.error("AppleScript error: \(error)")
+                } else {
+                    self?.logger.info("Opened Terminal.app for: \(workingDir)")
+                }
             }
         }
     }
