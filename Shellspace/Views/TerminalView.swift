@@ -750,7 +750,7 @@ class TerminalController: ObservableObject {
     }
 
     // Font size management
-    private static let defaultFontSize: CGFloat = 13
+    private static let defaultFontSize: CGFloat = 15.5
     private static let minFontSize: CGFloat = 8
     private static let maxFontSize: CGFloat = 32
     var fontSize: CGFloat = defaultFontSize
@@ -777,6 +777,7 @@ class TerminalController: ObservableObject {
         } else {
             terminal.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         }
+        UserDefaults.standard.set(Double(fontSize), forKey: "terminalFontSize")
         logger.info("Font size changed to: \(self.fontSize)")
     }
 
@@ -1037,11 +1038,13 @@ class TerminalController: ObservableObject {
             calibratedRed: 0.4, green: 0.6, blue: 1.0, alpha: 1.0
         )
 
-        // Set font - SF Mono for cleaner look, slightly larger for readability
-        if let sfMono = NSFont(name: "SF Mono", size: 15.5) {
+        // Restore saved font size, or use default
+        let saved = UserDefaults.standard.double(forKey: "terminalFontSize")
+        fontSize = saved > 0 ? CGFloat(saved) : Self.defaultFontSize
+        if let sfMono = NSFont(name: "SF Mono", size: fontSize) {
             terminal.font = sfMono
         } else {
-            terminal.font = NSFont.monospacedSystemFont(ofSize: 13.5, weight: .regular)
+            terminal.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         }
 
         // Install custom ANSI color palette matching Shellspace theme
@@ -1147,6 +1150,7 @@ class TerminalController: ObservableObject {
 /// eliminating the container view that was intercepting mouse events and breaking selection.
 class ShellspaceTerminalView: LocalProcessTerminalView {
     var projectPath: String?
+    weak var controller: TerminalController?
     private let chLogger = Logger(subsystem: "com.buzzbox.shellspace", category: "ShellspaceTerminal")
     private(set) var keyMonitor: Any?
 
@@ -1277,6 +1281,15 @@ class ShellspaceTerminalView: LocalProcessTerminalView {
                 if self.handleImagePaste() {
                     return nil
                 }
+            case "=", "+":
+                self.controller?.increaseFontSize()
+                return nil
+            case "-":
+                self.controller?.decreaseFontSize()
+                return nil
+            case "0":
+                self.controller?.resetFontSize()
+                return nil
             default:
                 break
             }
@@ -1439,6 +1452,9 @@ struct SwiftTermView: NSViewRepresentable {
         }
 
         let terminalView = controller.terminalView!
+
+        // Give the terminal view a reference to its controller (for font size shortcuts)
+        terminalView.controller = controller
 
         // Configure Shellspace features (drag-drop, key monitor, dictation)
         // Skip if already configured (view can be re-made when switching sessions)
