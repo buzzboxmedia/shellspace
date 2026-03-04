@@ -15,6 +15,9 @@ final class RelayClient: @unchecked Sendable {
     private var heartbeatTask: Task<Void, Never>?
     private var tokenRefreshTask: Task<Void, Never>?
 
+    /// Shared URLSession — reused across reconnects to avoid leaking sessions
+    private lazy var urlSession: URLSession = URLSession(configuration: .default)
+
     /// Sessions currently being auto-launched (prevents double-send)
     @MainActor private var autoLaunchingSessionIds: Set<UUID> = []
 
@@ -100,20 +103,21 @@ final class RelayClient: @unchecked Sendable {
             return
         }
 
-        let session = URLSession(configuration: .default)
-        let ws = session.webSocketTask(with: url)
+        let ws = urlSession.webSocketTask(with: url)
         self.webSocketTask = ws
         ws.resume()
 
         DebugLog.log("[RelayClient] WebSocket connecting to relay (device: \(deviceId))")
 
         // Start receiving messages (detached to avoid inheriting @MainActor)
+        // The receiveLoop will set state to .connected on first successful receive,
+        // and the pollingLoop waits for .connected before sending.
         let client = self
         receiveTask = Task.detached {
             await client.receiveLoop()
         }
 
-        // Start polling terminal buffers
+        // Start polling terminal buffers (waits for .connected state before sending)
         pollingTask = Task.detached { [weak self] in
             await self?.pollingLoop()
         }
@@ -128,8 +132,8 @@ final class RelayClient: @unchecked Sendable {
             await self?.tokenRefreshLoop()
         }
 
-        state = .connected
-        reconnectAttempts = 0
+        // Note: state stays .connecting until receiveLoop confirms the connection
+        // by successfully receiving or sending the first message
     }
 
     @MainActor
@@ -171,14 +175,17 @@ final class RelayClient: @unchecked Sendable {
 
             self.reconnectTask = Task {
                 try? await Task.sleep(for: .seconds(delay))
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    await MainActor.run { self.isReconnecting = false }
+                    return
+                }
 
                 // Always refresh the token before reconnecting (JWT expires in 15m)
                 do {
                     try await RelayAuth.shared.refreshAccessToken()
                 } catch {
                     await MainActor.run {
-                        DebugLog.log("[RelayClient] Token refresh failed: \(error)")
+                        DebugLog.log("[RelayClient] Token refresh failed: \(error.localizedDescription)")
                     }
                 }
 
@@ -199,7 +206,27 @@ final class RelayClient: @unchecked Sendable {
             return
         }
 
-        await MainActor.run { DebugLog.log("[RelayClient] receiveLoop: started, waiting for messages...") }
+        await MainActor.run { DebugLog.log("[RelayClient] receiveLoop: started, waiting for first message...") }
+
+        // Send an initial ping to confirm the connection is alive before entering the loop.
+        // URLSessionWebSocketTask.resume() returns immediately; the actual TCP+TLS+WS handshake
+        // happens asynchronously. Calling receive() before the handshake finishes can fail with
+        // POSIX error 57 ("Socket is not connected"). A send-based probe ensures the transport
+        // layer is ready before we start the receive pump.
+        do {
+            try await ws.send(.string("{\"type\":\"ping\"}"))
+            await MainActor.run {
+                self.state = .connected
+                self.reconnectAttempts = 0
+                DebugLog.log("[RelayClient] WebSocket confirmed connected (initial ping sent)")
+            }
+        } catch {
+            await MainActor.run {
+                DebugLog.log("[RelayClient] Initial ping failed, connection not ready: \(error.localizedDescription)")
+            }
+            scheduleReconnect()
+            return
+        }
 
         while !Task.isCancelled {
             do {
@@ -218,7 +245,7 @@ final class RelayClient: @unchecked Sendable {
                 }
             } catch {
                 await MainActor.run {
-                    DebugLog.log("[RelayClient] Receive error: \(error)")
+                    DebugLog.log("[RelayClient] Receive error: \(error.localizedDescription)")
                 }
                 // Connection dropped - reconnect
                 scheduleReconnect()
@@ -445,9 +472,18 @@ final class RelayClient: @unchecked Sendable {
     // MARK: - Polling Loop (Outbound Updates)
 
     private func pollingLoop() async {
-        // Wait for WebSocket handshake to complete before sending
-        try? await Task.sleep(for: .seconds(2))
-        guard !Task.isCancelled else { return }
+        // Wait for the connection to be confirmed (.connected) before polling.
+        // The receiveLoop sets .connected after a successful initial ping.
+        for _ in 0..<60 { // Up to 30 seconds
+            let currentState = await MainActor.run { self.state }
+            if currentState == .connected { break }
+            if currentState == .disconnected { return } // Gave up
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+        }
+
+        let currentState = await MainActor.run { self.state }
+        guard currentState == .connected, !Task.isCancelled else { return }
 
         // Send initial state (projects + sessions)
         await sendStateUpdate()
@@ -706,6 +742,10 @@ final class RelayClient: @unchecked Sendable {
     // MARK: - Send Message
 
     private func sendMessage(_ dict: [String: Any]) async {
+        // Only send when connected — avoids flooding errors during handshake
+        let currentState = await MainActor.run { self.state }
+        guard currentState == .connected else { return }
+
         guard let ws = webSocketTask,
               let data = try? JSONSerialization.data(withJSONObject: dict),
               let jsonString = String(data: data, encoding: .utf8) else {
@@ -716,7 +756,7 @@ final class RelayClient: @unchecked Sendable {
             try await ws.send(.string(jsonString))
         } catch {
             await MainActor.run {
-                DebugLog.log("[RelayClient] Send error: \(error)")
+                DebugLog.log("[RelayClient] Send error: \(error.localizedDescription)")
             }
             // Connection likely dropped
             scheduleReconnect()
