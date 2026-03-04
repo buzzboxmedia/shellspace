@@ -130,6 +130,20 @@ struct ShellspaceApp: App {
                                     DebugLog.log("[App] Cleared \(staleSessions.count) stale waiting-for-input flags (post-import)")
                                 }
                             }
+
+                            // Auto-archive: delete completed+hidden sessions older than 30 days
+                            let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+                            let archiveDescriptor = FetchDescriptor<Session>(predicate: #Predicate<Session> {
+                                $0.isCompleted && $0.isHidden && $0.lastAccessedAt < thirtyDaysAgo
+                            })
+                            if let stale = try? container.mainContext.fetch(archiveDescriptor), !stale.isEmpty {
+                                for session in stale {
+                                    container.mainContext.delete(session)
+                                }
+                                try? container.mainContext.save()
+                                DebugLog.log("[App] Auto-archived \(stale.count) old completed sessions (>30 days)")
+                            }
+
                             ProjectSyncService.shared.exportProjects(from: container.mainContext)
                             DebugLog.log("[App] Startup complete")
                         }

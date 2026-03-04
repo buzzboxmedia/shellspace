@@ -7,7 +7,7 @@ struct NavigationRailView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var windowState: WindowState
-    @Query private var allSessions: [Session]
+    @Query(filter: #Predicate<Session> { !$0.isCompleted }) private var allSessions: [Session]
     @Query(sort: \Project.name) private var allProjects: [Project]
 
     @State private var showAddProject = false

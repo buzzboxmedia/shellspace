@@ -65,7 +65,7 @@ struct LauncherView: View {
     @EnvironmentObject var windowState: WindowState
 
     @Query(sort: \Project.name) private var allProjects: [Project]
-    @Query private var allSessions: [Session]
+    @Query(filter: #Predicate<Session> { !$0.isCompleted }) private var allSessions: [Session]
 
     @State private var showSettings = false
     @State private var showCleanup = false

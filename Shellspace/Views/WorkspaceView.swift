@@ -8,7 +8,7 @@ struct WorkspaceView: View {
     let project: Project
 
     // Query sessions by projectPath - works even for non-persisted projects
-    @Query private var allSessions: [Session]
+    @Query(filter: #Predicate<Session> { !$0.isCompleted }) private var allSessions: [Session]
 
     // Track when this workspace was opened (for unsaved progress check)
     @State private var workspaceOpenedAt: Date = Date()
@@ -331,7 +331,7 @@ struct SessionSidebar: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var windowState: WindowState
     let project: Project
-    @Query private var allSessions: [Session]
+    @Query(filter: #Predicate<Session> { !$0.isCompleted }) private var allSessions: [Session]
     @Query private var allProjects: [Project]
     @Query private var allProjectGroups: [ProjectGroup]
     @State private var isCreatingTask = false
@@ -810,7 +810,7 @@ struct ProjectGroupSection: View {
     let project: Project
     let index: Int
     let totalGroups: Int
-    @Query private var allSessions: [Session]
+    @Query(filter: #Predicate<Session> { !$0.isCompleted }) private var allSessions: [Session]
     @Binding var draggedGroupId: UUID?
     @State private var isHovered = false
     @State private var isEditing = false

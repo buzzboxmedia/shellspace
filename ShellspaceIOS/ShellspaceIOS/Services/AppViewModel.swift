@@ -49,6 +49,50 @@ final class AppViewModel {
     var showSettings = false
     var lastRefreshed: Date?
 
+    // MARK: - Local Cache
+
+    private static let cacheDir: URL = {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+    }()
+    private static let projectsCacheURL = cacheDir.appendingPathComponent("cached_projects.json")
+    private static let sessionsCacheURL = cacheDir.appendingPathComponent("cached_sessions.json")
+
+    init() {
+        loadCachedData()
+    }
+
+    private func loadCachedData() {
+        let decoder = JSONDecoder()
+        if let data = try? Data(contentsOf: Self.projectsCacheURL),
+           let cached = try? decoder.decode([RemoteProject].self, from: data) {
+            projects = cached
+        }
+        if let data = try? Data(contentsOf: Self.sessionsCacheURL),
+           let cached = try? decoder.decode([RemoteSession].self, from: data) {
+            allSessions = cached
+        }
+        if let date = UserDefaults.standard.object(forKey: "lastCacheDate") as? Date {
+            lastRefreshed = date
+        }
+    }
+
+    private func saveCache() {
+        let encoder = JSONEncoder()
+        if let data = try? encoder.encode(projects) {
+            try? data.write(to: Self.projectsCacheURL)
+        }
+        if let data = try? encoder.encode(allSessions) {
+            try? data.write(to: Self.sessionsCacheURL)
+        }
+        UserDefaults.standard.set(Date(), forKey: "lastCacheDate")
+    }
+
+    private func clearCache() {
+        try? FileManager.default.removeItem(at: Self.projectsCacheURL)
+        try? FileManager.default.removeItem(at: Self.sessionsCacheURL)
+        UserDefaults.standard.removeObject(forKey: "lastCacheDate")
+    }
+
     /// Set by notification tap or deep link -- navigates to this session
     var pendingSessionId: String?
 
@@ -163,6 +207,10 @@ final class AppViewModel {
         disconnect()
         selectedDeviceId = nil
         selectedDeviceName = nil
+        projects = []
+        allSessions = []
+        lastRefreshed = nil
+        clearCache()
     }
 
     /// Connect to the selected device via relay tunnel.
@@ -183,8 +231,7 @@ final class AppViewModel {
         wsObserveTask = nil
         wsManager?.disconnect()
         wsManager = nil
-        projects = []
-        allSessions = []
+        // Preserve projects/allSessions so cached data stays visible during reconnects
         connectionState = .disconnected
         connectionMode = .none
     }
@@ -235,6 +282,7 @@ final class AppViewModel {
                             self.projects = wsProjects
                         }
                         self.lastRefreshed = Date()
+                        self.saveCache()
                     }
                 }
             }

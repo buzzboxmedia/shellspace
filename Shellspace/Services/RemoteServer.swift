@@ -326,9 +326,8 @@ final class RemoteServer: @unchecked Sendable {
             guard let container = modelContainer else { return nil }
 
             let context = ModelContext(container)
-            let descriptor = FetchDescriptor<Session>()
-            guard let allSessions = try? context.fetch(descriptor) else { return nil }
-            let sessions = allSessions.filter { !$0.isHidden }
+            let descriptor = FetchDescriptor<Session>(predicate: #Predicate { !$0.isHidden && !$0.isCompleted })
+            guard let sessions = try? context.fetch(descriptor) else { return nil }
 
             if !force {
                 var changed = lastStates.count != sessions.count
@@ -685,9 +684,9 @@ final class RemoteServer: @unchecked Sendable {
 
         let controller = await MainActor.run {
             let mainContext = container.mainContext
-            let descriptor = FetchDescriptor<Session>()
-            guard let sessions = try? mainContext.fetch(descriptor),
-                  let session = sessions.first(where: { $0.id == uuid }) else {
+            var descriptor = FetchDescriptor<Session>(predicate: #Predicate { $0.id == uuid })
+            descriptor.fetchLimit = 1
+            guard let session = try? mainContext.fetch(descriptor).first else {
                 return nil as TerminalController?
             }
 
@@ -771,9 +770,9 @@ final class RemoteServer: @unchecked Sendable {
         guard let container = modelContainer,
               let uuid = UUID(uuidString: sessionId) else { return nil }
         let context = ModelContext(container)
-        let descriptor = FetchDescriptor<Session>()
-        guard let sessions = try? context.fetch(descriptor) else { return nil }
-        return sessions.first { $0.id == uuid }
+        var descriptor = FetchDescriptor<Session>(predicate: #Predicate { $0.id == uuid })
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
     }
 
     @MainActor
