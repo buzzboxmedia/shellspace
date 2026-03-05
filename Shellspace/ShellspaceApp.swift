@@ -4,6 +4,18 @@ import os.log
 
 private let appLogger = Logger(subsystem: "com.buzzbox.shellspace", category: "AppState")
 
+/// Delete SwiftData store files to recover from corruption.
+/// Free function so it can be called from stored property initializers.
+private func deleteSwiftDataStore() {
+    let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let storeFiles = ["default.store", "default.store-shm", "default.store-wal"]
+    for file in storeFiles {
+        let url = appSupport.appendingPathComponent(file)
+        try? FileManager.default.removeItem(at: url)
+    }
+    appLogger.warning("Deleted SwiftData store files for recovery")
+}
+
 // MARK: - Notification Names
 extension Notification.Name {
     static let toggleDictation = Notification.Name("toggleDictation")
@@ -39,10 +51,31 @@ struct ShellspaceApp: App {
             cloudKitDatabase: .none
         )
 
+        // Crash-on-launch recovery: if the app crashed during last data access
+        // (e.g. swift_dynamicCastFailure from corrupt SwiftData store), delete and rebuild.
+        // The guard flag is set here and cleared in onAppear after successful first render.
+        let crashGuardKey = "shellspace_store_access_guard"
+        if UserDefaults.standard.bool(forKey: crashGuardKey) {
+            appLogger.warning("Previous launch crashed during data access — deleting store to recover")
+            deleteSwiftDataStore()
+            UserDefaults.standard.set(false, forKey: crashGuardKey)
+        }
+
+        // Set guard before creating container (cleared after first successful render)
+        UserDefaults.standard.set(true, forKey: crashGuardKey)
+
         do {
             return try ModelContainer(for: schema, configurations: [config])
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            // Schema incompatible — delete and recreate
+            appLogger.error("ModelContainer failed: \(error) — deleting store and retrying")
+            deleteSwiftDataStore()
+
+            do {
+                return try ModelContainer(for: schema, configurations: [config])
+            } catch {
+                fatalError("Could not create ModelContainer after store reset: \(error)")
+            }
         }
     }()
 
@@ -53,6 +86,9 @@ struct ShellspaceApp: App {
                 .onAppear {
                     DebugLog.clear()
                     DebugLog.log("[App] Shellspace launched")
+
+                    // Clear crash guard — we survived the first render without swift_dynamicCastFailure
+                    UserDefaults.standard.set(false, forKey: "shellspace_store_access_guard")
 
                     // Make sure app is active when window appears
                     NSApplication.shared.activate(ignoringOtherApps: true)
