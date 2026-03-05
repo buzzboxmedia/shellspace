@@ -90,6 +90,12 @@ struct ShellspaceApp: App {
                     // Clear crash guard — we survived the first render without swift_dynamicCastFailure
                     UserDefaults.standard.set(false, forKey: "shellspace_store_access_guard")
 
+                    // Disable SwiftData autosave to prevent crash during app deactivation.
+                    // SwiftData's internal auto-save observer can hit dangling faults from
+                    // background sync (SessionSyncService/ProjectSyncService) when encoding
+                    // Session objects with faulted relationships to deleted rows.
+                    sharedModelContainer.mainContext.autosaveEnabled = false
+
                     // Make sure app is active when window appears
                     NSApplication.shared.activate(ignoringOtherApps: true)
                     // Give AppDelegate access to appState for cleanup on quit
@@ -128,6 +134,7 @@ struct ShellspaceApp: App {
 
                     // Import projects from Dropbox (before session sync)
                     ProjectSyncService.shared.importProjects(into: sharedModelContainer.mainContext)
+                    try? sharedModelContainer.mainContext.save()
 
                     // Enable session sync
                     SessionSyncService.shared.isEnabled = true
@@ -141,11 +148,27 @@ struct ShellspaceApp: App {
                         DebugLog.log("[App] Started local server (Hummingbird on port 8847)")
                     }
 
+                    // Safe save on deactivation (replaces SwiftData's auto-save which crashes on faults)
+                    NotificationCenter.default.addObserver(
+                        forName: NSApplication.willResignActiveNotification,
+                        object: nil,
+                        queue: .main
+                    ) { _ in
+                        do {
+                            try sharedModelContainer.mainContext.save()
+                        } catch {
+                            appLogger.error("Failed to save on deactivation: \(error)")
+                            // Don't crash - just log it. Data will be saved next time.
+                        }
+                    }
+
                     // Periodic cleanup: prune dead controllers, discover orphan processes
                     Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { _ in
                         DispatchQueue.main.async {
                             appState.pruneDeadControllers()
                             appState.refreshOrphanProcesses()
+                            // Periodic safe save (since autosave is disabled)
+                            try? sharedModelContainer.mainContext.save()
                         }
                     }
                     // Run once immediately
