@@ -624,7 +624,19 @@ final class RelayClient: @unchecked Sendable {
 
             let context = ModelContext(container)
             let descriptor = FetchDescriptor<Session>(predicate: #Predicate { !$0.isHidden && !$0.isCompleted })
-            guard let sessions = try? context.fetch(descriptor) else { return nil }
+            guard let allSessions = try? context.fetch(descriptor) else { return nil }
+
+            // Filter to shared projects only
+            let sessions: [Session]
+            if CompanionSharing.isRestricted {
+                let projectDescriptor = FetchDescriptor<Project>()
+                let sharedPaths = Set((try? context.fetch(projectDescriptor))?.filter {
+                    CompanionSharing.isShared($0.id.uuidString)
+                }.map { $0.path } ?? [])
+                sessions = allSessions.filter { sharedPaths.contains($0.projectPath) }
+            } else {
+                sessions = allSessions
+            }
 
             // Quick hash to detect changes
             let currentHash = sessions.map { s in
@@ -655,10 +667,12 @@ final class RelayClient: @unchecked Sendable {
             guard let container = modelContainer else { return (nil as [[String: Any]]?, nil as [[String: Any]]?) }
             let context = ModelContext(container)
 
-            // Fetch projects
+            // Fetch projects (filtered by companion sharing settings)
             let projectDescriptor = FetchDescriptor<Project>()
-            let projects = (try? context.fetch(projectDescriptor)) ?? []
-            let projectsList = projects.map { project -> [String: Any] in
+            let allProjects = (try? context.fetch(projectDescriptor)) ?? []
+            let sharedProjects = allProjects.filter { CompanionSharing.isShared($0.id.uuidString) }
+            let sharedProjectPaths = Set(sharedProjects.map { $0.path })
+            let projectsList = sharedProjects.map { project -> [String: Any] in
                 let activeSessions = project.sessions.filter { !$0.isHidden && !$0.isCompleted }
                 let waitingSessions = activeSessions.filter { $0.isWaitingForInput }
                 return [
@@ -672,12 +686,13 @@ final class RelayClient: @unchecked Sendable {
                 ]
             }
 
-            // Fetch sessions
+            // Fetch sessions (filtered to shared projects only)
             let sessionDescriptor = FetchDescriptor<Session>()
             let allSessions = (try? context.fetch(sessionDescriptor)) ?? []
-            let sessionsList = allSessions.filter { !$0.isHidden }.map { session in
-                sessionToJSON(session)
-            }
+            let sessionsList = allSessions
+                .filter { !$0.isHidden }
+                .filter { !CompanionSharing.isRestricted || sharedProjectPaths.contains($0.projectPath) }
+                .map { session in sessionToJSON(session) }
 
             return (projectsList, sessionsList)
         }

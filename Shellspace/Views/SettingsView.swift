@@ -92,6 +92,12 @@ struct SettingsView: View {
             // Relay Connection Section
             RelaySettingsSection()
 
+            Divider()
+                .padding(.vertical, 8)
+
+            // Companion Sharing Section
+            CompanionSharingSection(projects: allProjects)
+
             Spacer()
 
             Divider()
@@ -144,7 +150,7 @@ struct SettingsView: View {
             }
             .padding(12)
         }
-        .frame(width: 350, height: 580)
+        .frame(width: 350, height: 700)
         .background(.ultraThinMaterial)
     }
 
@@ -253,6 +259,110 @@ struct ProjectRow: View {
             return ".../" + lastTwo
         }
         return path
+    }
+}
+
+// MARK: - Companion Sharing
+
+/// Controls which projects are visible to iOS companion apps.
+/// When restricted, only selected projects are sent to connected iOS devices.
+enum CompanionSharing {
+    private static let key = "companionSharedProjectIds"
+    private static let restrictedKey = "companionSharingRestricted"
+
+    /// Whether companion sharing is restricted (only selected projects visible)
+    static var isRestricted: Bool {
+        get { UserDefaults.standard.bool(forKey: restrictedKey) }
+        set { UserDefaults.standard.set(newValue, forKey: restrictedKey) }
+    }
+
+    /// Project IDs that are shared with iOS companions (only used when restricted)
+    static var sharedProjectIds: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: key) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: key) }
+    }
+
+    static func isShared(_ projectId: String) -> Bool {
+        if !isRestricted { return true }
+        return sharedProjectIds.contains(projectId)
+    }
+
+    static func toggle(_ projectId: String) {
+        var ids = sharedProjectIds
+        if ids.contains(projectId) {
+            ids.remove(projectId)
+        } else {
+            ids.insert(projectId)
+        }
+        sharedProjectIds = ids
+    }
+}
+
+struct CompanionSharingSection: View {
+    let projects: [Project]
+    @State private var isRestricted = CompanionSharing.isRestricted
+    @State private var sharedIds = CompanionSharing.sharedProjectIds
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("iOS COMPANION")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+
+            Toggle(isOn: $isRestricted) {
+                Text("Restrict visible projects")
+                    .font(.system(size: 13))
+            }
+            .toggleStyle(.switch)
+            .padding(.horizontal, 16)
+            .onChange(of: isRestricted) { _, newValue in
+                CompanionSharing.isRestricted = newValue
+            }
+
+            if isRestricted {
+                VStack(spacing: 4) {
+                    ForEach(projects) { project in
+                        HStack(spacing: 10) {
+                            Image(systemName: project.icon)
+                                .font(.system(size: 14))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 20)
+
+                            Text(project.name)
+                                .font(.system(size: 13))
+
+                            Spacer()
+
+                            Toggle("", isOn: Binding(
+                                get: { sharedIds.contains(project.id.uuidString) },
+                                set: { _ in
+                                    CompanionSharing.toggle(project.id.uuidString)
+                                    sharedIds = CompanionSharing.sharedProjectIds
+                                }
+                            ))
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 2)
+                    }
+                }
+
+                Text("Only toggled projects are visible on iOS")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 16)
+            } else {
+                Text("All projects visible on iOS companions")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 16)
+            }
+        }
     }
 }
 

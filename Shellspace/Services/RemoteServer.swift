@@ -327,7 +327,22 @@ final class RemoteServer: @unchecked Sendable {
 
             let context = ModelContext(container)
             let descriptor = FetchDescriptor<Session>(predicate: #Predicate { !$0.isHidden && !$0.isCompleted })
-            guard let sessions = try? context.fetch(descriptor) else { return nil }
+            guard let allSessions = try? context.fetch(descriptor) else { return nil }
+
+            // Filter to only sessions from projects shared with iOS companions
+            let projectDescriptor = FetchDescriptor<Project>()
+            let sharedProjectPaths: Set<String>
+            if CompanionSharing.isRestricted {
+                let allProjects = (try? context.fetch(projectDescriptor)) ?? []
+                sharedProjectPaths = Set(allProjects
+                    .filter { CompanionSharing.isShared($0.id.uuidString) }
+                    .map { $0.path })
+            } else {
+                sharedProjectPaths = [] // empty means all allowed
+            }
+            let sessions = CompanionSharing.isRestricted
+                ? allSessions.filter { sharedProjectPaths.contains($0.projectPath) }
+                : allSessions
 
             if !force {
                 var changed = lastStates.count != sessions.count
@@ -390,19 +405,21 @@ final class RemoteServer: @unchecked Sendable {
             let descriptor = FetchDescriptor<Project>(sortBy: [SortDescriptor(\.name)])
             guard let projects = try? context.fetch(descriptor) else { return nil }
 
-            return projects.map { project in
-                let activeSessions = project.sessions.filter { !$0.isCompleted && !$0.isHidden }
-                let waitingSessions = activeSessions.filter { $0.isWaitingForInput }
-                return [
-                    "id": project.id.uuidString,
-                    "name": project.name,
-                    "path": project.path,
-                    "icon": project.icon,
-                    "category": project.category.rawValue,
-                    "active_sessions": activeSessions.count,
-                    "waiting_sessions": waitingSessions.count,
-                ] as [String: Any]
-            }
+            return projects
+                .filter { CompanionSharing.isShared($0.id.uuidString) }
+                .map { project in
+                    let activeSessions = project.sessions.filter { !$0.isCompleted && !$0.isHidden }
+                    let waitingSessions = activeSessions.filter { $0.isWaitingForInput }
+                    return [
+                        "id": project.id.uuidString,
+                        "name": project.name,
+                        "path": project.path,
+                        "icon": project.icon,
+                        "category": project.category.rawValue,
+                        "active_sessions": activeSessions.count,
+                        "waiting_sessions": waitingSessions.count,
+                    ] as [String: Any]
+                }
         }
 
         guard let projectList else {
@@ -419,7 +436,8 @@ final class RemoteServer: @unchecked Sendable {
             let context = ModelContext(container)
             let descriptor = FetchDescriptor<Project>()
             guard let projects = try? context.fetch(descriptor),
-                  let project = projects.first(where: { $0.id == uuid }) else { return nil }
+                  let project = projects.first(where: { $0.id == uuid }),
+                  CompanionSharing.isShared(project.id.uuidString) else { return nil }
 
             return project.sessions
                 .filter { !$0.isHidden }
