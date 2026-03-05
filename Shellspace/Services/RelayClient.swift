@@ -21,6 +21,9 @@ final class RelayClient: @unchecked Sendable {
     /// Sessions currently being auto-launched (prevents double-send)
     @MainActor private var autoLaunchingSessionIds: Set<UUID> = []
 
+    /// Connected tunnel users: userId -> email (from tunnel_connected messages)
+    @MainActor private(set) var connectedTunnelUsers: [String: String] = [:]
+
     // MARK: - Connection State
 
     enum ConnectionState: String {
@@ -55,6 +58,7 @@ final class RelayClient: @unchecked Sendable {
     private var lastRunningStates: [String: Bool] = [:]
     private var lastWaitingStates: [String: Bool] = [:]
     private var lastSessionsHash: Int = 0
+    private var lastSessionsHashPerUser: [String: Int] = [:]
 
     init() {}
 
@@ -156,6 +160,8 @@ final class RelayClient: @unchecked Sendable {
         lastRunningStates = [:]
         lastWaitingStates = [:]
         lastSessionsHash = 0
+        lastSessionsHashPerUser = [:]
+        connectedTunnelUsers = [:]
     }
 
     // MARK: - Reconnect
@@ -291,11 +297,42 @@ final class RelayClient: @unchecked Sendable {
             let filename = json["filename"] as? String
             await handleImageUpload(sessionId: sessionId, base64: base64, filename: filename)
 
+        case "tunnel_connected":
+            let userId = json["user_id"] as? String ?? ""
+            let email = json["email"] as? String ?? "unknown"
+            guard !userId.isEmpty else { break }
+            await MainActor.run {
+                connectedTunnelUsers[userId] = email
+                TeamAssignments.addMember(userId: userId, email: email)
+                DebugLog.log("[RelayClient] Tunnel user connected: \(email) (\(userId))")
+                appState?.objectWillChange.send()
+            }
+            await sendStateUpdateForUser(userId)
+
+        case "tunnel_disconnected":
+            let userId = json["user_id"] as? String ?? ""
+            guard !userId.isEmpty else { break }
+            await MainActor.run {
+                connectedTunnelUsers.removeValue(forKey: userId)
+                DebugLog.log("[RelayClient] Tunnel user disconnected: \(userId)")
+                appState?.objectWillChange.send()
+            }
+
         case "request_state":
-            await sendStateUpdate()
+            let senderUserId = json["sender_user_id"] as? String
+            if let uid = senderUserId {
+                await sendStateUpdateForUser(uid)
+            } else {
+                await sendStateUpdateForAllUsers()
+            }
 
         case "request_sessions":
-            await sendSessionsUpdate(force: true)
+            let senderUserId = json["sender_user_id"] as? String
+            if let uid = senderUserId {
+                await sendSessionsUpdateForUser(uid, force: true)
+            } else {
+                await sendSessionsUpdateForAllUsers(force: true)
+            }
 
         case "request_terminal", "subscribe_terminal":
             if let sessionId = (json["session_id"] ?? json["sessionId"]) as? String {
@@ -408,7 +445,7 @@ final class RelayClient: @unchecked Sendable {
                 "session": result
             ])
             // Also send updated sessions list
-            await sendSessionsUpdate(force: true)
+            await sendSessionsUpdateForAllUsers(force: true)
         }
     }
 
@@ -485,8 +522,8 @@ final class RelayClient: @unchecked Sendable {
         let currentState = await MainActor.run { self.state }
         guard currentState == .connected, !Task.isCancelled else { return }
 
-        // Send initial state (projects + sessions)
-        await sendStateUpdate()
+        // Send initial state for all connected tunnel users
+        await sendStateUpdateForAllUsers()
 
         while !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(500))
@@ -544,7 +581,7 @@ final class RelayClient: @unchecked Sendable {
 
         // Sessions snapshot every 2 seconds (every 4th poll at 500ms)
         if pollCount % 4 == 0 {
-            await sendSessionsUpdate(force: false)
+            await sendSessionsUpdateForAllUsers(force: false)
         }
     }
 
@@ -618,7 +655,21 @@ final class RelayClient: @unchecked Sendable {
         ])
     }
 
-    private func sendSessionsUpdate(force: Bool) async {
+    // MARK: - Per-User Sessions Update
+
+    private func sendSessionsUpdateForAllUsers(force: Bool) async {
+        let users = await MainActor.run { Array(connectedTunnelUsers.keys) }
+        if users.isEmpty {
+            // Legacy: no tracked tunnel users, send broadcast
+            await sendSessionsUpdateForUser(nil, force: force)
+        } else {
+            for userId in users {
+                await sendSessionsUpdateForUser(userId, force: force)
+            }
+        }
+    }
+
+    private func sendSessionsUpdateForUser(_ targetUserId: String?, force: Bool) async {
         let sessionDicts: [[String: Any]]? = await MainActor.run {
             guard let container = modelContainer else { return nil }
 
@@ -626,53 +677,76 @@ final class RelayClient: @unchecked Sendable {
             let descriptor = FetchDescriptor<Session>(predicate: #Predicate { !$0.isHidden && !$0.isCompleted })
             guard let allSessions = try? context.fetch(descriptor) else { return nil }
 
-            // Filter to shared projects only
-            let sessions: [Session]
-            if CompanionSharing.isRestricted {
-                let projectDescriptor = FetchDescriptor<Project>()
-                let sharedPaths = Set((try? context.fetch(projectDescriptor))?.filter {
-                    CompanionSharing.isShared($0.id.uuidString)
-                }.map { $0.path } ?? [])
-                sessions = allSessions.filter { sharedPaths.contains($0.projectPath) }
-            } else {
-                sessions = allSessions
-            }
+            // Filter sessions based on user assignments
+            let sessions = filterSessionsForUser(allSessions, userId: targetUserId, context: context)
 
-            // Quick hash to detect changes
+            // Per-user hash to detect changes
+            let hashKey = targetUserId ?? "_broadcast"
             let currentHash = sessions.map { s in
                 let isRunning = appState?.terminalControllers[s.id]?.terminalView?.process?.running == true
                 return "\(s.id):\(isRunning):\(s.isWaitingForInput):\(s.isCompleted)"
             }.joined().hashValue
 
-            guard force || currentHash != lastSessionsHash else { return nil }
-            lastSessionsHash = currentHash
+            guard force || lastSessionsHashPerUser[hashKey] != currentHash else { return nil }
+            lastSessionsHashPerUser[hashKey] = currentHash
 
-            return sessions.map { session in
-                sessionToJSON(session)
-            }
+            return sessions.map { session in sessionToJSON(session) }
         }
 
         guard let sessionDicts else { return }
 
-        await sendMessage([
+        var message: [String: Any] = [
             "type": "sessions_update",
             "sessions": sessionDicts
-        ])
+        ]
+        if let targetUserId {
+            message["target_user_id"] = targetUserId
+        }
+        await sendMessage(message)
     }
 
-    // MARK: - State Update (projects + sessions)
+    // MARK: - Per-User State Update (projects + sessions)
 
-    private func sendStateUpdate() async {
+    private func sendStateUpdateForAllUsers() async {
+        let users = await MainActor.run { Array(connectedTunnelUsers.keys) }
+        if users.isEmpty {
+            // Legacy: no tracked tunnel users, send broadcast
+            await sendStateUpdateForUser(nil)
+        } else {
+            for userId in users {
+                await sendStateUpdateForUser(userId)
+            }
+        }
+    }
+
+    private func sendStateUpdateForUser(_ targetUserId: String?) async {
         let (projectDicts, sessionDicts) = await MainActor.run {
             guard let container = modelContainer else { return (nil as [[String: Any]]?, nil as [[String: Any]]?) }
             let context = ModelContext(container)
 
-            // Fetch projects (filtered by companion sharing settings)
+            // Fetch all projects
             let projectDescriptor = FetchDescriptor<Project>()
             let allProjects = (try? context.fetch(projectDescriptor)) ?? []
-            let sharedProjects = allProjects.filter { CompanionSharing.isShared($0.id.uuidString) }
-            let sharedProjectPaths = Set(sharedProjects.map { $0.path })
-            let projectsList = sharedProjects.map { project -> [String: Any] in
+
+            // Filter projects for this user
+            let filteredProjects: [Project]
+            if let userId = targetUserId {
+                let assignedIds = TeamAssignments.assignedProjectIds(for: userId)
+                if !assignedIds.isEmpty {
+                    // User has specific assignments - only show those
+                    filteredProjects = allProjects.filter { assignedIds.contains($0.id.uuidString) }
+                } else {
+                    // No assignments = see all (owner/admin behavior, backward compat)
+                    filteredProjects = allProjects.filter { CompanionSharing.isShared($0.id.uuidString) }
+                }
+            } else {
+                // Legacy broadcast: use CompanionSharing
+                filteredProjects = allProjects.filter { CompanionSharing.isShared($0.id.uuidString) }
+            }
+
+            let filteredPaths = Set(filteredProjects.map { $0.path })
+
+            let projectsList = filteredProjects.map { project -> [String: Any] in
                 let activeSessions = project.sessions.filter { !$0.isHidden && !$0.isCompleted }
                 let waitingSessions = activeSessions.filter { $0.isWaitingForInput }
                 return [
@@ -686,12 +760,12 @@ final class RelayClient: @unchecked Sendable {
                 ]
             }
 
-            // Fetch sessions (filtered to shared projects only)
+            // Fetch sessions filtered to visible projects
             let sessionDescriptor = FetchDescriptor<Session>()
             let allSessions = (try? context.fetch(sessionDescriptor)) ?? []
             let sessionsList = allSessions
                 .filter { !$0.isHidden }
-                .filter { !CompanionSharing.isRestricted || sharedProjectPaths.contains($0.projectPath) }
+                .filter { filteredPaths.contains($0.projectPath) }
                 .map { session in sessionToJSON(session) }
 
             return (projectsList, sessionsList)
@@ -699,11 +773,40 @@ final class RelayClient: @unchecked Sendable {
 
         guard let projectDicts, let sessionDicts else { return }
 
-        await sendMessage([
+        var message: [String: Any] = [
             "type": "state_update",
             "projects": projectDicts,
             "sessions": sessionDicts,
-        ])
+        ]
+        if let targetUserId {
+            message["target_user_id"] = targetUserId
+        }
+        await sendMessage(message)
+    }
+
+    // MARK: - Session Filtering Helper
+
+    @MainActor
+    private func filterSessionsForUser(_ sessions: [Session], userId: String?, context: ModelContext) -> [Session] {
+        if let userId {
+            let assignedIds = TeamAssignments.assignedProjectIds(for: userId)
+            if !assignedIds.isEmpty {
+                let projectDescriptor = FetchDescriptor<Project>()
+                let assignedPaths = Set((try? context.fetch(projectDescriptor))?.filter {
+                    assignedIds.contains($0.id.uuidString)
+                }.map { $0.path } ?? [])
+                return sessions.filter { assignedPaths.contains($0.projectPath) }
+            }
+        }
+        // No specific user or no assignments: use CompanionSharing (backward compat)
+        if CompanionSharing.isRestricted {
+            let projectDescriptor = FetchDescriptor<Project>()
+            let sharedPaths = Set((try? context.fetch(projectDescriptor))?.filter {
+                CompanionSharing.isShared($0.id.uuidString)
+            }.map { $0.path } ?? [])
+            return sessions.filter { sharedPaths.contains($0.projectPath) }
+        }
+        return sessions
     }
 
     // MARK: - Heartbeat (WebSocket-level ping for dead connection detection)

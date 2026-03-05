@@ -252,6 +252,95 @@ final class RelayAuth: @unchecked Sendable {
         return true
     }
 
+    // MARK: - Device Sharing
+
+    /// Share this device with another user by email
+    func shareDevice(email targetEmail: String) async throws -> (userId: String, email: String) {
+        guard let token = accessToken, let devId = deviceId else {
+            throw AuthError.notAuthenticated
+        }
+
+        let url = URL(string: "\(baseURL)/api/devices/\(devId)/share")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["email": targetEmail])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.invalidResponse
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "Unknown error"
+            throw AuthError.serverError("Share failed (\(httpResponse.statusCode)): \(body)")
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let uid = json["userId"] as? String,
+              let email = json["email"] as? String else {
+            throw AuthError.invalidResponse
+        }
+
+        DebugLog.log("[RelayAuth] Device shared with \(email) (\(uid))")
+        return (uid, email)
+    }
+
+    /// Revoke device sharing for a user
+    func revokeDeviceShare(userId targetUserId: String) async throws {
+        guard let token = accessToken, let devId = deviceId else {
+            throw AuthError.notAuthenticated
+        }
+
+        let url = URL(string: "\(baseURL)/api/devices/\(devId)/shares/\(targetUserId)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.invalidResponse
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "Unknown error"
+            throw AuthError.serverError("Revoke failed (\(httpResponse.statusCode)): \(body)")
+        }
+
+        DebugLog.log("[RelayAuth] Device share revoked for \(targetUserId)")
+    }
+
+    /// List current device shares
+    func listDeviceShares() async throws -> [(userId: String, email: String)] {
+        guard let token = accessToken, let devId = deviceId else {
+            throw AuthError.notAuthenticated
+        }
+
+        let url = URL(string: "\(baseURL)/api/devices/\(devId)/shares")!
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            return []
+        }
+
+        guard let shares = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return []
+        }
+
+        return shares.compactMap { share in
+            guard let uid = share["user_id"] as? String,
+                  let email = share["email"] as? String else { return nil }
+            return (uid, email)
+        }
+    }
+
     // MARK: - Logout
 
     func logout() {

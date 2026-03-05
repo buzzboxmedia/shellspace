@@ -95,7 +95,13 @@ struct SettingsView: View {
             Divider()
                 .padding(.vertical, 8)
 
-            // Companion Sharing Section
+            // Team & Companion Sharing Section
+            TeamSharingSection(projects: allProjects)
+
+            Divider()
+                .padding(.vertical, 8)
+
+            // Legacy Companion Sharing (fallback for users without assignments)
             CompanionSharingSection(projects: allProjects)
 
             Spacer()
@@ -259,6 +265,234 @@ struct ProjectRow: View {
             return ".../" + lastTwo
         }
         return path
+    }
+}
+
+// MARK: - Team Sharing
+
+struct TeamSharingSection: View {
+    let projects: [Project]
+    @State private var members = TeamAssignments.members
+    @State private var newEmail = ""
+    @State private var isAdding = false
+    @State private var addError: String?
+    @State private var expandedMember: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("TEAM")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+
+            if members.isEmpty {
+                Text("No team members. Add people by email to share access.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 16)
+            } else {
+                VStack(spacing: 2) {
+                    ForEach(members) { member in
+                        TeamMemberRow(
+                            member: member,
+                            projects: projects,
+                            isExpanded: expandedMember == member.userId,
+                            onToggleExpand: {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    expandedMember = expandedMember == member.userId ? nil : member.userId
+                                }
+                            },
+                            onRemove: {
+                                Task {
+                                    try? await RelayAuth.shared.revokeDeviceShare(userId: member.userId)
+                                    TeamAssignments.removeMember(userId: member.userId)
+                                    members = TeamAssignments.members
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Add member field
+            HStack(spacing: 8) {
+                TextField("Email address", text: $newEmail)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+                    .onSubmit { addMember() }
+
+                Button {
+                    addMember()
+                } label: {
+                    if isAdding {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Text("Add")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                }
+                .disabled(newEmail.isEmpty || isAdding)
+                .buttonStyle(.plain)
+                .foregroundStyle(.blue)
+            }
+            .padding(.horizontal, 16)
+
+            if let error = addError {
+                Text(error)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 16)
+            }
+
+            Text("Team members can connect from iOS and only see assigned projects")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 16)
+        }
+    }
+
+    private func addMember() {
+        guard !newEmail.isEmpty else { return }
+        isAdding = true
+        addError = nil
+
+        Task {
+            do {
+                let (userId, email) = try await RelayAuth.shared.shareDevice(email: newEmail)
+                TeamAssignments.addMember(userId: userId, email: email)
+                await MainActor.run {
+                    members = TeamAssignments.members
+                    newEmail = ""
+                    isAdding = false
+                    // Auto-expand newly added member for project assignment
+                    expandedMember = userId
+                }
+            } catch {
+                await MainActor.run {
+                    addError = error.localizedDescription
+                    isAdding = false
+                }
+            }
+        }
+    }
+}
+
+struct TeamMemberRow: View {
+    let member: TeamAssignments.TeamMember
+    let projects: [Project]
+    let isExpanded: Bool
+    let onToggleExpand: () -> Void
+    let onRemove: () -> Void
+
+    @State private var assignedIds = Set<String>()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Member header
+            HStack(spacing: 10) {
+                Image(systemName: isOnline ? "person.circle.fill" : "person.circle")
+                    .font(.system(size: 16))
+                    .foregroundStyle(isOnline ? .green : .secondary)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(member.displayName)
+                        .font(.system(size: 13, weight: .medium))
+                    if member.name != nil {
+                        Text(member.email)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+
+                Spacer()
+
+                if isOnline {
+                    Text("Online")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.green)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.green.opacity(0.1))
+                        .cornerRadius(4)
+                }
+
+                // Expand/collapse for project assignment
+                Button {
+                    onToggleExpand()
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+
+                // Remove button
+                Button {
+                    onRemove()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.red.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+
+            // Expanded: project assignment checkboxes
+            if isExpanded {
+                VStack(spacing: 4) {
+                    ForEach(projects) { project in
+                        HStack(spacing: 8) {
+                            Toggle("", isOn: Binding(
+                                get: { assignedIds.contains(project.id.uuidString) },
+                                set: { _ in
+                                    TeamAssignments.toggleProject(project.id.uuidString, for: member.userId)
+                                    assignedIds = TeamAssignments.assignedProjectIds(for: member.userId)
+                                }
+                            ))
+                            .toggleStyle(.checkbox)
+                            .controlSize(.small)
+
+                            Image(systemName: project.icon)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 16)
+
+                            Text(project.name)
+                                .font(.system(size: 12))
+
+                            Spacer()
+                        }
+                        .padding(.horizontal, 32)
+                    }
+
+                    if assignedIds.isEmpty {
+                        Text("No projects assigned = sees all shared projects")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 32)
+                            .padding(.top, 2)
+                    }
+                }
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.02))
+            }
+        }
+        .onAppear {
+            assignedIds = TeamAssignments.assignedProjectIds(for: member.userId)
+        }
+    }
+
+    private var isOnline: Bool {
+        // Check if this member is currently connected via tunnel
+        // We'd need access to the relay client's connectedTunnelUsers
+        // For now, use a simple check via AppState or UserDefaults
+        false // Will be connected to live data
     }
 }
 

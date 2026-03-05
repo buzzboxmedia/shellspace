@@ -1,0 +1,417 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		02C5D5FD37F319F03F1D13F9 /* SpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11608CB2CDF29EA378F25D27 /* SpeechService.swift */; };
+		055C5DA6E9BBB6C9F1C086EB /* RemoteTaskFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 236CCAE64EDBDEB59DF13D3C /* RemoteTaskFolder.swift */; };
+		05E42E793899DB156ED0B545 /* DevicePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FED0C143F08E177ABD6D75B /* DevicePickerView.swift */; };
+		0684B9107B733F08F922217B /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47939E098E7D58E0E35B4ED6 /* LoginView.swift */; };
+		1BE37C832AEB5BE2860B040C /* ShellspaceAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1312EE9C66A4323CB6541FA0 /* ShellspaceAPI.swift */; };
+		259E3A2C1E56AB6F05186F5E /* RemoteProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 295A107B8134072264131C64 /* RemoteProject.swift */; };
+		37CC5F2A7757CE9077436E66 /* BonjourBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF5E59F34B41FC8AE84602C5 /* BonjourBrowser.swift */; };
+		3E3DD804B0DE1229137546EC /* LiteSessionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29F0FA6709B8B6A9CB2DB91 /* LiteSessionsView.swift */; };
+		4472662D9184BFFC688F1FBA /* SettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCBB1BF7C61C8A0CC8A21E5 /* SettingsSheet.swift */; };
+		546ECF85A9851C33D6D1D8D9 /* RelayAuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 705A1D0199C0D0026EA9407E /* RelayAuthManager.swift */; };
+		5C063D71BA02935085FB24C9 /* ShellspaceLiteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75D6351106FD5B2524F666DC /* ShellspaceLiteApp.swift */; };
+		5F48B7ADEF159BBD3C94B64F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 63428B31958F38E5A2CFFCFE /* Assets.xcassets */; };
+		7B621CFC23AADD51822D5C30 /* CreateSessionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13E0592C8AFFF1887FCB0786 /* CreateSessionSheet.swift */; };
+		8CAFD49BFD362B70BA610301 /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D040F09620E8A6087FB0927 /* AppViewModel.swift */; };
+		A9E019997FBCBDBFD97D3365 /* WebSocketManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27D385D12EECBE35868E541C /* WebSocketManager.swift */; };
+		D0B2E3F129AFE8017B20D65D /* TerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D735C87E81C56ED17333773 /* TerminalView.swift */; };
+		E8F1B6D359216C7B09CFD5C6 /* RemoteSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC3A589CDE74388F4CFBD17B /* RemoteSession.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		11608CB2CDF29EA378F25D27 /* SpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechService.swift; sourceTree = "<group>"; };
+		1312EE9C66A4323CB6541FA0 /* ShellspaceAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellspaceAPI.swift; sourceTree = "<group>"; };
+		13E0592C8AFFF1887FCB0786 /* CreateSessionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateSessionSheet.swift; sourceTree = "<group>"; };
+		1FED0C143F08E177ABD6D75B /* DevicePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePickerView.swift; sourceTree = "<group>"; };
+		236CCAE64EDBDEB59DF13D3C /* RemoteTaskFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTaskFolder.swift; sourceTree = "<group>"; };
+		27D385D12EECBE35868E541C /* WebSocketManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketManager.swift; sourceTree = "<group>"; };
+		295A107B8134072264131C64 /* RemoteProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteProject.swift; sourceTree = "<group>"; };
+		47939E098E7D58E0E35B4ED6 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		4D735C87E81C56ED17333773 /* TerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalView.swift; sourceTree = "<group>"; };
+		63428B31958F38E5A2CFFCFE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		6D7F645C61BE56783CA62BB1 /* ShellspaceLite.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ShellspaceLite.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		705A1D0199C0D0026EA9407E /* RelayAuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayAuthManager.swift; sourceTree = "<group>"; };
+		75D6351106FD5B2524F666DC /* ShellspaceLiteApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellspaceLiteApp.swift; sourceTree = "<group>"; };
+		9D040F09620E8A6087FB0927 /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
+		A29F0FA6709B8B6A9CB2DB91 /* LiteSessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteSessionsView.swift; sourceTree = "<group>"; };
+		ABCBB1BF7C61C8A0CC8A21E5 /* SettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSheet.swift; sourceTree = "<group>"; };
+		BF5E59F34B41FC8AE84602C5 /* BonjourBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BonjourBrowser.swift; sourceTree = "<group>"; };
+		DC3A589CDE74388F4CFBD17B /* RemoteSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSession.swift; sourceTree = "<group>"; };
+		F14604E7ABED5EE8E18741EF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		10F187D2D020CB06CD44269F /* ShellspaceLite */ = {
+			isa = PBXGroup;
+			children = (
+				63428B31958F38E5A2CFFCFE /* Assets.xcassets */,
+				F14604E7ABED5EE8E18741EF /* Info.plist */,
+				75D6351106FD5B2524F666DC /* ShellspaceLiteApp.swift */,
+				1B94B4DF2A50AF1CC0945194 /* Models */,
+				A1CF9C4EF562757A397A8EC9 /* Services */,
+				F5C3BBB54596266534C808AF /* Views */,
+			);
+			path = ShellspaceLite;
+			sourceTree = "<group>";
+		};
+		1B94B4DF2A50AF1CC0945194 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				295A107B8134072264131C64 /* RemoteProject.swift */,
+				DC3A589CDE74388F4CFBD17B /* RemoteSession.swift */,
+				236CCAE64EDBDEB59DF13D3C /* RemoteTaskFolder.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		6ECF927CFF5E4883D6C5AA3B = {
+			isa = PBXGroup;
+			children = (
+				10F187D2D020CB06CD44269F /* ShellspaceLite */,
+				985CDC5F5692EE7A45AF6673 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		985CDC5F5692EE7A45AF6673 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				6D7F645C61BE56783CA62BB1 /* ShellspaceLite.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A1CF9C4EF562757A397A8EC9 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				9D040F09620E8A6087FB0927 /* AppViewModel.swift */,
+				BF5E59F34B41FC8AE84602C5 /* BonjourBrowser.swift */,
+				705A1D0199C0D0026EA9407E /* RelayAuthManager.swift */,
+				1312EE9C66A4323CB6541FA0 /* ShellspaceAPI.swift */,
+				11608CB2CDF29EA378F25D27 /* SpeechService.swift */,
+				27D385D12EECBE35868E541C /* WebSocketManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		F5C3BBB54596266534C808AF /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				13E0592C8AFFF1887FCB0786 /* CreateSessionSheet.swift */,
+				1FED0C143F08E177ABD6D75B /* DevicePickerView.swift */,
+				A29F0FA6709B8B6A9CB2DB91 /* LiteSessionsView.swift */,
+				47939E098E7D58E0E35B4ED6 /* LoginView.swift */,
+				ABCBB1BF7C61C8A0CC8A21E5 /* SettingsSheet.swift */,
+				4D735C87E81C56ED17333773 /* TerminalView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		28ACC67F7D09B081F5B0B190 /* ShellspaceLite */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4D9F75FF2D936B5D99B706DA /* Build configuration list for PBXNativeTarget "ShellspaceLite" */;
+			buildPhases = (
+				88791CC195EDB882CB4F1448 /* Sources */,
+				D1F4D0DF108FF9E4EB2529B1 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ShellspaceLite;
+			packageProductDependencies = (
+			);
+			productName = ShellspaceLite;
+			productReference = 6D7F645C61BE56783CA62BB1 /* ShellspaceLite.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1E5DFBEC9FAC44DAA4CF5B07 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					28ACC67F7D09B081F5B0B190 = {
+						DevelopmentTeam = VCY2SG8342;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = D6C33778E1171E55B5A538A3 /* Build configuration list for PBXProject "ShellspaceLite" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 6ECF927CFF5E4883D6C5AA3B;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				28ACC67F7D09B081F5B0B190 /* ShellspaceLite */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D1F4D0DF108FF9E4EB2529B1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5F48B7ADEF159BBD3C94B64F /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		88791CC195EDB882CB4F1448 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8CAFD49BFD362B70BA610301 /* AppViewModel.swift in Sources */,
+				37CC5F2A7757CE9077436E66 /* BonjourBrowser.swift in Sources */,
+				7B621CFC23AADD51822D5C30 /* CreateSessionSheet.swift in Sources */,
+				05E42E793899DB156ED0B545 /* DevicePickerView.swift in Sources */,
+				3E3DD804B0DE1229137546EC /* LiteSessionsView.swift in Sources */,
+				0684B9107B733F08F922217B /* LoginView.swift in Sources */,
+				546ECF85A9851C33D6D1D8D9 /* RelayAuthManager.swift in Sources */,
+				259E3A2C1E56AB6F05186F5E /* RemoteProject.swift in Sources */,
+				E8F1B6D359216C7B09CFD5C6 /* RemoteSession.swift in Sources */,
+				055C5DA6E9BBB6C9F1C086EB /* RemoteTaskFolder.swift in Sources */,
+				4472662D9184BFFC688F1FBA /* SettingsSheet.swift in Sources */,
+				1BE37C832AEB5BE2860B040C /* ShellspaceAPI.swift in Sources */,
+				5C063D71BA02935085FB24C9 /* ShellspaceLiteApp.swift in Sources */,
+				02C5D5FD37F319F03F1D13F9 /* SpeechService.swift in Sources */,
+				D0B2E3F129AFE8017B20D65D /* TerminalView.swift in Sources */,
+				A9E019997FBCBDBFD97D3365 /* WebSocketManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		129CE394EDC524DDF9A4A26B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		64E5C03F81BF2F762AAD194D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		8D16F95A29F5AD05F0358B0E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = VCY2SG8342;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = ShellspaceLite/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Shellspace Lite";
+				INFOPLIST_KEY_CFBundleIconName = AppIcon;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Shellspace Lite uses your local network to automatically discover and connect to your Mac running Shellspace.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.buzzbox.shellspace-lite";
+				PRODUCT_NAME = "Shellspace Lite";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D8B3CAAC1BA7388F9ACEF50E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = VCY2SG8342;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = ShellspaceLite/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Shellspace Lite";
+				INFOPLIST_KEY_CFBundleIconName = AppIcon;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Shellspace Lite uses your local network to automatically discover and connect to your Mac running Shellspace.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.buzzbox.shellspace-lite";
+				PRODUCT_NAME = "Shellspace Lite";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4D9F75FF2D936B5D99B706DA /* Build configuration list for PBXNativeTarget "ShellspaceLite" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8D16F95A29F5AD05F0358B0E /* Debug */,
+				D8B3CAAC1BA7388F9ACEF50E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D6C33778E1171E55B5A538A3 /* Build configuration list for PBXProject "ShellspaceLite" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				129CE394EDC524DDF9A4A26B /* Debug */,
+				64E5C03F81BF2F762AAD194D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1E5DFBEC9FAC44DAA4CF5B07 /* Project object */;
+}
