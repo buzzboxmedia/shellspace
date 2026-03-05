@@ -5,7 +5,7 @@ struct ProjectsListView: View {
 
     private var groupedProjects: [(String, [RemoteProject])] {
         let categories = ["main": "Main Projects", "client": "Clients", "dev": "Development"]
-        let grouped = Dictionary(grouping: viewModel.projects) { $0.category }
+        let grouped = Dictionary(grouping: viewModel.visibleProjects) { $0.category }
         return ["main", "client", "dev"].compactMap { key in
             guard let projects = grouped[key], !projects.isEmpty else { return nil }
             return (categories[key] ?? key, projects)

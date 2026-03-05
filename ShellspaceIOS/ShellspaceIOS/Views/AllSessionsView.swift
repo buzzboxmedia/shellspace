@@ -10,7 +10,7 @@ struct AllSessionsView: View {
         let activeProjectPaths = Set(
             viewModel.allActiveSessions.map { $0.projectPath }
         )
-        return viewModel.projects
+        return viewModel.visibleProjects
             .filter { activeProjectPaths.contains($0.path) }
             .sorted { $0.name < $1.name }
     }

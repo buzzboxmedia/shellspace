@@ -84,6 +84,31 @@ struct SettingsSheet: View {
                     }
                 }
 
+                // MARK: - Visible Projects
+
+                if !viewModel.projects.isEmpty {
+                    Section {
+                        ForEach(viewModel.projects) { project in
+                            Toggle(isOn: Binding(
+                                get: { viewModel.isProjectVisible(project.id) },
+                                set: { _ in viewModel.toggleProjectVisibility(project.id) }
+                            )) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: project.icon)
+                                        .font(.body)
+                                        .foregroundStyle(.primary)
+                                        .frame(width: 24)
+                                    Text(project.name)
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("Visible Projects")
+                    } footer: {
+                        Text("Hidden projects won't appear anywhere in the app.")
+                    }
+                }
+
                 // MARK: - Account
 
                 Section("Account") {

@@ -14,7 +14,7 @@ struct BrowseView: View {
                 if !searchText.isEmpty {
                     SearchResultsView(
                         query: searchText,
-                        sessions: viewModel.allSessions,
+                        sessions: viewModel.visibleSessions,
                         onSelect: { session in
                             searchText = ""
                             isSearchActive = false

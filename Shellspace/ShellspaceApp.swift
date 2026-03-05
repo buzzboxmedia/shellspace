@@ -84,6 +84,12 @@ struct ShellspaceApp: App {
                         UserDefaults.standard.set(true, forKey: "deduplicatedProjectsByPath")
                     }
 
+                    // One-time migration: Add Pull Up project
+                    if !UserDefaults.standard.bool(forKey: "addedPullUpProject") {
+                        ProjectMigration.addPullUpProject(in: sharedModelContainer.mainContext)
+                        UserDefaults.standard.set(true, forKey: "addedPullUpProject")
+                    }
+
                     // Import projects from Dropbox (before session sync)
                     ProjectSyncService.shared.importProjects(into: sharedModelContainer.mainContext)
 
@@ -766,7 +772,8 @@ enum ProjectMigration {
             ("Miller", "\(dropboxPath)/Miller", "person.fill"),
             ("Talkspresso", "\(dropboxPath)/Talkspresso", "cup.and.saucer.fill"),
             ("Buzzbox", "\(dropboxPath)/Buzzbox", "shippingbox.fill"),
-            ("Shellspace", "\(dropboxPath)/Shellspace", "fossil.shell.fill")
+            ("Shellspace", "\(dropboxPath)/Shellspace", "fossil.shell.fill"),
+            ("Pull Up", "\(dropboxPath)/Pull Up", "arrow.up.circle.fill")
         ]
 
         // Client icon mapping
@@ -822,6 +829,30 @@ enum ProjectMigration {
 
         try? context.save()
         appLogger.info("Project migration complete - all projects now persisted")
+    }
+
+    /// Add Pull Up project if it exists on disk and isn't already in the database
+    static func addPullUpProject(in context: ModelContext) {
+        let newPath = NSString("~/Library/CloudStorage/Dropbox").expandingTildeInPath
+        let legacyPath = NSString("~/Dropbox").expandingTildeInPath
+        let dropboxPath = FileManager.default.fileExists(atPath: newPath) ? newPath : legacyPath
+        let pullUpPath = "\(dropboxPath)/Pull Up"
+
+        guard FileManager.default.fileExists(atPath: pullUpPath) else { return }
+
+        let descriptor = FetchDescriptor<Project>()
+        let existingPaths = Set((try? context.fetch(descriptor))?.map { $0.path } ?? [])
+        guard !existingPaths.contains(pullUpPath) else { return }
+
+        let project = Project(
+            name: "Pull Up",
+            path: pullUpPath,
+            icon: "arrow.up.circle.fill",
+            category: .main
+        )
+        context.insert(project)
+        try? context.save()
+        appLogger.info("Added Pull Up project")
     }
 
     /// Remove duplicate projects that share the same path, keeping the one with the most sessions

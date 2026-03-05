@@ -49,6 +49,43 @@ final class AppViewModel {
     var showSettings = false
     var lastRefreshed: Date?
 
+    // MARK: - Project Visibility Filter
+
+    /// Project IDs that are hidden. When empty, all projects are visible.
+    var hiddenProjectIds: Set<String> = {
+        let saved = UserDefaults.standard.stringArray(forKey: "hiddenProjectIds") ?? []
+        return Set(saved)
+    }() {
+        didSet {
+            UserDefaults.standard.set(Array(hiddenProjectIds), forKey: "hiddenProjectIds")
+        }
+    }
+
+    /// Projects filtered by visibility settings
+    var visibleProjects: [RemoteProject] {
+        if hiddenProjectIds.isEmpty { return projects }
+        return projects.filter { !hiddenProjectIds.contains($0.id) }
+    }
+
+    /// Sessions filtered to only include those from visible projects
+    var visibleSessions: [RemoteSession] {
+        if hiddenProjectIds.isEmpty { return allSessions }
+        let visiblePaths = Set(visibleProjects.map { $0.path })
+        return allSessions.filter { visiblePaths.contains($0.projectPath) }
+    }
+
+    func toggleProjectVisibility(_ projectId: String) {
+        if hiddenProjectIds.contains(projectId) {
+            hiddenProjectIds.remove(projectId)
+        } else {
+            hiddenProjectIds.insert(projectId)
+        }
+    }
+
+    func isProjectVisible(_ projectId: String) -> Bool {
+        !hiddenProjectIds.contains(projectId)
+    }
+
     // MARK: - Local Cache
 
     private static let cacheDir: URL = {
@@ -126,13 +163,13 @@ final class AppViewModel {
     }
 
     var waitingSessions: [RemoteSession] {
-        allSessions
+        visibleSessions
             .filter { $0.isWaitingForInput && !$0.isCompleted && !$0.isHidden }
             .sorted { $0.lastAccessedAt > $1.lastAccessedAt }
     }
 
     var allActiveSessions: [RemoteSession] {
-        allSessions
+        visibleSessions
             .filter { !$0.isCompleted && !$0.isHidden }
             .sorted { $0.lastAccessedAt > $1.lastAccessedAt }
     }
