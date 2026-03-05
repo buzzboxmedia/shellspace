@@ -494,14 +494,27 @@ class TaskImportService {
         // Clean up any duplicate sessions (same taskFolderPath)
         cleanupDuplicateSessions(for: project, modelContext: modelContext)
 
+        // Re-fetch project after deletions to avoid stale relationship faults.
+        // validateFilesystem and cleanupDuplicateSessions may delete sessions/groups,
+        // leaving the project's inverse relationships pointing at deleted objects.
+        // Accessing those faults during subsequent relationship assignments causes SIGABRT.
+        let projectId = project.id
+        let projectDescriptor = FetchDescriptor<Project>(
+            predicate: #Predicate<Project> { p in p.id == projectId }
+        )
+        guard let freshProject = (try? modelContext.fetch(projectDescriptor))?.first else {
+            logger.error("Failed to re-fetch project after cleanup: \(project.name)")
+            return 0
+        }
+
         // Auto-discover project groups from folder structure (BEFORE re-linking!)
-        discoverProjectGroups(for: project, modelContext: modelContext)
+        discoverProjectGroups(for: freshProject, modelContext: modelContext)
 
         // Re-link sessions that lost their group assignment (AFTER groups are discovered)
-        relinkSessionsToGroups(for: project, modelContext: modelContext)
+        relinkSessionsToGroups(for: freshProject, modelContext: modelContext)
 
         // Ensure all project groups have sessions
-        ensureProjectSessions(for: project, modelContext: modelContext)
+        ensureProjectSessions(for: freshProject, modelContext: modelContext)
 
         let tasksDir = taskFolderService.tasksDirectory(for: project.path)
 
