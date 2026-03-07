@@ -18,6 +18,8 @@ final class RelayAuth: @unchecked Sendable {
         static let deviceId = "relay_device_id"
         static let userId = "relay_user_id"
         static let connectionMode = "relay_connection_mode"
+        static let companionDeviceId = "relay_companion_device_id"
+        static let companionDeviceName = "relay_companion_device_name"
     }
 
     var email: String? {
@@ -62,11 +64,69 @@ final class RelayAuth: @unchecked Sendable {
         connectionMode == .relay
     }
 
+    var isCompanionMode: Bool {
+        connectionMode == .companion
+    }
+
+    // MARK: - Companion Mode (connect as tunnel client to another Mac)
+
+    var companionDeviceId: String? {
+        get { defaults.string(forKey: Keys.companionDeviceId) }
+        set { defaults.set(newValue, forKey: Keys.companionDeviceId) }
+    }
+
+    var companionDeviceName: String? {
+        get { defaults.string(forKey: Keys.companionDeviceName) }
+        set { defaults.set(newValue, forKey: Keys.companionDeviceName) }
+    }
+
     // MARK: - Connection Mode
 
     enum ConnectionMode: String {
-        case local  // Hummingbird local server (Tailscale/LAN)
-        case relay  // Outbound WebSocket to relay.shellspace.app
+        case local      // Hummingbird local server (Tailscale/LAN)
+        case relay      // Outbound WebSocket to relay.shellspace.app (HOST)
+        case companion  // Tunnel client to another Mac's relay (CLIENT)
+    }
+
+    // MARK: - Device Listing (for companion device picker)
+
+    struct RelayDevice: Codable, Identifiable {
+        let id: String
+        let name: String
+        let platform: String?
+        let online: Bool
+        let shared: Bool?
+    }
+
+    /// List devices available to this user (owned + shared)
+    func listDevices() async throws -> [RelayDevice] {
+        guard let token = accessToken else {
+            throw AuthError.notAuthenticated
+        }
+
+        let url = URL(string: "\(baseURL)/api/devices")!
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "Unknown error"
+            throw AuthError.serverError("List devices failed: \(body)")
+        }
+
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        // Response may be {devices: [...]} or [...]
+        if let wrapper = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let devicesArray = wrapper["devices"] {
+            let devicesData = try JSONSerialization.data(withJSONObject: devicesArray)
+            return try decoder.decode([RelayDevice].self, from: devicesData)
+        }
+
+        return try decoder.decode([RelayDevice].self, from: data)
     }
 
     // MARK: - Auth Errors

@@ -610,6 +610,8 @@ struct RelaySettingsSection: View {
     @State private var isLoggingIn = false
     @State private var loginError: String?
     @State private var showSignup = false
+    @State private var availableDevices: [RelayAuth.RelayDevice] = []
+    @State private var isLoadingDevices = false
 
     private var isAuthenticated: Bool {
         RelayAuth.shared.isAuthenticated
@@ -618,13 +620,13 @@ struct RelaySettingsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("REMOTE ACCESS")
+                Text("CONNECTION MODE")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
 
                 // Connection status indicator
-                if connectionMode == .relay {
+                if connectionMode == .relay || connectionMode == .companion {
                     HStack(spacing: 4) {
                         Circle()
                             .fill(statusColor)
@@ -640,16 +642,26 @@ struct RelaySettingsSection: View {
 
             // Mode toggle
             Picker("Mode", selection: $connectionMode) {
-                Text("Local (LAN/Tailscale)").tag(RelayAuth.ConnectionMode.local)
-                Text("Relay (Internet)").tag(RelayAuth.ConnectionMode.relay)
+                Text("Local").tag(RelayAuth.ConnectionMode.local)
+                Text("Host").tag(RelayAuth.ConnectionMode.relay)
+                Text("Companion").tag(RelayAuth.ConnectionMode.companion)
             }
             .pickerStyle(.segmented)
             .padding(.horizontal, 16)
             .onChange(of: connectionMode) { _, newValue in
                 RelayAuth.shared.connectionMode = newValue
+                if newValue == .companion && isAuthenticated {
+                    loadDevices()
+                }
             }
 
-            if connectionMode == .relay {
+            // Mode description
+            Text(modeDescription)
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 16)
+
+            if connectionMode == .relay || connectionMode == .companion {
                 if isAuthenticated {
                     // Logged in state
                     HStack {
@@ -663,12 +675,18 @@ struct RelaySettingsSection: View {
                             RelayAuth.shared.logout()
                             email = ""
                             password = ""
+                            availableDevices = []
                         }
                         .font(.system(size: 12))
                         .buttonStyle(.plain)
                         .foregroundStyle(.red)
                     }
                     .padding(.horizontal, 16)
+
+                    // Device picker (companion mode only)
+                    if connectionMode == .companion {
+                        companionDevicePicker
+                    }
                 } else {
                     // Login form
                     VStack(spacing: 6) {
@@ -710,6 +728,118 @@ struct RelaySettingsSection: View {
                     .padding(.horizontal, 16)
                 }
             }
+
+            // Restart notice
+            if connectionMode != RelayAuth.shared.connectionMode {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.system(size: 11))
+                    Text("Restart Shellspace to apply")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+    }
+
+    private var modeDescription: String {
+        switch connectionMode {
+        case .local:
+            return "Direct connection via LAN or Tailscale"
+        case .relay:
+            return "Host mode - share sessions with iOS and other Macs"
+        case .companion:
+            return "View sessions from another Mac running Shellspace"
+        }
+    }
+
+    // MARK: - Companion Device Picker
+
+    private var companionDevicePicker: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Connect to:")
+                    .font(.system(size: 13, weight: .medium))
+                Spacer()
+                if isLoadingDevices {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                }
+                Button(action: loadDevices) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain)
+            }
+
+            if availableDevices.isEmpty && !isLoadingDevices {
+                Text("No devices found. Make sure the host Mac has Shellspace in Host mode.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+            }
+
+            ForEach(availableDevices.filter { $0.id != RelayAuth.shared.deviceId }) { device in
+                Button {
+                    selectCompanionDevice(device)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: device.platform == "macos" ? "desktopcomputer" : "iphone")
+                            .font(.system(size: 14))
+                            .foregroundStyle(device.online ? .green : .secondary)
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(device.name)
+                                .font(.system(size: 13))
+                            Text(device.online ? "Online" : "Offline")
+                                .font(.system(size: 10))
+                                .foregroundStyle(device.online ? .green : .secondary)
+                        }
+
+                        Spacer()
+
+                        if RelayAuth.shared.companionDeviceId == device.id {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(RelayAuth.shared.companionDeviceId == device.id
+                                  ? Color.accentColor.opacity(0.1)
+                                  : Color.clear)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 16)
+        .onAppear { loadDevices() }
+    }
+
+    private func selectCompanionDevice(_ device: RelayAuth.RelayDevice) {
+        RelayAuth.shared.companionDeviceId = device.id
+        RelayAuth.shared.companionDeviceName = device.name
+    }
+
+    private func loadDevices() {
+        isLoadingDevices = true
+        Task {
+            do {
+                let devices = try await RelayAuth.shared.listDevices()
+                await MainActor.run {
+                    availableDevices = devices
+                    isLoadingDevices = false
+                }
+            } catch {
+                await MainActor.run {
+                    isLoadingDevices = false
+                    loginError = error.localizedDescription
+                }
+            }
         }
     }
 
@@ -746,6 +876,9 @@ struct RelaySettingsSection: View {
                     isLoggingIn = false
                     loginError = nil
                     password = ""
+                    if connectionMode == .companion {
+                        loadDevices()
+                    }
                 }
             } catch {
                 await MainActor.run {

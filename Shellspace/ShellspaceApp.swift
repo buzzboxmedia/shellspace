@@ -36,6 +36,7 @@ struct ShellspaceApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     private let remoteServer = RemoteServer()
     private let relayClient = RelayClient()
+    private let companionClient = CompanionClient()
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -81,7 +82,7 @@ struct ShellspaceApp: App {
 
     var body: some Scene {
         WindowGroup {
-            WindowContainer()
+            WindowContainer(companionClient: companionClient)
                 .environmentObject(appState)
                 .onAppear {
                     DebugLog.clear()
@@ -139,8 +140,11 @@ struct ShellspaceApp: App {
                     // Enable session sync
                     SessionSyncService.shared.isEnabled = true
 
-                    // Start remote access for iOS companion app
-                    if RelayAuth.shared.isRelayMode && RelayAuth.shared.isAuthenticated {
+                    // Start remote access (host mode) or companion tunnel (companion mode)
+                    if RelayAuth.shared.isCompanionMode && RelayAuth.shared.isAuthenticated {
+                        companionClient.connect()
+                        DebugLog.log("[App] Started companion client (tunnel to host)")
+                    } else if RelayAuth.shared.isRelayMode && RelayAuth.shared.isAuthenticated {
                         relayClient.connect(appState: appState, modelContainer: sharedModelContainer)
                         DebugLog.log("[App] Started relay client (outbound WebSocket)")
                     } else {
@@ -716,15 +720,21 @@ struct WindowContainer: View {
     @EnvironmentObject var appState: AppState
     @State private var windowId = UUID()
     @StateObject private var windowState = WindowState()
+    var companionClient: CompanionClient
 
     var body: some View {
-        WindowContent()
-            .environmentObject(windowState)
-            .frame(minWidth: 520, minHeight: 500)
-            .onDisappear {
-                // Clean up window state when window closes
-                appState.removeWindowState(for: windowId)
-            }
+        if RelayAuth.shared.isCompanionMode {
+            CompanionLauncherView(client: companionClient)
+                .frame(minWidth: 520, minHeight: 500)
+        } else {
+            WindowContent()
+                .environmentObject(windowState)
+                .frame(minWidth: 520, minHeight: 500)
+                .onDisappear {
+                    // Clean up window state when window closes
+                    appState.removeWindowState(for: windowId)
+                }
+        }
     }
 }
 
