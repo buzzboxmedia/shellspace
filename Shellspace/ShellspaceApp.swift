@@ -138,12 +138,11 @@ struct ShellspaceApp: App {
                     if RelayAuth.shared.isCompanionMode {
                         // Clear stale local data — relay will repopulate via CompanionClient
                         let ctx = sharedModelContainer.mainContext
-                        let sessions = (try? ctx.fetch(FetchDescriptor<Session>())) ?? []
-                        for s in sessions { ctx.delete(s) }
-                        let projects = (try? ctx.fetch(FetchDescriptor<Project>())) ?? []
-                        for p in projects { ctx.delete(p) }
+                        let oldSessions = (try? ctx.fetch(FetchDescriptor<Session>())) ?? []
+                        for s in oldSessions { ctx.delete(s) }
+                        let oldProjects = (try? ctx.fetch(FetchDescriptor<Project>())) ?? []
+                        for p in oldProjects { ctx.delete(p) }
                         try? ctx.save()
-                        // Clear restored project so we start on the launcher
                         UserDefaults.standard.removeObject(forKey: "lastSelectedProjectPath")
                         DebugLog.log("[App] Companion mode: cleared local SwiftData store")
                     } else {
