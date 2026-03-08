@@ -82,9 +82,15 @@ struct WorkspaceView: View {
             // Terminal pane - shows embedded SwiftTerm when a session is active
             let _ = DebugLog.log("[WorkspaceView] body: project=\(project.name), activeSession=\(windowState.activeSession?.name ?? "NIL"), hasBeenLaunched=\(windowState.activeSession?.hasBeenLaunched == true)")
             if let activeSession = windowState.activeSession, activeSession.hasBeenLaunched {
-                TerminalView(session: activeSession)
-                    .id(activeSession.id)  // Force new view identity per session — prevents @State leaking across session switches
-                    .frame(minWidth: 400)
+                if RelayAuth.shared.isCompanionMode, let client = appState.companionClient {
+                    CompanionTerminalView(session: activeSession, client: client)
+                        .id(activeSession.id)
+                        .frame(minWidth: 400)
+                } else {
+                    TerminalView(session: activeSession)
+                        .id(activeSession.id)  // Force new view identity per session — prevents @State leaking across session switches
+                        .frame(minWidth: 400)
+                }
             } else {
                 // Empty state when no session is launched
                 VStack(spacing: 16) {

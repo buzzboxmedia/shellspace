@@ -85,7 +85,7 @@ struct LauncherView: View {
         for session in allSessions {
             guard !session.isCompleted else { continue }
 
-            let isRunning = appState.terminalControllers[session.id]?.terminalView?.process?.running == true
+            let isRunning = appState.isSessionRunning(session.id)
             let isWaiting = session.isWaitingForInput && !session.isHidden
 
             // Must be either waiting or running to appear
@@ -778,7 +778,7 @@ struct ProjectCard: View {
     @State private var showEditProject = false
 
     var runningCount: Int {
-        project.sessions.filter { appState.terminalControllers[$0.id]?.terminalView?.process?.running == true }.count
+        project.sessions.filter { appState.isSessionRunning($0.id) }.count
     }
 
     var body: some View {

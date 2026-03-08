@@ -3,10 +3,14 @@ import SwiftUI
 /// Read-only terminal viewer for companion mode.
 /// Shows terminal content streamed from the host Mac via relay.
 struct CompanionTerminalView: View {
-    let session: RemoteSession
+    let session: Session
     @Bindable var client: CompanionClient
     @State private var inputText = ""
     @FocusState private var inputFocused: Bool
+
+    private var projectName: String {
+        session.project?.name ?? session.activeProjectName ?? ""
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,7 +25,7 @@ struct CompanionTerminalView: View {
                         .padding(12)
                         .id("terminal-bottom")
                 }
-                .background(Color.black)
+                .background(Color(NSColor(calibratedRed: 0.1, green: 0.1, blue: 0.11, alpha: 1.0)))
                 .onChange(of: client.terminalContent) {
                     withAnimation(.none) {
                         proxy.scrollTo("terminal-bottom", anchor: .bottom)
@@ -42,7 +46,7 @@ struct CompanionTerminalView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Spacer()
-                    Text(session.projectName)
+                    Text(projectName)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -80,7 +84,7 @@ struct CompanionTerminalView: View {
             .background(.ultraThinMaterial)
         }
         .onAppear {
-            client.subscribeTerminal(sessionId: session.id)
+            client.subscribeTerminal(sessionId: session.id.uuidString)
             inputFocused = true
         }
         .onDisappear {
@@ -103,7 +107,7 @@ struct CompanionTerminalView: View {
     private func sendInput() {
         let text = inputText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
-        _ = client.sendInput(sessionId: session.id, message: text + "\n")
+        _ = client.sendInput(sessionId: session.id.uuidString, message: text + "\n")
         inputText = ""
     }
 }

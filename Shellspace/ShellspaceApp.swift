@@ -82,7 +82,7 @@ struct ShellspaceApp: App {
 
     var body: some Scene {
         WindowGroup {
-            WindowContainer(companionClient: companionClient)
+            WindowContainer()
                 .environmentObject(appState)
                 .onAppear {
                     DebugLog.clear()
@@ -134,15 +134,19 @@ struct ShellspaceApp: App {
                     }
 
                     // Import projects from Dropbox (before session sync)
-                    ProjectSyncService.shared.importProjects(into: sharedModelContainer.mainContext)
-                    try? sharedModelContainer.mainContext.save()
+                    // Skip in companion mode — data comes from relay, not local filesystem
+                    if !RelayAuth.shared.isCompanionMode {
+                        ProjectSyncService.shared.importProjects(into: sharedModelContainer.mainContext)
+                        try? sharedModelContainer.mainContext.save()
 
-                    // Enable session sync
-                    SessionSyncService.shared.isEnabled = true
+                        // Enable session sync
+                        SessionSyncService.shared.isEnabled = true
+                    }
 
                     // Start remote access (host mode) or companion tunnel (companion mode)
                     if RelayAuth.shared.isCompanionMode && RelayAuth.shared.isAuthenticated {
-                        companionClient.connect()
+                        appState.companionClient = companionClient
+                        companionClient.connect(appState: appState, modelContainer: sharedModelContainer)
                         DebugLog.log("[App] Started companion client (tunnel to host)")
                     } else if RelayAuth.shared.isRelayMode && RelayAuth.shared.isAuthenticated {
                         relayClient.connect(appState: appState, modelContainer: sharedModelContainer)
@@ -490,6 +494,12 @@ class AppState: ObservableObject {
     /// Relay connection status (for UI indicator)
     @Published var relayConnectionState: RelayClient.ConnectionState = .disconnected
 
+    /// Companion client reference (for companion mode views)
+    var companionClient: CompanionClient?
+
+    /// Running session IDs from companion mode (relay data)
+    @Published var companionRunningSessionIds: Set<UUID> = []
+
     /// OS-level Claude processes not managed by any TerminalController
     @Published var orphanProcesses: [OrphanClaudeProcess] = []
 
@@ -527,6 +537,14 @@ class AppState: ObservableObject {
         if let controller = terminalControllers.removeValue(forKey: session.id) {
             controller.stopIdleDetection()
         }
+    }
+
+    /// Check if a session is running (works in both local and companion mode)
+    func isSessionRunning(_ id: UUID) -> Bool {
+        if terminalControllers[id]?.terminalView?.process?.running == true {
+            return true
+        }
+        return companionRunningSessionIds.contains(id)
     }
 
     // MARK: - Session Launch Tracking
@@ -720,21 +738,14 @@ struct WindowContainer: View {
     @EnvironmentObject var appState: AppState
     @State private var windowId = UUID()
     @StateObject private var windowState = WindowState()
-    var companionClient: CompanionClient
-
     var body: some View {
-        if RelayAuth.shared.isCompanionMode {
-            CompanionLauncherView(client: companionClient)
-                .frame(minWidth: 520, minHeight: 500)
-        } else {
-            WindowContent()
-                .environmentObject(windowState)
-                .frame(minWidth: 520, minHeight: 500)
-                .onDisappear {
-                    // Clean up window state when window closes
-                    appState.removeWindowState(for: windowId)
-                }
-        }
+        WindowContent()
+            .environmentObject(windowState)
+            .frame(minWidth: 520, minHeight: 500)
+            .onDisappear {
+                // Clean up window state when window closes
+                appState.removeWindowState(for: windowId)
+            }
     }
 }
 

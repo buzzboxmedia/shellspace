@@ -1,11 +1,12 @@
 import Foundation
+import SwiftData
 import UserNotifications
 import os.log
 
 private let logger = Logger(subsystem: "com.buzzbox.shellspace", category: "CompanionClient")
 
 /// Connects this Mac as a tunnel client to another Mac's Shellspace instance
-/// via the relay server. Same protocol as the iOS Lite app.
+/// via the relay server. Syncs relay data into SwiftData so regular views work.
 @Observable
 final class CompanionClient {
     enum State: Equatable {
@@ -19,17 +20,21 @@ final class CompanionClient {
 
     var tunnelState: State = .disconnected
 
-    // MARK: - State received from host Mac via tunnel
+    // MARK: - Running session tracking (from relay terminal updates)
 
-    var sessions: [RemoteSession] = []
-    var projects: [RemoteProject] = []
+    var runningSessionIds: Set<UUID> = []
 
-    // MARK: - Terminal stream
+    // MARK: - Terminal stream (for active viewing)
 
     var terminalContent: String = ""
     var terminalIsRunning: Bool = false
     var terminalIsWaiting: Bool = false
     var activeTerminalSessionId: String?
+
+    // MARK: - References
+
+    private weak var appState: AppState?
+    private var modelContainer: ModelContainer?
 
     // MARK: - Private
 
@@ -38,29 +43,16 @@ final class CompanionClient {
     private var tokenRefreshTask: Task<Void, Never>?
     private var activeSocket: URLSessionWebSocketTask?
 
-    private var previouslyWaiting: Set<String> = []
+    private var previouslyWaiting: Set<UUID> = []
 
-    private static let decoder: JSONDecoder = {
-        let d = JSONDecoder()
-        d.keyDecodingStrategy = .convertFromSnakeCase
-        return d
-    }()
-
-    // MARK: - Cache
-
-    private static let cacheDir: URL = {
-        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-    }()
-    private static let projectsCacheURL = cacheDir.appendingPathComponent("companion_projects.json")
-    private static let sessionsCacheURL = cacheDir.appendingPathComponent("companion_sessions.json")
-
-    init() {
-        loadCachedData()
-    }
+    init() {}
 
     // MARK: - Connect / Disconnect
 
-    func connect() {
+    func connect(appState: AppState, modelContainer: ModelContainer) {
+        self.appState = appState
+        self.modelContainer = modelContainer
+
         guard let deviceId = RelayAuth.shared.companionDeviceId,
               let token = RelayAuth.shared.accessToken else {
             logger.error("Cannot connect: no companion device or access token")
@@ -259,48 +251,125 @@ final class CompanionClient {
         }
     }
 
+    // MARK: - SwiftData Sync
+
     private func handleStateUpdate(_ json: [String: Any]) async {
-        if let projectsArray = json["projects"] {
-            do {
-                let projectsData = try JSONSerialization.data(withJSONObject: projectsArray)
-                let decoded = try Self.decoder.decode([RemoteProject].self, from: projectsData)
-                await MainActor.run { self.projects = decoded }
-                logger.info("State update: \(decoded.count) projects")
-            } catch {
-                logger.error("Projects decode error: \(error.localizedDescription)")
-            }
+        if let projectsArray = json["projects"] as? [[String: Any]] {
+            await syncProjects(projectsArray)
         }
-
-        if let sessionsArray = json["sessions"] {
-            do {
-                let sessionsData = try JSONSerialization.data(withJSONObject: sessionsArray)
-                let decoded = try Self.decoder.decode([RemoteSession].self, from: sessionsData)
-                await MainActor.run {
-                    self.sessions = decoded
-                    self.checkForNewWaitingSessions(decoded)
-                }
-                logger.info("State update: \(decoded.count) sessions")
-            } catch {
-                logger.error("Sessions decode error: \(error.localizedDescription)")
-            }
+        if let sessionsArray = json["sessions"] as? [[String: Any]] {
+            await syncSessions(sessionsArray)
         }
-
-        saveCache()
     }
 
     private func handleSessionsUpdate(_ json: [String: Any]) async {
-        guard let sessionsArray = json["sessions"] else { return }
-        do {
-            let sessionsData = try JSONSerialization.data(withJSONObject: sessionsArray)
-            let decoded = try Self.decoder.decode([RemoteSession].self, from: sessionsData)
-            await MainActor.run {
-                self.sessions = decoded
-                self.checkForNewWaitingSessions(decoded)
+        guard let sessionsArray = json["sessions"] as? [[String: Any]] else { return }
+        await syncSessions(sessionsArray)
+    }
+
+    @MainActor
+    private func syncProjects(_ projectsArray: [[String: Any]]) {
+        guard let container = modelContainer else { return }
+        let context = container.mainContext
+
+        for proj in projectsArray {
+            guard let idStr = proj["id"] as? String,
+                  let uuid = UUID(uuidString: idStr),
+                  let name = proj["name"] as? String,
+                  let path = proj["path"] as? String else { continue }
+
+            let icon = proj["icon"] as? String ?? "folder"
+            let categoryRaw = proj["category"] as? String ?? "main"
+            let category = ProjectCategory(rawValue: categoryRaw) ?? .main
+
+            // Find existing project by ID
+            let descriptor = FetchDescriptor<Project>(predicate: #Predicate<Project> { p in p.id == uuid })
+            if let existing = (try? context.fetch(descriptor))?.first {
+                existing.name = name
+                existing.icon = icon
+            } else {
+                let project = Project(name: name, path: path, icon: icon, category: category)
+                project.id = uuid
+                context.insert(project)
             }
-        } catch {
-            logger.error("Sessions update decode error: \(error.localizedDescription)")
         }
-        saveCache()
+
+        try? context.save()
+        logger.info("Synced \(projectsArray.count) projects to SwiftData")
+    }
+
+    @MainActor
+    private func syncSessions(_ sessionsArray: [[String: Any]]) {
+        guard let container = modelContainer else { return }
+        let context = container.mainContext
+        let isoFormatter = ISO8601DateFormatter()
+
+        var newRunningIds: Set<UUID> = []
+
+        for sess in sessionsArray {
+            guard let idStr = sess["id"] as? String,
+                  let uuid = UUID(uuidString: idStr),
+                  let name = sess["name"] as? String,
+                  let projectPath = sess["project_path"] as? String else { continue }
+
+            let isRunning = sess["is_running"] as? Bool ?? false
+            let isWaiting = sess["is_waiting_for_input"] as? Bool ?? false
+            let isCompleted = sess["is_completed"] as? Bool ?? false
+            let isHidden = sess["is_hidden"] as? Bool ?? false
+            let hasBeenLaunched = sess["has_been_launched"] as? Bool ?? true
+
+            if isRunning { newRunningIds.insert(uuid) }
+
+            // Find existing session by ID
+            var descriptor = FetchDescriptor<Session>(predicate: #Predicate<Session> { s in s.id == uuid })
+            descriptor.fetchLimit = 1
+
+            if let existing = (try? context.fetch(descriptor))?.first {
+                existing.name = name
+                existing.isWaitingForInput = isWaiting
+                existing.isCompleted = isCompleted
+                existing.isHidden = isHidden
+                existing.hasBeenLaunched = hasBeenLaunched
+                if let summary = sess["summary"] as? String { existing.lastSessionSummary = summary }
+                if let briefing = sess["parker_briefing"] as? String { existing.parkerBriefing = briefing }
+                if let accessedStr = sess["last_accessed_at"] as? String,
+                   let date = isoFormatter.date(from: accessedStr) {
+                    existing.lastAccessedAt = date
+                }
+            } else {
+                let session = Session(name: name, projectPath: projectPath)
+                session.id = uuid
+                session.isWaitingForInput = isWaiting
+                session.isCompleted = isCompleted
+                session.isHidden = isHidden
+                session.hasBeenLaunched = hasBeenLaunched
+                if let summary = sess["summary"] as? String { session.lastSessionSummary = summary }
+                if let briefing = sess["parker_briefing"] as? String { session.parkerBriefing = briefing }
+                if let taskFolder = sess["task_folder_path"] as? String { session.taskFolderPath = taskFolder }
+                if let createdStr = sess["created_at"] as? String {
+                    session.createdAt = isoFormatter.date(from: createdStr) ?? Date()
+                }
+                if let accessedStr = sess["last_accessed_at"] as? String {
+                    session.lastAccessedAt = isoFormatter.date(from: accessedStr) ?? Date()
+                }
+                context.insert(session)
+
+                // Link to project
+                let projectDescriptor = FetchDescriptor<Project>(predicate: #Predicate<Project> { p in p.path == projectPath })
+                if let project = (try? context.fetch(projectDescriptor))?.first {
+                    session.project = project
+                }
+            }
+        }
+
+        runningSessionIds = newRunningIds
+        appState?.companionRunningSessionIds = newRunningIds
+        try? context.save()
+
+        // Check for new waiting sessions (notifications)
+        checkForNewWaitingSessions(context: context)
+
+        logger.info("Synced \(sessionsArray.count) sessions to SwiftData (\(newRunningIds.count) running)")
     }
 
     private func handleTerminalUpdate(_ json: [String: Any]) async {
@@ -320,28 +389,27 @@ final class CompanionClient {
 
     // MARK: - Notifications
 
-    private func checkForNewWaitingSessions(_ sessions: [RemoteSession]) {
-        let nowWaiting = Set(
-            sessions
-                .filter { $0.isWaitingForInput && !$0.isCompleted && !$0.isHidden }
-                .map(\.id)
-        )
+    @MainActor
+    private func checkForNewWaitingSessions(context: ModelContext) {
+        let descriptor = FetchDescriptor<Session>(predicate: #Predicate<Session> { s in
+            s.isWaitingForInput && !s.isCompleted && !s.isHidden
+        })
+        let waitingSessions = (try? context.fetch(descriptor)) ?? []
+        let nowWaiting = Set(waitingSessions.map(\.id))
 
         let newlyWaiting = nowWaiting.subtracting(previouslyWaiting)
         previouslyWaiting = nowWaiting
 
-        for sessionId in newlyWaiting {
-            let session = sessions.first { $0.id == sessionId }
-            let sessionName = session?.name ?? "A session"
-            let projectName = session?.projectName ?? ""
-
+        for session in waitingSessions where newlyWaiting.contains(session.id) {
             let content = UNMutableNotificationContent()
             content.title = "Waiting for input"
-            content.body = projectName.isEmpty ? sessionName : "\(projectName) — \(sessionName)"
+            content.body = session.project?.name.isEmpty == false
+                ? "\(session.project!.name) — \(session.name)"
+                : session.name
             content.sound = .default
 
             let request = UNNotificationRequest(
-                identifier: "companion-waiting-\(sessionId)",
+                identifier: "companion-waiting-\(session.id.uuidString)",
                 content: content,
                 trigger: nil
             )
@@ -373,35 +441,12 @@ final class CompanionClient {
 
             do {
                 try await RelayAuth.shared.refreshAccessToken()
-                logger.info("Proactive token refresh succeeded, reconnecting")
-                activeSocket?.cancel(with: .goingAway, reason: nil)
+                logger.info("Proactive token refresh succeeded (stored for next reconnect)")
+                // Don't cancel the socket — the token is only used during
+                // the WebSocket upgrade handshake. Existing connection is fine.
             } catch {
                 logger.warning("Proactive token refresh failed: \(error.localizedDescription)")
             }
-        }
-    }
-
-    // MARK: - Cache
-
-    private func loadCachedData() {
-        let decoder = JSONDecoder()
-        if let data = try? Data(contentsOf: Self.projectsCacheURL),
-           let cached = try? decoder.decode([RemoteProject].self, from: data) {
-            projects = cached
-        }
-        if let data = try? Data(contentsOf: Self.sessionsCacheURL),
-           let cached = try? decoder.decode([RemoteSession].self, from: data) {
-            sessions = cached
-        }
-    }
-
-    private func saveCache() {
-        let encoder = JSONEncoder()
-        if let data = try? encoder.encode(projects) {
-            try? data.write(to: Self.projectsCacheURL)
-        }
-        if let data = try? encoder.encode(sessions) {
-            try? data.write(to: Self.sessionsCacheURL)
         }
     }
 }
