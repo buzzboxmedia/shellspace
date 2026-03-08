@@ -250,6 +250,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.buzzbox.shellspace-ios";
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -402,6 +404,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.buzzbox.shellspace-ios";
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;

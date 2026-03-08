@@ -189,7 +189,7 @@ struct TerminalView: View {
                 TextField("Send to terminal...", text: $inputText, axis: .vertical)
                     .font(.body)
                     .foregroundStyle(.white)
-                    .lineLimit(1...5)
+                    .lineLimit(3...8)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
                     .background(Color(white: 0.2))
