@@ -603,17 +603,24 @@ final class RelayClient: @unchecked Sendable {
         }
 
         let contentHash = content.hashValue
-        let prevHash = lastTerminalHashes[sessionId]
-        let prevRunning = lastRunningStates[sessionId]
-        let prevWaiting = lastWaitingStates[sessionId]
 
-        guard force || contentHash != prevHash || isRunning != prevRunning || isWaiting != prevWaiting else {
-            return
+        // Dictionary access must happen on MainActor to avoid data race with tearDown()
+        let shouldSend = await MainActor.run {
+            let prevHash = lastTerminalHashes[sessionId]
+            let prevRunning = lastRunningStates[sessionId]
+            let prevWaiting = lastWaitingStates[sessionId]
+
+            guard force || contentHash != prevHash || isRunning != prevRunning || isWaiting != prevWaiting else {
+                return false
+            }
+
+            lastTerminalHashes[sessionId] = contentHash
+            lastRunningStates[sessionId] = isRunning
+            lastWaitingStates[sessionId] = isWaiting
+            return true
         }
 
-        lastTerminalHashes[sessionId] = contentHash
-        lastRunningStates[sessionId] = isRunning
-        lastWaitingStates[sessionId] = isWaiting
+        guard shouldSend else { return }
 
         await sendMessage([
             "type": "terminal_update",
@@ -634,17 +641,24 @@ final class RelayClient: @unchecked Sendable {
         }
 
         let contentHash = content.hashValue
-        let prevHash = lastTerminalHashes[sessionId]
-        let prevRunning = lastRunningStates[sessionId]
-        let prevWaiting = lastWaitingStates[sessionId]
 
-        guard force || contentHash != prevHash || isRunning != prevRunning || isWaiting != prevWaiting else {
-            return
+        // Dictionary access must happen on MainActor to avoid data race with tearDown()
+        let shouldSend = await MainActor.run {
+            let prevHash = lastTerminalHashes[sessionId]
+            let prevRunning = lastRunningStates[sessionId]
+            let prevWaiting = lastWaitingStates[sessionId]
+
+            guard force || contentHash != prevHash || isRunning != prevRunning || isWaiting != prevWaiting else {
+                return false
+            }
+
+            lastTerminalHashes[sessionId] = contentHash
+            lastRunningStates[sessionId] = isRunning
+            lastWaitingStates[sessionId] = isWaiting
+            return true
         }
 
-        lastTerminalHashes[sessionId] = contentHash
-        lastRunningStates[sessionId] = isRunning
-        lastWaitingStates[sessionId] = isWaiting
+        guard shouldSend else { return }
 
         await sendMessage([
             "type": "terminal_update",
@@ -843,10 +857,11 @@ final class RelayClient: @unchecked Sendable {
             do {
                 try await RelayAuth.shared.refreshAccessToken()
                 await MainActor.run {
-                    DebugLog.log("[RelayClient] Token refreshed, reconnecting with new token")
-                    self.tearDown()
-                    self.startConnection()
+                    DebugLog.log("[RelayClient] Token refreshed (stored for next reconnect)")
                 }
+                // Don't tear down the existing connection — the token is only used
+                // during the WebSocket upgrade handshake. The current connection is
+                // fine; the fresh token will be used on the next reconnect.
             } catch {
                 await MainActor.run {
                     DebugLog.log("[RelayClient] Proactive token refresh failed: \(error)")
