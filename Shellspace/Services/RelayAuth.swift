@@ -292,9 +292,10 @@ final class RelayAuth: @unchecked Sendable {
         }
 
         guard httpResponse.statusCode == 200 else {
-            // Refresh failed - clear credentials
-            DebugLog.log("[RelayAuth] Token refresh failed (\(httpResponse.statusCode)), clearing credentials")
-            logout()
+            // Refresh failed - only clear the access token, NOT the refresh token or deviceId.
+            // A transient server error or race condition shouldn't require full re-login.
+            DebugLog.log("[RelayAuth] Token refresh failed (\(httpResponse.statusCode)), clearing access token only")
+            self.accessToken = nil
             return false
         }
 
