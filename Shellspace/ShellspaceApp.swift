@@ -135,7 +135,18 @@ struct ShellspaceApp: App {
 
                     // Import projects from Dropbox (before session sync)
                     // Skip in companion mode — data comes from relay, not local filesystem
-                    if !RelayAuth.shared.isCompanionMode {
+                    if RelayAuth.shared.isCompanionMode {
+                        // Clear stale local data — relay will repopulate via CompanionClient
+                        let ctx = sharedModelContainer.mainContext
+                        let sessions = (try? ctx.fetch(FetchDescriptor<Session>())) ?? []
+                        for s in sessions { ctx.delete(s) }
+                        let projects = (try? ctx.fetch(FetchDescriptor<Project>())) ?? []
+                        for p in projects { ctx.delete(p) }
+                        try? ctx.save()
+                        // Clear restored project so we start on the launcher
+                        UserDefaults.standard.removeObject(forKey: "lastSelectedProjectPath")
+                        DebugLog.log("[App] Companion mode: cleared local SwiftData store")
+                    } else {
                         ProjectSyncService.shared.importProjects(into: sharedModelContainer.mainContext)
                         try? sharedModelContainer.mainContext.save()
 
