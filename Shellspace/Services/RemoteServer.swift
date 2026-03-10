@@ -408,7 +408,10 @@ final class RemoteServer: @unchecked Sendable {
             return projects
                 .filter { CompanionSharing.isShared($0.id.uuidString) }
                 .map { project in
-                    let activeSessions = project.sessions.filter { !$0.isCompleted && !$0.isHidden }
+                    let activeSessions = project.sessions.filter { session in
+                        !session.isCompleted && !session.isHidden &&
+                        self.appState?.terminalControllers[session.id]?.terminalView?.process?.running == true
+                    }
                     let waitingSessions = activeSessions.filter { $0.isWaitingForInput }
                     return [
                         "id": project.id.uuidString,

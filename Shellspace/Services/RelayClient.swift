@@ -760,8 +760,11 @@ final class RelayClient: @unchecked Sendable {
 
             let filteredPaths = Set(filteredProjects.map { $0.path })
 
-            let projectsList = filteredProjects.map { project -> [String: Any] in
-                let activeSessions = project.sessions.filter { !$0.isHidden && !$0.isCompleted }
+            let projectsList = filteredProjects.map { [weak self] project -> [String: Any] in
+                let activeSessions = project.sessions.filter { session in
+                    !session.isHidden && !session.isCompleted &&
+                    self?.appState?.terminalControllers[session.id]?.terminalView?.process?.running == true
+                }
                 let waitingSessions = activeSessions.filter { $0.isWaitingForInput }
                 return [
                     "id": project.id.uuidString,
