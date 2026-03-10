@@ -23,13 +23,13 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
-        INFOPLIST_KEY_CFBundleDisplayName: "Shellspace Lite"
-        PRODUCT_BUNDLE_IDENTIFIER: com.buzzbox.shellspace-lite
-        PRODUCT_NAME: "Shellspace Lite"
+        INFOPLIST_KEY_CFBundleDisplayName: "Pull Up Dev"
+        PRODUCT_BUNDLE_IDENTIFIER: com.buzzbox.pullup-dev
+        PRODUCT_NAME: "Pull Up Dev"
         DEVELOPMENT_TEAM: VCY2SG8342
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleIconName: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ENABLE_PREVIEWS: YES
-        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Shellspace Lite uses your local network to automatically discover and connect to your Mac running Shellspace."
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Pull Up Dev uses your local network to connect to your Mac running Shellspace."

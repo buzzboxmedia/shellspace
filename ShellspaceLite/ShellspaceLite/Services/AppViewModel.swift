@@ -60,7 +60,7 @@ final class AppViewModel {
         if projects.count == 1 {
             return projects.first?.name ?? "Shellspace"
         }
-        return "Shellspace"
+        return "Pull Up Dev"
     }
 
     /// All visible sessions (already filtered by server per user assignments)

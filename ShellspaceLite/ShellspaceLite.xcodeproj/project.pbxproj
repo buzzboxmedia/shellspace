@@ -342,9 +342,9 @@
 				DEVELOPMENT_TEAM = VCY2SG8342;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = ShellspaceLite/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Shellspace Lite";
+				INFOPLIST_KEY_CFBundleDisplayName = "Pull Up Dev";
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Shellspace Lite uses your local network to automatically discover and connect to your Mac running Shellspace.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Pull Up Dev uses your local network to connect to your Mac running Shellspace.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -354,9 +354,11 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.buzzbox.shellspace-lite";
-				PRODUCT_NAME = "Shellspace Lite";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.buzzbox.pullup-dev";
+				PRODUCT_NAME = "Pull Up Dev";
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -371,9 +373,9 @@
 				DEVELOPMENT_TEAM = VCY2SG8342;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = ShellspaceLite/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Shellspace Lite";
+				INFOPLIST_KEY_CFBundleDisplayName = "Pull Up Dev";
 				INFOPLIST_KEY_CFBundleIconName = AppIcon;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Shellspace Lite uses your local network to automatically discover and connect to your Mac running Shellspace.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Pull Up Dev uses your local network to connect to your Mac running Shellspace.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -383,9 +385,11 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.buzzbox.shellspace-lite";
-				PRODUCT_NAME = "Shellspace Lite";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.buzzbox.pullup-dev";
+				PRODUCT_NAME = "Pull Up Dev";
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
