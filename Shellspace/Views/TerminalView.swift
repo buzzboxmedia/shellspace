@@ -919,10 +919,10 @@ class TerminalController: ObservableObject {
             workingDir = directory
         }
         let hasExistingSession = checkForExistingSession(in: workingDir)
-        // Only continue if this session was previously launched AND has an existing Claude session.
-        // New tasks (hasBeenLaunched=false) should always start fresh, even if the fallback
-        // directory has an old conversation.
-        let shouldContinue = hasExistingSession && hasBeenLaunched
+        // Continue if session files exist (synced via Dropbox across machines).
+        // Previously required hasBeenLaunched, but that's local SwiftData — not synced.
+        // If .jsonl files exist for this project, always resume regardless of which machine created them.
+        let shouldContinue = hasExistingSession
         let claudePath = findClaudePath()
 
         DebugLog.log("[startClaude]   workingDir=\(workingDir), hasExistingSession=\(hasExistingSession), hasBeenLaunched=\(hasBeenLaunched), shouldContinue=\(shouldContinue)")
