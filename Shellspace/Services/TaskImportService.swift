@@ -12,6 +12,10 @@ class TaskImportService {
     private let fileManager = FileManager.default
     private let taskFolderService = TaskFolderService.shared
 
+    /// Per-project cooldown: skip reimport if last scan was recent
+    private var lastImportTime: [String: Date] = [:]
+    private let importCooldown: TimeInterval = 60  // seconds
+
     private init() {}
 
     /// Validate existing sessions and groups against the filesystem
@@ -19,7 +23,7 @@ class TaskImportService {
     /// - Removes sessions whose folders no longer exist
     /// - Removes groups that are actually task folders (have TASK.md)
     @MainActor
-    func validateFilesystem(for project: Project, modelContext: ModelContext) {
+    func validateFilesystem(for project: Project, modelContext: ModelContext, skipSave: Bool = false) {
         let tasksDir = taskFolderService.tasksDirectory(for: project.path)
         let completedDir = taskFolderService.completedDirectory(for: project.path)
 
@@ -205,11 +209,13 @@ class TaskImportService {
         }
 
         if !sessionsToDelete.isEmpty || !groupsToDelete.isEmpty {
-            do {
-                try modelContext.save()
-                logger.info("Cleaned up \(sessionsToDelete.count) sessions, \(groupsToDelete.count) groups")
-            } catch {
-                logger.error("Failed to save cleanup: \(error.localizedDescription)")
+            logger.info("Cleaned up \(sessionsToDelete.count) sessions, \(groupsToDelete.count) groups")
+            if !skipSave {
+                do {
+                    try modelContext.save()
+                } catch {
+                    logger.error("Failed to save cleanup: \(error.localizedDescription)")
+                }
             }
         }
     }
@@ -217,7 +223,7 @@ class TaskImportService {
     /// Re-link sessions to their correct task groups based on folder structure
     /// This fixes sessions that lost their taskGroup assignment
     @MainActor
-    func relinkSessionsToGroups(for project: Project, modelContext: ModelContext) {
+    func relinkSessionsToGroups(for project: Project, modelContext: ModelContext, skipSave: Bool = false) {
         let projectPath = project.path
         let tasksDir = taskFolderService.tasksDirectory(for: project.path)
 
@@ -265,11 +271,13 @@ class TaskImportService {
         }
 
         if relinkedCount > 0 {
-            do {
-                try modelContext.save()
-                logger.info("Re-linked \(relinkedCount) sessions to their groups")
-            } catch {
-                logger.error("Failed to save re-linked sessions: \(error.localizedDescription)")
+            logger.info("Re-linked \(relinkedCount) sessions to their groups")
+            if !skipSave {
+                do {
+                    try modelContext.save()
+                } catch {
+                    logger.error("Failed to save re-linked sessions: \(error.localizedDescription)")
+                }
             }
         }
     }
@@ -277,7 +285,7 @@ class TaskImportService {
     /// Remove duplicate sessions with the same taskFolderPath
     /// Keeps the session with hasBeenLaunched=true, or the first one if neither has it
     @MainActor
-    func cleanupDuplicateSessions(for project: Project, modelContext: ModelContext) {
+    func cleanupDuplicateSessions(for project: Project, modelContext: ModelContext, skipSave: Bool = false) {
         let projectPath = project.path
         let descriptor = FetchDescriptor<Session>(
             predicate: #Predicate<Session> { session in
@@ -326,11 +334,13 @@ class TaskImportService {
         }
 
         if !duplicatesToDelete.isEmpty {
-            do {
-                try modelContext.save()
-                logger.info("Removed \(duplicatesToDelete.count) duplicate sessions")
-            } catch {
-                logger.error("Failed to remove duplicates: \(error.localizedDescription)")
+            logger.info("Removed \(duplicatesToDelete.count) duplicate sessions")
+            if !skipSave {
+                do {
+                    try modelContext.save()
+                } catch {
+                    logger.error("Failed to remove duplicates: \(error.localizedDescription)")
+                }
             }
         }
     }
@@ -338,7 +348,7 @@ class TaskImportService {
     /// Discover and create ProjectGroups from folder structure
     /// This allows projects created on one machine to appear on another via Dropbox sync
     @MainActor
-    func discoverProjectGroups(for project: Project, modelContext: ModelContext) {
+    func discoverProjectGroups(for project: Project, modelContext: ModelContext, skipSave: Bool = false) {
         let tasksDir = taskFolderService.tasksDirectory(for: project.path)
 
         guard fileManager.fileExists(atPath: tasksDir.path) else {
@@ -413,16 +423,18 @@ class TaskImportService {
             logger.info("Discovered project group from folder: \(name)")
         }
 
-        do {
-            try modelContext.save()
-        } catch {
-            logger.error("Failed to save discovered project groups: \(error.localizedDescription)")
+        if !skipSave {
+            do {
+                try modelContext.save()
+            } catch {
+                logger.error("Failed to save discovered project groups: \(error.localizedDescription)")
+            }
         }
     }
 
     /// Ensure each ProjectGroup has a session so it can be opened in terminal
     @MainActor
-    func ensureProjectSessions(for project: Project, modelContext: ModelContext) {
+    func ensureProjectSessions(for project: Project, modelContext: ModelContext, skipSave: Bool = false) {
         // Fetch groups fresh from database to avoid stale relationship faults
         let projectPath = project.path
         let groupDescriptor = FetchDescriptor<ProjectGroup>(
@@ -477,10 +489,12 @@ class TaskImportService {
             }
         }
 
-        do {
-            try modelContext.save()
-        } catch {
-            logger.error("Failed to save project sessions: \(error.localizedDescription)")
+        if !skipSave {
+            do {
+                try modelContext.save()
+            } catch {
+                logger.error("Failed to save project sessions: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -488,11 +502,20 @@ class TaskImportService {
     /// Returns the number of tasks imported
     @MainActor
     func importTasks(for project: Project, modelContext: ModelContext) -> Int {
-        // First validate existing records against filesystem
-        validateFilesystem(for: project, modelContext: modelContext)
+        // Cooldown: skip reimport if this project was scanned recently
+        let now = Date()
+        if let lastImport = lastImportTime[project.path],
+           now.timeIntervalSince(lastImport) < importCooldown {
+            logger.debug("Skipping import for \(project.name) — cooldown (\(Int(now.timeIntervalSince(lastImport)))s < \(Int(self.importCooldown))s)")
+            return 0
+        }
+        lastImportTime[project.path] = now
 
-        // Clean up any duplicate sessions (same taskFolderPath)
-        cleanupDuplicateSessions(for: project, modelContext: modelContext)
+        // First validate existing records against filesystem (no save — batched at end)
+        validateFilesystem(for: project, modelContext: modelContext, skipSave: true)
+
+        // Clean up any duplicate sessions (same taskFolderPath) (no save — batched at end)
+        cleanupDuplicateSessions(for: project, modelContext: modelContext, skipSave: true)
 
         // Re-fetch project after deletions to avoid stale relationship faults.
         // validateFilesystem and cleanupDuplicateSessions may delete sessions/groups,
@@ -507,18 +530,20 @@ class TaskImportService {
             return 0
         }
 
-        // Auto-discover project groups from folder structure (BEFORE re-linking!)
-        discoverProjectGroups(for: freshProject, modelContext: modelContext)
+        // Auto-discover project groups from folder structure (no save — batched at end)
+        discoverProjectGroups(for: freshProject, modelContext: modelContext, skipSave: true)
 
-        // Re-link sessions that lost their group assignment (AFTER groups are discovered)
-        relinkSessionsToGroups(for: freshProject, modelContext: modelContext)
+        // Re-link sessions that lost their group assignment (no save — batched at end)
+        relinkSessionsToGroups(for: freshProject, modelContext: modelContext, skipSave: true)
 
-        // Ensure all project groups have sessions
-        ensureProjectSessions(for: freshProject, modelContext: modelContext)
+        // Ensure all project groups have sessions (no save — batched at end)
+        ensureProjectSessions(for: freshProject, modelContext: modelContext, skipSave: true)
 
         let tasksDir = taskFolderService.tasksDirectory(for: project.path)
 
         guard fileManager.fileExists(atPath: tasksDir.path) else {
+            // Single batched save for all changes above
+            try? modelContext.save()
             logger.info("No tasks directory found for \(project.name)")
             return 0
         }
@@ -610,13 +635,12 @@ class TaskImportService {
             logger.info("Imported task: \(taskContent.title ?? "Unknown")")
         }
 
-        if importedCount > 0 {
-            do {
-                try modelContext.save()
-                logger.info("Imported \(importedCount) tasks for \(project.name)")
-            } catch {
-                logger.error("Failed to save imported tasks: \(error.localizedDescription)")
-            }
+        // Single batched save for ALL changes (validate, cleanup, discover, relink, ensure, import)
+        do {
+            try modelContext.save()
+            logger.info("Import complete for \(project.name): \(importedCount) new tasks (single batched save)")
+        } catch {
+            logger.error("Failed to save import batch: \(error.localizedDescription)")
         }
 
         return importedCount

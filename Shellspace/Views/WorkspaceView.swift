@@ -118,11 +118,11 @@ struct WorkspaceView: View {
             // Restore last active session
             restoreLastSession()
 
-            // Import task folders in background
-            Task.detached(priority: .background) {
-                _ = await MainActor.run {
-                    TaskImportService.shared.importTasks(for: project, modelContext: modelContext)
-                }
+            // Import task folders — delayed to let UI render first.
+            // importTasks has a 60s cooldown so rapid project switches don't rescan.
+            Task {
+                try? await Task.sleep(nanoseconds: 300_000_000) // 300ms — UI renders first
+                TaskImportService.shared.importTasks(for: project, modelContext: modelContext)
             }
         }
         // Backup: .task(id:) fires reliably even when onAppear doesn't (SwiftUI .id() changes)
